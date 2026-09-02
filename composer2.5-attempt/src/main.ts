@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const data = (await response.json()) as ReachData;
   let activeRenderer: RendererId = 'arcgis';
   let activeScene: SceneBackend | null = null;
-  let currentStageId = data.meta.stages[0].id;
+  let currentOffsetM = 0;
 
   const showRenderer = (id: RendererId): void => {
     const arcgisActive = id === 'arcgis';
@@ -59,13 +59,13 @@ async function main(): Promise<void> {
     activeScene = null;
     showRenderer(id);
     activeScene = await createScene(id);
-    activeScene.setStage(currentStageId);
+    activeScene.setStageOffsetM(currentOffsetM);
     activeRenderer = id;
   };
 
-  bindStageControls(data, (stageId) => {
-    currentStageId = stageId;
-    activeScene?.setStage(stageId);
+  bindStageControls(data, (offsetM) => {
+    currentOffsetM = offsetM;
+    activeScene?.setStageOffsetM(offsetM);
   });
 
   bindRendererToggle(activeRenderer, switchRenderer);

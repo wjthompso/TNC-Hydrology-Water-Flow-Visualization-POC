@@ -1,35 +1,99 @@
 import type { BasemapMode, ElevationSource } from './arcgis-scene';
 import type { ReachData } from './types';
+import {
+  MAX_WATER_STAGE_FT,
+  feetToMeters,
+  formatStageLabel,
+} from './water-stage';
 
 type RendererId = 'arcgis' | 'three';
 
+const RISE_CYCLE_SECONDS = 8;
+
+export interface StageControls {
+  getOffsetFeet: () => number;
+  setOffsetFeet: (feet: number) => void;
+}
+
 export function bindStageControls(
   data: ReachData,
-  onStageChange: (stageId: string) => void,
-): void {
+  onStageChange: (offsetM: number) => void,
+): StageControls {
   const slider = document.getElementById('stage-slider') as HTMLInputElement;
   const stageValue = document.getElementById('stage-value');
   const reachStats = document.getElementById('reach-stats');
+  const playBtn = document.getElementById('stage-play-btn') as HTMLButtonElement;
 
-  if (!slider || !stageValue || !reachStats) {
+  if (!slider || !stageValue || !reachStats || !playBtn) {
     throw new Error('Required UI elements missing');
   }
 
-  slider.max = String(data.meta.stages.length - 1);
+  slider.min = '0';
+  slider.max = String(MAX_WATER_STAGE_FT);
+  slider.step = '0.05';
+  slider.value = '0';
 
-  const update = (index: number) => {
-    const stage = data.meta.stages[index];
-    slider.value = String(index);
-    slider.setAttribute('aria-valuetext', stage.label);
-    stageValue.textContent = stage.label;
-    onStageChange(stage.id);
+  let playing = false;
+  let rafId = 0;
+  let lastTime = 0;
+
+  const setFeet = (feet: number, fromUser = false): void => {
+    const clamped = Math.max(0, Math.min(MAX_WATER_STAGE_FT, feet));
+    slider.value = String(clamped);
+    const label = formatStageLabel(clamped);
+    slider.setAttribute('aria-valuetext', label);
+    stageValue.textContent = label;
+    onStageChange(feetToMeters(clamped));
+
+    if (fromUser && playing) {
+      playing = false;
+      playBtn.textContent = 'Play';
+      playBtn.setAttribute('aria-pressed', 'false');
+      cancelAnimationFrame(rafId);
+    }
   };
 
-  slider.addEventListener('input', () => update(Number(slider.value)));
+  const tick = (time: number): void => {
+    if (!playing) return;
+
+    if (!lastTime) lastTime = time;
+    const dt = (time - lastTime) / 1000;
+    lastTime = time;
+
+    const nextFeet = Number(slider.value) + (MAX_WATER_STAGE_FT / RISE_CYCLE_SECONDS) * dt;
+    if (nextFeet >= MAX_WATER_STAGE_FT) {
+      setFeet(0);
+      lastTime = time;
+    } else {
+      setFeet(nextFeet);
+    }
+
+    rafId = requestAnimationFrame(tick);
+  };
+
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-pressed', String(playing));
+
+    if (playing) {
+      lastTime = 0;
+      rafId = requestAnimationFrame(tick);
+    } else {
+      cancelAnimationFrame(rafId);
+    }
+  });
+
+  slider.addEventListener('input', () => setFeet(Number(slider.value), true));
 
   reachStats.textContent = `${data.meta.reachLengthM} m reach · COMID ${data.meta.comid} · origin ${data.meta.originWgs84.lat.toFixed(5)}°N`;
 
-  update(0);
+  setFeet(0);
+
+  return {
+    getOffsetFeet: () => Number(slider.value),
+    setOffsetFeet: (feet) => setFeet(feet),
+  };
 }
 
 export function bindRendererToggle(
@@ -91,13 +155,13 @@ export function updateBasemapNote(
   if (elevationSource === 'usgs-3dep') {
     subtitle.textContent = 'ArcGIS SceneView · USGS imagery + 3DEP elevation (key-free)';
     note.textContent =
-      'No API key — validated USGS 3DEP GeoTIFF terrain is active in a 2 km creek area. Water uses absolute heights aligned to the sampled ground; navigation remains unconstrained. Optional VITE_ARCGIS_API_KEY switches to Esri imagery + world elevation.';
+      'No API key — USGS 3DEP terrain is active in a 2 km creek area. Water uses offline valley-bottom elevations from reach.json and renders at absolute height on the terrain. Optional VITE_ARCGIS_API_KEY switches to Esri imagery + world elevation.';
     return;
   }
 
   subtitle.textContent = 'ArcGIS SceneView · USGS satellite imagery (key-free, flat ground)';
   note.textContent =
-    'USGS 3DEP preflight did not return a usable tile, so the map safely uses flat ground and ground-draped mock water. Set VITE_ARCGIS_API_KEY for Esri imagery + world elevation.';
+    'Terrain sampling was unavailable, so the map safely uses flat ground and ground-draped water. Set VITE_ARCGIS_API_KEY for Esri imagery + world elevation.';
 }
 
 export function hideLoadingOverlay(): void {

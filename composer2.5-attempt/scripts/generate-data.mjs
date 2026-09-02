@@ -1,9 +1,9 @@
 /**
  * Fetches Escondido Creek centerline from TNC public FeatureServer,
- * projects a short reach to local meters, synthesizes terrain, and
- * precomputes sloped water ribbon meshes at discrete stages.
+ * samples USGS 3DEP valley-bottom elevation along the reach, and
+ * precomputes water ribbon meshes at discrete stages (absolute meters).
  */
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,20 +11,34 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = join(__dirname, '../public/data/reach.json');
 const CENTERLINE_URL =
   'https://services.arcgis.com/F7DSX1DSNSiWmOqh/arcgis/rest/services/jldp_nhd24kflowlines_streams/FeatureServer/7/query';
+const USGS_ELEVATION_URL =
+  'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer';
 
-const STAGES = [
-  { id: 'baseline', label: 'Baseline (+0 m)', offsetM: 0 },
-  { id: 'plus-0.25', label: '+0.25 m', offsetM: 0.25 },
-  { id: 'plus-0.5', label: '+0.5 m', offsetM: 0.5 },
-  { id: 'plus-1.0', label: '+1.0 m', offsetM: 1.0 },
-];
+const MAX_STAGE_FT = 3;
+const FT_TO_M = 0.3048;
+
+const STAGES = Array.from({ length: MAX_STAGE_FT / 0.25 + 1 }, (_, i) => {
+  const ft = i * 0.25;
+  const id =
+    ft === 0
+      ? 'baseline'
+      : `plus-${String(ft).replace('.', '-')}ft`;
+  return {
+    id,
+    label: ft === 0 ? 'Baseline (0 ft)' : `+${ft} ft`,
+    offsetM: FT_TO_M * ft,
+  };
+});
 
 const TARGET_REACH_M = 350;
 const SAMPLE_SPACING_M = 8;
 const BASE_HALF_WIDTH_M = 4;
 const WIDTH_GROWTH_PER_M_STAGE = 1.8;
-const BASE_WATER_ABOVE_BED_M = 0.35;
-const DOWNSTREAM_DROP_M_PER_100M = 1.2;
+const PROBE_DISTANCES_M = [0];
+for (const d of [4, 8, 12, 16, 20, 24, 28, 30]) {
+  PROBE_DISTANCES_M.push(d, -d);
+}
+const GET_SAMPLES_BATCH = 100;
 
 function haversineM(lon1, lat1, lon2, lat2) {
   const R = 6371000;
@@ -92,73 +106,120 @@ function trimReach(points, maxLenM) {
   return out;
 }
 
-function syntheticBedElevation(chainageM, x, y) {
-  const downstreamDrop = (chainageM / 100) * DOWNSTREAM_DROP_M_PER_100M;
-  const bankNoise = 0.4 * Math.sin(chainageM / 22) + 0.25 * Math.cos(x / 18);
-  return 42.5 - downstreamDrop + bankNoise + 0.15 * Math.sin(y / 12);
+function perpendicularUnitNormal(centerline, index) {
+  const pt = centerline[index];
+  const prev = centerline[Math.max(0, index - 1)];
+  const next = centerline[Math.min(centerline.length - 1, index + 1)];
+  const metersPerLon = 111320 * Math.cos((pt.lat * Math.PI) / 180);
+  const dx = (next.lon - prev.lon) * metersPerLon;
+  const dy = (next.lat - prev.lat) * 111320;
+  const len = Math.hypot(dx, dy) || 1;
+  return {
+    nx: -dy / len,
+    ny: dx / len,
+    metersPerLon,
+  };
+}
+
+function offsetLonLat(lon, lat, nx, ny, metersPerLon, distanceM) {
+  return {
+    lon: lon + (nx * distanceM) / metersPerLon,
+    lat: lat + (ny * distanceM) / 111320,
+  };
+}
+
+function crossSectionProbePoints(centerline, index) {
+  const pt = centerline[index];
+  const { nx, ny, metersPerLon } = perpendicularUnitNormal(centerline, index);
+  return PROBE_DISTANCES_M.map((distanceM) => ({
+    ...offsetLonLat(pt.lon, pt.lat, nx, ny, metersPerLon, distanceM),
+    centerlineIndex: index,
+    offsetM: distanceM,
+  }));
+}
+
+async function sampleElevationsLonLat(points) {
+  const elevations = new Array(points.length);
+
+  for (let start = 0; start < points.length; start += GET_SAMPLES_BATCH) {
+    const batch = points.slice(start, start + GET_SAMPLES_BATCH);
+    const geometry = JSON.stringify({
+      points: batch.map((p) => [p.lon, p.lat]),
+      spatialReference: { wkid: 4326 },
+    });
+    const body = new URLSearchParams({
+      geometry,
+      geometryType: 'esriGeometryMultipoint',
+      returnFirstValueOnly: 'true',
+      f: 'json',
+    });
+
+    const res = await fetch(`${USGS_ELEVATION_URL}/getSamples`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!res.ok) {
+      throw new Error(`USGS 3DEP getSamples failed: ${res.status}`);
+    }
+
+    const json = await res.json();
+    const samples = json.samples ?? [];
+    if (samples.length !== batch.length) {
+      throw new Error(
+        `USGS 3DEP getSamples returned ${samples.length} samples for ${batch.length} points`,
+      );
+    }
+
+    for (const sample of samples) {
+      const batchIndex = sample.locationId;
+      const globalIndex = start + batchIndex;
+      const value = Number.parseFloat(sample.value);
+      if (!Number.isFinite(value)) {
+        const pt = batch[batchIndex];
+        throw new Error(`NoData elevation at lon=${pt.lon}, lat=${pt.lat}`);
+      }
+      elevations[globalIndex] = value;
+    }
+  }
+
+  return elevations;
+}
+
+async function computeValleyMinProfile(centerline) {
+  const probePoints = centerline.flatMap((_, index) => crossSectionProbePoints(centerline, index));
+  console.log(
+    `Querying USGS 3DEP for ${probePoints.length} cross-section samples (${centerline.length} stations × ${PROBE_DISTANCES_M.length} probes)…`,
+  );
+
+  const elevations = await sampleElevationsLonLat(probePoints);
+  const probesPerStation = PROBE_DISTANCES_M.length;
+
+  return centerline.map((pt, index) => {
+    const start = index * probesPerStation;
+    const stationElevations = elevations.slice(start, start + probesPerStation);
+    const valleyMinElevationM = Math.min(...stationElevations);
+    return { ...pt, valleyMinElevationM };
+  });
 }
 
 function buildRibbonMesh(centerline, stageOffsetM) {
   const positions = [];
   const indices = [];
-  const halfWidth =
-    BASE_HALF_WIDTH_M + stageOffsetM * WIDTH_GROWTH_PER_M_STAGE;
+  const halfWidth = BASE_HALF_WIDTH_M + stageOffsetM * WIDTH_GROWTH_PER_M_STAGE;
 
   for (let i = 0; i < centerline.length; i++) {
     const pt = centerline[i];
-    const prev = centerline[Math.max(0, i - 1)];
-    const next = centerline[Math.min(centerline.length - 1, i + 1)];
-    const tx = next.x - prev.x;
-    const ty = next.y - prev.y;
-    const len = Math.hypot(tx, ty) || 1;
-    const nx = -ty / len;
-    const ny = tx / len;
-
-    const bedZ = syntheticBedElevation(pt.chainageM, pt.x, pt.y);
-    const waterZ = bedZ + BASE_WATER_ABOVE_BED_M + stageOffsetM;
-
-    const left = { x: pt.x + nx * halfWidth, y: pt.y + ny * halfWidth, z: waterZ };
-    const right = { x: pt.x - nx * halfWidth, y: pt.y - ny * halfWidth, z: waterZ };
-
-    positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
-  }
-
-  for (let i = 0; i < centerline.length - 1; i++) {
-    const a = i * 2;
-    const b = a + 1;
-    const c = a + 2;
-    const d = a + 3;
-    indices.push(a, c, b, b, c, d);
-  }
-
-  return { positions, indices };
-}
-
-function buildTerrainStrip(centerline) {
-  const positions = [];
-  const indices = [];
-  const halfWidth = BASE_HALF_WIDTH_M + 12;
-
-  for (let i = 0; i < centerline.length; i++) {
-    const pt = centerline[i];
-    const prev = centerline[Math.max(0, i - 1)];
-    const next = centerline[Math.min(centerline.length - 1, i + 1)];
-    const tx = next.x - prev.x;
-    const ty = next.y - prev.y;
-    const len = Math.hypot(tx, ty) || 1;
-    const nx = -ty / len;
-    const ny = tx / len;
-
-    const bedZ = syntheticBedElevation(pt.chainageM, pt.x, pt.y);
-    const bankBoost = 1.5 + 0.3 * Math.sin(pt.chainageM / 30);
+    const { nx, ny } = perpendicularUnitNormal(centerline, i);
+    const waterZ = pt.valleyMinElevationM + stageOffsetM;
 
     positions.push(
       pt.x + nx * halfWidth,
       pt.y + ny * halfWidth,
-      bedZ + bankBoost,
+      waterZ,
       pt.x - nx * halfWidth,
       pt.y - ny * halfWidth,
-      bedZ + bankBoost,
+      waterZ,
     );
   }
 
@@ -205,6 +266,29 @@ async function fetchEscondidoSegment() {
 }
 
 async function main() {
+  const stagesOnly = process.argv.includes('--stages-only');
+
+  if (stagesOnly && existsSync(OUT_PATH)) {
+    console.log(`Rebuilding water stages from existing ${OUT_PATH} (skipping USGS 3DEP)…`);
+    const existing = JSON.parse(readFileSync(OUT_PATH, 'utf8'));
+    const centerline = existing.centerline;
+    if (!centerline?.length) {
+      throw new Error('Existing reach.json has no centerline — run full generate-data first');
+    }
+
+    existing.meta.maxStageFt = MAX_STAGE_FT;
+    existing.meta.stages = STAGES;
+    existing.waterStages = Object.fromEntries(
+      STAGES.map((stage) => [stage.id, buildRibbonMesh(centerline, stage.offsetM)]),
+    );
+
+    writeFileSync(OUT_PATH, JSON.stringify(existing, null, 2));
+    console.log(
+      `Updated ${OUT_PATH} with ${STAGES.length} stages (0–${MAX_STAGE_FT} ft), ${centerline.length} stations`,
+    );
+    return;
+  }
+
   console.log('Fetching Escondido Creek centerline from TNC public service...');
   const segment = await fetchEscondidoSegment();
 
@@ -218,22 +302,19 @@ async function main() {
   const resampled = resampleLine(rawLocal, SAMPLE_SPACING_M);
   const reach = trimReach(resampled, TARGET_REACH_M);
 
-  const centerline = reach.map((pt, i) => ({
-    ...pt,
-    chainageM: pt.chainageM ?? (i === 0 ? 0 : reach[i].chainageM),
-    lon: segment.coords[0][0],
-    lat: segment.coords[0][1],
-  }));
-
-  // Attach source lon/lat per point by re-projecting from local (approx inverse)
   const mPerDegLat = 111320;
   const mPerDegLon = 111320 * Math.cos((originLat * Math.PI) / 180);
-  centerline.forEach((pt) => {
-    pt.lon = originLon + pt.x / mPerDegLon;
-    pt.lat = originLat + pt.y / mPerDegLat;
-  });
+  const centerlineDraft = reach.map((pt) => ({
+    ...pt,
+    lon: originLon + pt.x / mPerDegLon,
+    lat: originLat + pt.y / mPerDegLat,
+  }));
 
+  const centerline = await computeValleyMinProfile(centerlineDraft);
   const reachLengthM = centerline.at(-1)?.chainageM ?? 0;
+  const valleyStats = centerline.map((pt) => pt.valleyMinElevationM);
+  const minValley = Math.min(...valleyStats);
+  const maxValley = Math.max(...valleyStats);
 
   const payload = {
     meta: {
@@ -241,19 +322,37 @@ async function main() {
       source: {
         centerline: 'REAL — TNC JLDP NHD flowlines FeatureServer/7 (Escondido Creek)',
         centerlineUrl: CENTERLINE_URL,
-        terrain: 'MOCK — synthetic bed profile with downstream slope (~1.2 m/100 m) and noise',
-        waterGeometry: 'MOCK — fixed-width ribbon widened per stage; not terrain-clipped inundation',
-        verticalDatum: 'Approximate NAVD88-like meters (synthetic baseline ~42.5 m)',
+        elevation: 'REAL — USGS 3DEP ImageServer getSamples (valley-bottom cross-section minimum)',
+        elevationUrl: USGS_ELEVATION_URL,
+        waterGeometry:
+          'REAL — absolute-height ribbon at valley minimum + stage offset; drapes on 3DEP terrain',
+        verticalDatum: 'NAVD88 meters (USGS 3DEP)',
+      },
+      valleyBottomSampling: {
+        method: 'Perpendicular probes at each centerline station; minimum elevation defines thalweg',
+        probeDistancesM: PROBE_DISTANCES_M,
+        halfWidthBaseM: BASE_HALF_WIDTH_M,
+        elevationRangeM: {
+          min: Number(minValley.toFixed(3)),
+          max: Number(maxValley.toFixed(3)),
+        },
       },
       originWgs84: { lon: originLon, lat: originLat },
       reachLengthM: Math.round(reachLengthM),
       comid: segment.properties.COMID,
+      maxStageFt: MAX_STAGE_FT,
       stages: STAGES,
-      approach: 'Three.js sloped water mesh (T4 comparison path)',
+      approach: 'Offline USGS 3DEP valley-bottom water mesh + ArcGIS SceneView absolute-height',
       apiKeyRequired: false,
     },
-    centerline: centerline.map(({ x, y, chainageM, lon, lat }) => ({ x, y, chainageM, lon, lat })),
-    terrain: buildTerrainStrip(centerline),
+    centerline: centerline.map(({ x, y, chainageM, lon, lat, valleyMinElevationM }) => ({
+      x,
+      y,
+      chainageM,
+      lon,
+      lat,
+      valleyMinElevationM,
+    })),
     waterStages: Object.fromEntries(
       STAGES.map((stage) => [stage.id, buildRibbonMesh(centerline, stage.offsetM)]),
     ),
@@ -261,7 +360,9 @@ async function main() {
 
   mkdirSync(dirname(OUT_PATH), { recursive: true });
   writeFileSync(OUT_PATH, JSON.stringify(payload, null, 2));
-  console.log(`Wrote ${OUT_PATH} (${reachLengthM.toFixed(0)} m reach, ${centerline.length} samples)`);
+  console.log(
+    `Wrote ${OUT_PATH} (${reachLengthM.toFixed(0)} m reach, ${centerline.length} stations, valley ${minValley.toFixed(1)}–${maxValley.toFixed(1)} m)`,
+  );
 }
 
 main().catch((err) => {

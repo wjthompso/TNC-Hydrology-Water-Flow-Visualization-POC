@@ -1,17 +1,22 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { MeshData, ReachData } from './types';
+import type { ReachData } from './types';
 import type { SceneBackend } from './scene-backend';
+import { buildRibbonMesh } from './water-stage';
 
 /** Map local meters (x, y) + elevation z to Three.js Y-up coordinates. */
 function toThreeVector(x: number, y: number, elevation: number): THREE.Vector3 {
   return new THREE.Vector3(x, elevation, -y);
 }
 
-function meshFromData(data: MeshData, material: THREE.Material): THREE.Mesh {
-  const remapped = new Float32Array(data.positions.length);
-  for (let i = 0; i < data.positions.length; i += 3) {
-    const v = toThreeVector(data.positions[i], data.positions[i + 1], data.positions[i + 2]);
+function meshFromData(
+  positions: number[],
+  indices: number[],
+  material: THREE.Material,
+): THREE.Mesh {
+  const remapped = new Float32Array(positions.length);
+  for (let i = 0; i < positions.length; i += 3) {
+    const v = toThreeVector(positions[i], positions[i + 1], positions[i + 2]);
     remapped[i] = v.x;
     remapped[i + 1] = v.y;
     remapped[i + 2] = v.z;
@@ -19,21 +24,9 @@ function meshFromData(data: MeshData, material: THREE.Material): THREE.Mesh {
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(remapped, 3));
-  geometry.setIndex(data.indices);
+  geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return new THREE.Mesh(geometry, material);
-}
-
-function centerlineToLine(data: ReachData): THREE.Line {
-  const baseline = data.waterStages.baseline;
-  const points = data.centerline.map((pt, i) => {
-    const vi = i * 6;
-    const leftZ = baseline.positions[vi + 2] - 0.35;
-    return toThreeVector(pt.x, pt.y, leftZ);
-  });
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({ color: 0xfbbf24 });
-  return new THREE.Line(geometry, material);
 }
 
 export class CreekScene implements SceneBackend {
@@ -41,8 +34,10 @@ export class CreekScene implements SceneBackend {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private controls: OrbitControls;
-  private waterMeshes = new Map<string, THREE.Mesh>();
-  private activeStageId: string | null = null;
+  private waterMesh: THREE.Mesh | null = null;
+  private waterMaterial: THREE.MeshPhysicalMaterial | null = null;
+  private reachData: ReachData | null = null;
+  private currentOffsetM = -1;
   private container: HTMLElement;
   private rafId = 0;
 
@@ -77,14 +72,8 @@ export class CreekScene implements SceneBackend {
   }
 
   load(data: ReachData): void {
-    const terrainMaterial = new THREE.MeshStandardMaterial({
-      color: 0x6b5b4a,
-      roughness: 0.95,
-      metalness: 0.02,
-      flatShading: true,
-    });
-
-    const waterMaterial = new THREE.MeshPhysicalMaterial({
+    this.reachData = data;
+    this.waterMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x1d9bf0,
       transparent: true,
       opacity: 0.72,
@@ -95,41 +84,41 @@ export class CreekScene implements SceneBackend {
       side: THREE.DoubleSide,
     });
 
-    this.scene.add(meshFromData(data.terrain, terrainMaterial));
-    this.scene.add(centerlineToLine(data));
-
-    for (const stage of data.meta.stages) {
-      const mesh = meshFromData(data.waterStages[stage.id], waterMaterial.clone());
-      mesh.visible = false;
-      mesh.name = `water-${stage.id}`;
-      this.waterMeshes.set(stage.id, mesh);
-      this.scene.add(mesh);
-    }
-
+    this.setStageOffsetM(0);
     this.frameCamera();
-    this.setStage(data.meta.stages[0].id);
     this.animate();
   }
 
   setStage(stageId: string): void {
-    if (this.activeStageId === stageId) return;
+    const stage = this.reachData?.meta.stages.find((item) => item.id === stageId);
+    if (stage) this.setStageOffsetM(stage.offsetM);
+  }
 
-    for (const [id, mesh] of this.waterMeshes) {
-      mesh.visible = id === stageId;
+  setStageOffsetM(offsetM: number): void {
+    if (!this.reachData || !this.waterMaterial) return;
+    if (Math.abs(this.currentOffsetM - offsetM) < 1e-6) return;
+
+    this.currentOffsetM = offsetM;
+    const { positions, indices } = buildRibbonMesh(this.reachData.centerline, offsetM);
+
+    if (this.waterMesh) {
+      this.waterMesh.geometry.dispose();
+      this.waterMesh.removeFromParent();
     }
-    this.activeStageId = stageId;
+
+    this.waterMesh = meshFromData(positions, indices, this.waterMaterial);
+    this.waterMesh.name = 'water-dynamic';
+    this.scene.add(this.waterMesh);
   }
 
   private frameCamera(): void {
+    if (!this.waterMesh) return;
+
     const bounds = new THREE.Box3();
-    this.scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry.computeBoundingBox();
-        if (child.geometry.boundingBox) {
-          bounds.union(child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld));
-        }
-      }
-    });
+    this.waterMesh.geometry.computeBoundingBox();
+    if (this.waterMesh.geometry.boundingBox) {
+      bounds.copy(this.waterMesh.geometry.boundingBox);
+    }
 
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
@@ -160,8 +149,14 @@ export class CreekScene implements SceneBackend {
   destroy(): void {
     cancelAnimationFrame(this.rafId);
     window.removeEventListener('resize', this.onResize);
+    this.waterMesh?.geometry.dispose();
+    this.waterMaterial?.dispose();
     this.controls.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    this.waterMesh = null;
+    this.waterMaterial = null;
+    this.reachData = null;
+    this.currentOffsetM = -1;
   }
 }

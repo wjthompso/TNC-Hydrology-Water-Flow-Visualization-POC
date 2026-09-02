@@ -10,19 +10,12 @@ import Polygon from '@arcgis/core/geometry/Polygon';
 import Polyline from '@arcgis/core/geometry/Polyline';
 import PolygonSymbol3D from '@arcgis/core/symbols/PolygonSymbol3D';
 import WaterSymbol3DLayer from '@arcgis/core/symbols/WaterSymbol3DLayer';
-import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol';
 import esriConfig from '@arcgis/core/config.js';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
-import {
-  centerlineToPath,
-  flattenMeshZ,
-  meshToMultiPolygonCoordinates,
-} from './geo';
+import { buildWaterRibbonSegmentRings } from './water-stage';
 import type { SceneBackend } from './scene-backend';
 import type { ReachData } from './types';
-import Usgs3DepElevationLayer, {
-  preflightElevationAtPoint,
-} from './usgs-elevation-layer';
+import Usgs3DepElevationLayer, { preflightElevationAtPoint } from './usgs-elevation-layer';
 
 export type BasemapMode = 'usgs-imagery' | 'arcgis-imagery';
 export type ElevationSource = 'usgs-3dep' | 'world-elevation' | 'none';
@@ -65,9 +58,7 @@ function createFlatGround(): __esri.GroundProperties {
   return { navigationConstraint: { type: 'none' } };
 }
 
-function createCreekElevationExtent(
-  origin: ReachData['meta']['originWgs84'],
-): Extent {
+function createCreekElevationExtent(origin: ReachData['meta']['originWgs84']): Extent {
   const point = webMercatorUtils.geographicToWebMercator(
     new Point({ longitude: origin.lon, latitude: origin.lat, spatialReference: { wkid: 4326 } }),
   ) as Point;
@@ -92,55 +83,6 @@ const waterSymbol = new PolygonSymbol3D({
   ],
 });
 
-const terrainSymbol = new PolygonSymbol3D({
-  symbolLayers: [
-    {
-      type: 'fill',
-      material: { color: [107, 91, 74, 0.85] },
-    },
-  ],
-});
-
-function centerlineGraphic(path: number[][]): Graphic {
-  return new Graphic({
-    geometry: new Polyline({
-      paths: [path],
-      hasZ: true,
-      spatialReference: { wkid: 4326 },
-    }),
-    symbol: new SimpleLineSymbol({
-      color: [251, 191, 36],
-      width: 3,
-    }),
-  });
-}
-
-function graphicsFromMesh(
-  mesh: ReachData['terrain'],
-  origin: ReachData['meta']['originWgs84'],
-  symbol: PolygonSymbol3D,
-  groundDraped: boolean,
-  absoluteElevationOffset = 0,
-): Graphic[] {
-  const renderMesh = groundDraped ? flattenMeshZ(mesh) : mesh;
-  return meshToMultiPolygonCoordinates(renderMesh, origin, groundDraped ? 0 : undefined).map(
-    (polygonCoords) => {
-      const coordinates = groundDraped
-        ? polygonCoords
-        : polygonCoords.map((ring) =>
-            ring.map(([lon, lat, z]) => [lon, lat, z + absoluteElevationOffset]),
-          );
-      return new Graphic({
-        geometry: new Polygon({
-          rings: coordinates,
-          hasZ: true,
-          spatialReference: { wkid: 4326 },
-        }),
-        symbol,
-      });
-    },
-  );
-}
 
 function elevationInfoForMode(
   groundDraped: boolean,
@@ -154,8 +96,10 @@ function elevationInfoForMode(
 
 export class ArcGISCreekScene implements SceneBackend {
   private view: SceneView | null = null;
-  private waterStageLayers = new globalThis.Map<string, GraphicsLayer>();
-  private activeStageId: string | null = null;
+  private waterLayer: GraphicsLayer | null = null;
+  private waterGraphics: Graphic[] = [];
+  private reachData: ReachData | null = null;
+  private groundDraped = false;
   readonly basemapMode: BasemapMode;
   private _elevationSource: ElevationSource = 'none';
 
@@ -202,7 +146,6 @@ export class ArcGISCreekScene implements SceneBackend {
     await this.view.when();
 
     let groundDraped = this.basemapMode === 'usgs-imagery';
-    let absoluteElevationOffset = 0;
     this._elevationSource = groundDraped ? 'none' : 'world-elevation';
 
     if (groundDraped) {
@@ -214,93 +157,82 @@ export class ArcGISCreekScene implements SceneBackend {
       const elevationLayer = new Usgs3DepElevationLayer({
         fullExtent: createCreekElevationExtent(data.meta.originWgs84),
       });
-      const preflight = await preflightElevationAtPoint(originPoint, {
-        fullExtent: elevationLayer.fullExtent,
-      });
+      const preflight = await preflightElevationAtPoint(originPoint, elevationLayer);
 
       if (preflight) {
         map.ground.layers.add(elevationLayer);
         groundDraped = false;
         this._elevationSource = 'usgs-3dep';
-        // Synthetic meshes use a nominal ~42 m baseline. Shift them to the
-        // sampled 3DEP height so their absolute elevations remain visible.
-        absoluteElevationOffset =
-          preflight.elevationM - data.waterStages.baseline.positions[2] + 0.5;
       }
     }
 
-    const baselineMesh = data.waterStages.baseline;
-    const centerlineZ =
-      baselineMesh.positions.length >= 3
-        ? baselineMesh.positions[2] + absoluteElevationOffset - 0.35
-        : 42;
+    const centerlinePath = data.centerline.map((pt) => [
+      pt.lon,
+      pt.lat,
+      pt.valleyMinElevationM,
+    ]);
 
-    const centerlinePath = centerlineToPath(
-      data.centerline,
-      groundDraped ? 0 : centerlineZ,
-    );
-
-    const centerlineLayer = new GraphicsLayer({
-      id: 'centerline-layer',
-      elevationInfo: elevationInfoForMode(groundDraped),
+    this.reachData = data;
+    this.groundDraped = groundDraped;
+    this.waterLayer = new GraphicsLayer({
+      id: 'water-dynamic',
+      elevationInfo: elevationInfoForMode(groundDraped, 0),
     });
-    const terrainLayer = new GraphicsLayer({
-      id: 'terrain-layer',
-      elevationInfo: groundDraped
-        ? { mode: 'relative-to-ground', offset: 0.15 }
-        : { mode: 'absolute-height' },
-    });
-
-    centerlineLayer.add(centerlineGraphic(centerlinePath));
-    terrainLayer.addMany(
-      graphicsFromMesh(
-        data.terrain,
-        data.meta.originWgs84,
-        terrainSymbol,
-        groundDraped,
-        absoluteElevationOffset,
-      ),
-    );
-
-    map.addMany([terrainLayer, centerlineLayer]);
-
-    for (const stage of data.meta.stages) {
-      const layer = new GraphicsLayer({
-        id: `water-${stage.id}`,
-        visible: false,
-        elevationInfo: elevationInfoForMode(groundDraped, stage.offsetM),
-      });
-      layer.addMany(
-        graphicsFromMesh(
-          data.waterStages[stage.id],
-          data.meta.originWgs84,
-          waterSymbol,
-          groundDraped,
-          absoluteElevationOffset,
-        ),
-      );
-      this.waterStageLayers.set(stage.id, layer);
-      map.add(layer);
-    }
+    map.add(this.waterLayer);
 
     await this.frameCamera(centerlinePath, !groundDraped);
-    this.setStage(data.meta.stages[0].id);
+    this.setStageOffsetM(0);
   }
 
   setStage(stageId: string): void {
-    if (this.activeStageId === stageId) return;
+    const stage = this.reachData?.meta.stages.find((item) => item.id === stageId);
+    if (stage) this.setStageOffsetM(stage.offsetM);
+  }
 
-    for (const [id, layer] of this.waterStageLayers) {
-      layer.visible = id === stageId;
+  setStageOffsetM(offsetM: number): void {
+    if (!this.reachData || !this.waterLayer) return;
+
+    const segmentRings = buildWaterRibbonSegmentRings(
+      this.reachData.centerline,
+      offsetM,
+      this.groundDraped,
+    );
+
+    if (this.waterGraphics.length !== segmentRings.length) {
+      this.waterLayer.removeAll();
+      this.waterGraphics = segmentRings.map((ring) => {
+        const graphic = new Graphic({
+          geometry: new Polygon({
+            rings: [ring],
+            hasZ: true,
+            spatialReference: { wkid: 4326 },
+          }),
+          symbol: waterSymbol,
+        });
+        this.waterLayer!.add(graphic);
+        return graphic;
+      });
+    } else {
+      for (let i = 0; i < segmentRings.length; i++) {
+        this.waterGraphics[i].geometry = new Polygon({
+          rings: [segmentRings[i]],
+          hasZ: true,
+          spatialReference: { wkid: 4326 },
+        });
+      }
     }
-    this.activeStageId = stageId;
+
+    if (this.groundDraped) {
+      this.waterLayer.elevationInfo = elevationInfoForMode(true, offsetM);
+    }
   }
 
   destroy(): void {
     this.view?.destroy();
     this.view = null;
-    this.waterStageLayers.clear();
-    this.activeStageId = null;
+    this.waterLayer = null;
+    this.waterGraphics = [];
+    this.reachData = null;
   }
 
   private async frameCamera(

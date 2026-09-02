@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "generate-data": "node scripts/generate-data.mjs"
+    "generate-data": "node scripts/generate-data.mjs",
+    "generate-data:stages-only": "node scripts/generate-data.mjs --stages-only"
   },
   "dependencies": {
     "@arcgis/core": "^4.31.6",

@@ -4,5 +4,6 @@ import type { ReachData } from './types';
 export interface SceneBackend {
   load(data: ReachData): void | Promise<void>;
   setStage(stageId: string): void;
+  setStageOffsetM(offsetM: number): void;
   destroy(): void;
 }

@@ -53,45 +53,49 @@
         </section>
 
         <section id="stage-section" class="pointer-events-auto mb-4">
-          <label id="stage-label" for="stage-slider" class="mb-2 block text-sm font-medium text-slate-200">
-            Water stage
-          </label>
+          <div id="stage-header" class="mb-2 flex items-center justify-between gap-2">
+            <label id="stage-label" for="stage-slider" class="text-sm font-medium text-slate-200">
+              Water stage
+            </label>
+            <button
+              id="stage-play-btn"
+              type="button"
+              aria-pressed="false"
+              class="rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2.5 py-1 text-xs font-medium text-cyan-200 transition-colors hover:bg-cyan-900/70"
+            >
+              Play
+            </button>
+          </div>
           <input
             id="stage-slider"
             type="range"
             min="0"
             max="3"
-            step="1"
+            step="0.05"
             value="0"
             class="w-full accent-cyan-400"
-            aria-valuetext="Baseline (+0 m)"
+            aria-valuetext="Baseline (0 ft)"
           />
           <div id="stage-tick-labels" class="mt-1 flex justify-between text-[10px] text-slate-500">
-            <span id="tick-baseline">+0</span>
-            <span id="tick-plus-0.25">+0.25</span>
-            <span id="tick-plus-0.5">+0.5</span>
-            <span id="tick-plus-1.0">+1.0</span>
+            <span id="tick-baseline">0 ft</span>
+            <span id="tick-plus-1ft">1 ft</span>
+            <span id="tick-plus-2ft">2 ft</span>
+            <span id="tick-plus-3ft">3 ft</span>
           </div>
-          <p id="stage-value" class="mt-2 text-sm font-medium text-cyan-200">Baseline (+0 m)</p>
+          <p id="stage-value" class="mt-2 text-sm font-medium text-cyan-200">Baseline (0 ft)</p>
         </section>
 
         <section id="legend-section" class="space-y-2 text-xs leading-relaxed text-slate-300">
           <h2 id="legend-heading" class="text-sm font-semibold text-slate-100">Data status</h2>
           <ul id="legend-list" class="list-disc space-y-1 pl-4">
-            <li id="legend-centerline">
-              <span class="font-medium text-emerald-300">Real:</span> creek centerline (TNC NHD flowlines)
-            </li>
             <li id="legend-basemap">
               <span class="font-medium text-emerald-300">Real:</span> geographic basemap (USGS NAIP or Esri imagery)
             </li>
             <li id="legend-elevation">
               <span class="font-medium text-emerald-300">Real:</span> 3D terrain elevation (USGS 3DEP or Esri world-elevation)
             </li>
-            <li id="legend-terrain">
-              <span class="font-medium text-amber-300">Mock:</span> terrain bed elevation &amp; banks
-            </li>
             <li id="legend-water">
-              <span class="font-medium text-amber-300">Mock:</span> widening ribbon geometry per stage
+              <span class="font-medium text-cyan-300">Water:</span> valley-bottom ribbon (USGS 3DEP offline sampling); slider raises 0 to 3 ft — press Play to animate
             </li>
           </ul>
         </section>

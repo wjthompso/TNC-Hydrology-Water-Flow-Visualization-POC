@@ -8,11 +8,11 @@ Browser POC for Escondido Creek at Dangermond Preserve comparing **ArcGIS SceneV
 | --- | --- |
 | Vite + TypeScript + Tailwind scaffold | ✅ |
 | Real creek centerline geometry | ✅ (TNC public FeatureServer) |
-| Synthetic terrain bed strip | ✅ (mock elevation profile) |
-| Precomputed sloped water ribbons at 4 stages | ✅ |
+| Offline USGS 3DEP valley-bottom sampling | ✅ |
+| Four terrain-aligned water stages | ✅ |
 | Stage slider UI (+0, +0.25, +0.5, +1.0 m) | ✅ |
 | **ArcGIS SceneView + WaterSymbol3DLayer** | ✅ (default renderer) |
-| OpenStreetMap basemap (key-free) | ✅ → USGS NAIP imagery |
+| USGS NAIP imagery basemap (key-free) | ✅ |
 | Esri World Imagery basemap (optional API key) | ✅ |
 | **USGS 3DEP elevation (key-free 3D terrain via custom BaseElevationLayer)** | ✅ |
 | Esri world-elevation ground (with API key) | ✅ |
@@ -24,25 +24,25 @@ Browser POC for Escondido Creek at Dangermond Preserve comparing **ArcGIS SceneV
 **ArcGIS SceneView (default):**
 
 - Real-world map context at Dangermond Preserve (free USGS imagery + USGS 3DEP elevation without API key, or Esri imagery + world elevation with `VITE_ARCGIS_API_KEY`).
-- Creek centerline as GeoJSON-derived polyline in WGS84.
-- Mock water/terrain ribbon meshes converted from local meters to geographic polygons with `WaterSymbol3DLayer`.
-- **With 3D terrain:** mock geometry uses absolute heights. In key-free mode it is vertically aligned to the validated 3DEP sample at the creek; the source mesh itself remains synthetic.
-- **Fallback (USGS elevation unavailable):** ground-draped geometry via `relative-to-ground` offsets on flat basemap.
+- Only the blue water ribbon is rendered — no centerline or mock terrain layers.
+- Valley-bottom elevations are sampled **offline** in `generate-data.mjs` from USGS 3DEP (same source as terrain).
+- At each resampled centerline station, the script probes perpendicular offsets (0, ±4, ±8, … ±30 m) and takes the **minimum** elevation as the thalweg / water baseline.
+- Baseline stage (+0 m) places water at that valley minimum; higher stages add a uniform +0.25 / +0.5 / +1.0 m offset to every vertex.
+- Water renders at **absolute-height** on the 3DEP terrain mesh when elevation loads successfully.
+- **Fallback (terrain unavailable):** ground-draped water from the same precomputed meshes (z flattened).
 
 **Three.js sloped water mesh (fallback):**
 
-- Local-meter scene with translucent physical material (T4 comparison path).
-- No basemap — useful for comparing mesh rendering without ArcGIS SDK weight.
+- Local-meter scene with translucent physical material — water only, no mock terrain or centerline.
+- Uses the same offline valley-bottom elevations embedded in `reach.json`.
 
 ## API key status
 
 | Mode | API key | Basemap | Ground / elevation | Notes |
 | --- | --- | --- | --- | --- |
-| **Key-free (default)** | Not required | USGS imagery | Custom `Usgs3DepElevationLayer` (GeoTIFF tiles), preflighted at creek | Full 3D pan/zoom/tilt/rotate with unconstrained navigation; mock water uses sampled-ground-aligned absolute heights |
+| **Key-free (default)** | Not required | USGS imagery | Custom `Usgs3DepElevationLayer` (GeoTIFF tiles), preflighted at creek | Full 3D pan/zoom/tilt/rotate with unconstrained navigation; water at absolute height from offline 3DEP sampling |
 | **Key-free fallback** | Not required | USGS NAIP imagery | Flat + `relative-to-ground` offsets | Used only if terrain elevation query fails after view load |
-| **With Esri key** | `VITE_ARCGIS_API_KEY` | Esri World Imagery | Esri `world-elevation` + `stay-above` | Matches Digital Twin satellite + terrain context |
-
-Both elevation modes render mock terrain/water at absolute heights when 3D ground is available.
+| **With Esri key** | `VITE_ARCGIS_API_KEY` | Esri World Imagery | Esri `world-elevation` | Matches Digital Twin satellite + terrain context |
 
 ## Real vs mock
 
@@ -52,16 +52,16 @@ Both elevation modes render mock terrain/water at absolute heights when 3D groun
 | Reach length & COMID | **Real** | From feature attributes |
 | Basemap tiles | **Real** | USGS NAIP imagery (key-free) or Esri imagery (with key) |
 | Ground elevation | **Real** | USGS 3DEP (key-free) or Esri world-elevation (with key) |
-| Terrain / bed elevation | **Mock** | ~1.2 m drop per 100 m downstream + noise; baseline ~42.5 m |
-| Water surface geometry | **Mock** | Fixed-width ribbon, widened per stage; not DEM-derived inundation |
-| Vertical datum | **Mock** | NAVD88-like meters for labeling only |
+| Valley-bottom profile | **Real (offline)** | USGS 3DEP `getSamples` cross-section minimum per station |
+| Water surface geometry | **Terrain-aligned ribbon** | 8 m base width (widens per stage); not terrain-clipped inundation |
+| Vertical datum | **NAVD88** | From USGS 3DEP elevation service |
 
 ## How to run
 
 ```bash
 cd composer2.5-attempt
 npm install
-npm run generate-data   # fetches centerline, writes public/data/reach.json
+npm run generate-data   # fetches centerline + USGS 3DEP valley profile → public/data/reach.json
 npm run dev
 ```
 
@@ -78,53 +78,31 @@ cp .env.example .env
 npm run dev
 ```
 
-A free [ArcGIS Developer](https://developers.arcgis.com/) API key unlocks Esri World Imagery and the Esri world-elevation ground service. Without a key, the POC first validates a Float32 GeoTIFF tile from the USGS 3DEP ImageServer, then attaches a custom `BaseElevationLayer` limited to 2 km around the creek. If validation fails, it keeps the reliable flat-ground fallback (the stock `ElevationLayer` cannot render this dynamic service in SceneView).
-
 ### 3D navigation
 
 - **Pan:** left-drag (or touch drag)
 - **Zoom:** scroll wheel / pinch
 - **Rotate & tilt:** right-drag (or two-finger drag on touch)
-- **UI widgets:** zoom (+/−), compass (reset north), navigation-toggle (switch 2D/3D pan mode) — top-right of the scene
+- **UI widgets:** zoom (+/−), compass (top-right)
 
-In key-free mode, navigation remains unconstrained (`navigationConstraint: none`) even after 3DEP loads, preserving the verified pan/zoom/rotate behavior. The API-key mode uses Esri world elevation and its normal terrain navigation behavior.
+## Verifying valley-bottom water
+
+1. Run `npm run generate-data` and confirm console output shows a realistic elevation range (e.g. ~400–420 m NAVD88 for this reach).
+2. Open ArcGIS view, tilt to ~78° and zoom to the creek — blue water should sit in the valley trough, not float above ridgelines.
+3. Move the stage slider — water should rise uniformly (+0.25 / +0.5 / +1.0 m) while staying aligned with the creek path.
+4. Inspect `public/data/reach.json` → `meta.valleyBottomSampling.elevationRangeM` and per-point `centerline[].valleyMinElevationM`.
 
 ## Project layout
 
 ```
 composer2.5-attempt/
-├── .env.example            # optional VITE_ARCGIS_API_KEY
-├── index.html              # UI shell (descriptive element ids)
-├── package.json
-├── vite.config.ts          # optimizeDeps exclude for @arcgis/core
-├── scripts/generate-data.mjs
-├── public/data/reach.json
+├── scripts/generate-data.mjs   # centerline fetch + USGS 3DEP valley sampling
+├── public/data/reach.json      # centerline, valley profile, water stage meshes
 └── src/
-    ├── main.ts             # bootstrap, renderer toggle
-    ├── arcgis-scene.ts     # SceneView + WaterSymbol3DLayer
-    ├── usgs-elevation-layer.ts  # BaseElevationLayer for USGS 3DEP GeoTIFF tiles
-    ├── scene.ts            # Three.js fallback
-    ├── geo.ts              # local meters → WGS84 conversion
-    ├── ui.ts               # stage slider + renderer toggle
-    ├── scene-backend.ts    # shared interface
-    └── types.ts
+    ├── arcgis-scene.ts         # SceneView — water layers only
+    ├── usgs-elevation-layer.ts # BaseElevationLayer for 3DEP GeoTIFF tiles
+    └── scene.ts                # Three.js fallback — water only
 ```
-
-## Coordinate conversion
-
-Vertices in `reach.json` use local east-north meters `(x, y)` plus elevation `z`. ArcGIS layers convert via `meta.originWgs84`:
-
-```
-lon = originLon + x / (111320 * cos(originLat))
-lat = originLat + y / 111320
-z   = elevation in meters (absolute-height when 3D terrain loaded; flattened to 0 with relative-to-ground offsets only if elevation service fails)
-```
-
-## Stubbed / out of scope
-
-- Terrain-derived inundation footprints (T3)
-- Performance metrics (T5)
-- Flood scenario (T6)
 
 ## Regenerating data
 
@@ -132,4 +110,10 @@ z   = elevation in meters (absolute-height when 3D terrain loaded; flattened to 
 npm run generate-data
 ```
 
-Requires network access to the TNC FeatureServer.
+Requires network access to the TNC FeatureServer and USGS 3DEP ImageServer.
+
+## Stubbed / out of scope
+
+- Terrain-derived inundation footprints (T3)
+- Performance metrics (T5)
+- Flood scenario (T6)
