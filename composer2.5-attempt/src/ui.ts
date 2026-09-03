@@ -36,9 +36,11 @@ export function bindStageControls(
   let playing = false;
   let rafId = 0;
   let lastTime = 0;
+  let currentFeet = 0;
 
   const setFeet = (feet: number, fromUser = false): void => {
     const clamped = Math.max(0, Math.min(MAX_WATER_STAGE_FT, feet));
+    currentFeet = clamped;
     slider.value = String(clamped);
     const label = formatStageLabel(clamped);
     slider.setAttribute('aria-valuetext', label);
@@ -60,7 +62,7 @@ export function bindStageControls(
     const dt = (time - lastTime) / 1000;
     lastTime = time;
 
-    const nextFeet = Number(slider.value) + (MAX_WATER_STAGE_FT / RISE_CYCLE_SECONDS) * dt;
+    const nextFeet = currentFeet + (MAX_WATER_STAGE_FT / RISE_CYCLE_SECONDS) * dt;
     if (nextFeet >= MAX_WATER_STAGE_FT) {
       setFeet(0);
       lastTime = time;
@@ -91,7 +93,7 @@ export function bindStageControls(
   setFeet(0);
 
   return {
-    getOffsetFeet: () => Number(slider.value),
+    getOffsetFeet: () => currentFeet,
     setOffsetFeet: (feet) => setFeet(feet),
   };
 }
