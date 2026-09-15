@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { ReachData } from './types';
+import type { NetworkData } from './types';
 import type { SceneBackend } from './scene-backend';
 import { buildRibbonMesh } from './water-stage';
 
@@ -34,9 +34,9 @@ export class CreekScene implements SceneBackend {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private controls: OrbitControls;
-  private waterMesh: THREE.Mesh | null = null;
+  private waterMeshes: THREE.Mesh[] = [];
   private waterMaterial: THREE.MeshPhysicalMaterial | null = null;
-  private reachData: ReachData | null = null;
+  private networkData: NetworkData | null = null;
   private currentOffsetM = -1;
   private container: HTMLElement;
   private rafId = 0;
@@ -55,8 +55,8 @@ export class CreekScene implements SceneBackend {
     this.camera = new THREE.PerspectiveCamera(
       55,
       container.clientWidth / container.clientHeight,
-      0.1,
-      2000,
+      1,
+      80000,
     );
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -71,8 +71,8 @@ export class CreekScene implements SceneBackend {
     window.addEventListener('resize', this.onResize);
   }
 
-  load(data: ReachData): void {
-    this.reachData = data;
+  load(data: NetworkData): void {
+    this.networkData = data;
     this.waterMaterial = new THREE.MeshPhysicalMaterial({
       color: 0x1d9bf0,
       transparent: true,
@@ -90,35 +90,43 @@ export class CreekScene implements SceneBackend {
   }
 
   setStage(stageId: string): void {
-    const stage = this.reachData?.meta.stages.find((item) => item.id === stageId);
+    const stage = this.networkData?.meta.stages.find((item) => item.id === stageId);
     if (stage) this.setStageOffsetM(stage.offsetM);
   }
 
   setStageOffsetM(offsetM: number): void {
-    if (!this.reachData || !this.waterMaterial) return;
+    if (!this.networkData || !this.waterMaterial) return;
     if (Math.abs(this.currentOffsetM - offsetM) < 1e-6) return;
 
     this.currentOffsetM = offsetM;
-    const { positions, indices } = buildRibbonMesh(this.reachData.centerline, offsetM);
+    this.clearWaterMeshes();
 
-    if (this.waterMesh) {
-      this.waterMesh.geometry.dispose();
-      this.waterMesh.removeFromParent();
+    this.waterMeshes = this.networkData.reaches
+      .filter((reach) => reach.centerline.length >= 2)
+      .map((reach, index) => {
+        const { positions, indices } = buildRibbonMesh(reach.centerline, offsetM);
+        const mesh = meshFromData(positions, indices, this.waterMaterial!);
+        mesh.name = `water-reach-${reach.comid ?? index}`;
+        this.scene.add(mesh);
+        return mesh;
+      });
+  }
+
+  private clearWaterMeshes(): void {
+    for (const mesh of this.waterMeshes) {
+      mesh.geometry.dispose();
+      mesh.removeFromParent();
     }
-
-    this.waterMesh = meshFromData(positions, indices, this.waterMaterial);
-    this.waterMesh.name = 'water-dynamic';
-    this.scene.add(this.waterMesh);
+    this.waterMeshes = [];
   }
 
   private frameCamera(): void {
-    if (!this.waterMesh) return;
-
     const bounds = new THREE.Box3();
-    this.waterMesh.geometry.computeBoundingBox();
-    if (this.waterMesh.geometry.boundingBox) {
-      bounds.copy(this.waterMesh.geometry.boundingBox);
+    for (const mesh of this.waterMeshes) {
+      mesh.geometry.computeBoundingBox();
+      if (mesh.geometry.boundingBox) bounds.union(mesh.geometry.boundingBox);
     }
+    if (bounds.isEmpty()) return;
 
     const center = bounds.getCenter(new THREE.Vector3());
     const size = bounds.getSize(new THREE.Vector3());
@@ -149,14 +157,13 @@ export class CreekScene implements SceneBackend {
   destroy(): void {
     cancelAnimationFrame(this.rafId);
     window.removeEventListener('resize', this.onResize);
-    this.waterMesh?.geometry.dispose();
+    this.clearWaterMeshes();
     this.waterMaterial?.dispose();
     this.controls.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
-    this.waterMesh = null;
     this.waterMaterial = null;
-    this.reachData = null;
+    this.networkData = null;
     this.currentOffsetM = -1;
   }
 }

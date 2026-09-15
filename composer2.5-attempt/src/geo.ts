@@ -91,3 +91,10 @@ export function extentFromCenterline(
 
   return { xmin, ymin, xmax, ymax };
 }
+
+/** Geographic bbox of every station on every reach. */
+export function extentFromReaches(
+  reaches: Array<{ centerline: Array<{ lon: number; lat: number }> }>,
+): { xmin: number; ymin: number; xmax: number; ymax: number } {
+  return extentFromCenterline(reaches.flatMap((reach) => reach.centerline));
+}

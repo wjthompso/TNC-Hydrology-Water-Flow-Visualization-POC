@@ -9,7 +9,7 @@ import {
   updateBasemapNote,
 } from './ui';
 import type { SceneBackend } from './scene-backend';
-import type { ReachData } from './types';
+import type { NetworkData } from './types';
 
 type RendererId = 'arcgis' | 'three';
 
@@ -25,7 +25,7 @@ async function main(): Promise<void> {
     throw new Error('reach.json missing. Run: npm run generate-data');
   }
 
-  const data = (await response.json()) as ReachData;
+  const data = (await response.json()) as NetworkData;
   let activeRenderer: RendererId = 'arcgis';
   let activeScene: SceneBackend | null = null;
   let currentOffsetM = 0;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Escondido Creek Water POC — Composer 2.5</title>
+    <title>Dangermond Creek Network — Composer 2.5</title>
   </head>
   <body class="m-0 overflow-hidden bg-slate-950 text-slate-100">
     <div id="app-root" class="relative h-screen w-screen">
@@ -21,7 +21,7 @@
             Research POC · Dangermond Preserve
           </p>
           <h1 id="panel-title" class="mt-1 text-lg font-semibold leading-tight">
-            Escondido Creek @ Dangermond
+            Dangermond Preserve creeks
           </h1>
           <p id="panel-subtitle" class="mt-1 text-sm text-slate-400">
             ArcGIS SceneView · USGS imagery + 3DEP elevation (key-free)
@@ -95,13 +95,13 @@
               <span class="font-medium text-emerald-300">Real:</span> 3D terrain elevation (USGS 3DEP or Esri world-elevation)
             </li>
             <li id="legend-water">
-              <span class="font-medium text-cyan-300">Water:</span> valley-bottom ribbon (USGS 3DEP offline sampling); slider raises 0 to 3 ft — press Play to animate
+              <span class="font-medium text-cyan-300">Water:</span> named + perennial NHD network as valley-bottom ribbons (USGS 3DEP offline sampling); slider raises all creeks 0 to 3 ft — press Play to animate
             </li>
           </ul>
         </section>
 
         <footer id="panel-footer" class="mt-4 border-t border-slate-700 pt-3 text-[11px] text-slate-500">
-          <p id="reach-stats">Loading reach metadata…</p>
+          <p id="reach-stats">Loading creek network…</p>
           <p id="api-key-note" class="mt-1">
             No API key — USGS satellite imagery with flat ground for reliable navigation. Optional VITE_ARCGIS_API_KEY switches to Esri imagery + world elevation.
           </p>

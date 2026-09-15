@@ -118,8 +118,8 @@ export async function preflightElevationAtPoint(
  * Custom elevation layer for USGS 3DEP ImageServer (dynamic, not LERC-tiled).
  * Fetches Float32 GeoTIFF tiles via exportImage and feeds SceneView terrain.
  *
- * Pass `fullExtent` (WGS84) around the creek reach so SceneView does not
- * request tiles globally.
+ * Pass `fullExtent` covering the creek network plus buffer so SceneView does
+ * not request tiles globally.
  */
 export default class Usgs3DepElevationLayer extends BaseElevationLayer {
   constructor(properties?: __esri.BaseElevationLayerProperties) {

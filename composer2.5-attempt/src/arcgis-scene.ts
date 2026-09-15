@@ -12,9 +12,10 @@ import PolygonSymbol3D from '@arcgis/core/symbols/PolygonSymbol3D';
 import WaterSymbol3DLayer from '@arcgis/core/symbols/WaterSymbol3DLayer';
 import esriConfig from '@arcgis/core/config.js';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
-import { buildWaterRibbonSegmentRings } from './water-stage';
+import { buildWaterRibbonOutlineRing } from './water-stage';
+import { extentFromReaches } from './geo';
 import type { SceneBackend } from './scene-backend';
-import type { ReachData } from './types';
+import type { NetworkData, NetworkReach } from './types';
 import Usgs3DepElevationLayer, { preflightElevationAtPoint } from './usgs-elevation-layer';
 
 export type BasemapMode = 'usgs-imagery' | 'arcgis-imagery';
@@ -22,6 +23,7 @@ export type ElevationSource = 'usgs-3dep' | 'world-elevation' | 'none';
 
 const USGS_IMAGERY_URL =
   'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer';
+const TERRAIN_BUFFER_M = 1500;
 
 function configureApiKey(): BasemapMode {
   const apiKey = import.meta.env.VITE_ARCGIS_API_KEY?.trim();
@@ -58,16 +60,27 @@ function createFlatGround(): __esri.GroundProperties {
   return { navigationConstraint: { type: 'none' } };
 }
 
-function createCreekElevationExtent(origin: ReachData['meta']['originWgs84']): Extent {
-  const point = webMercatorUtils.geographicToWebMercator(
-    new Point({ longitude: origin.lon, latitude: origin.lat, spatialReference: { wkid: 4326 } }),
+function createNetworkElevationExtent(reaches: NetworkReach[]): Extent {
+  const geo = extentFromReaches(reaches);
+  const sw = webMercatorUtils.geographicToWebMercator(
+    new Point({
+      longitude: geo.xmin,
+      latitude: geo.ymin,
+      spatialReference: { wkid: 4326 },
+    }),
   ) as Point;
-  const paddingM = 2_000;
+  const ne = webMercatorUtils.geographicToWebMercator(
+    new Point({
+      longitude: geo.xmax,
+      latitude: geo.ymax,
+      spatialReference: { wkid: 4326 },
+    }),
+  ) as Point;
   return new Extent({
-    xmin: point.x - paddingM,
-    ymin: point.y - paddingM,
-    xmax: point.x + paddingM,
-    ymax: point.y + paddingM,
+    xmin: sw.x - TERRAIN_BUFFER_M,
+    ymin: sw.y - TERRAIN_BUFFER_M,
+    xmax: ne.x + TERRAIN_BUFFER_M,
+    ymax: ne.y + TERRAIN_BUFFER_M,
     spatialReference: { wkid: 3857 },
   });
 }
@@ -83,7 +96,6 @@ const waterSymbol = new PolygonSymbol3D({
   ],
 });
 
-
 function elevationInfoForMode(
   groundDraped: boolean,
   offsetM = 0,
@@ -94,11 +106,25 @@ function elevationInfoForMode(
   return { mode: 'absolute-height' };
 }
 
+function waterPolygonForReach(
+  reach: NetworkReach,
+  offsetM: number,
+  groundDraped: boolean,
+): Polygon | null {
+  const ring = buildWaterRibbonOutlineRing(reach.centerline, offsetM, groundDraped);
+  if (!ring) return null;
+  return new Polygon({
+    rings: [ring],
+    hasZ: true,
+    spatialReference: { wkid: 4326 },
+  });
+}
+
 export class ArcGISCreekScene implements SceneBackend {
   private view: SceneView | null = null;
   private waterLayer: GraphicsLayer | null = null;
   private waterGraphics: Graphic[] = [];
-  private reachData: ReachData | null = null;
+  private networkData: NetworkData | null = null;
   private groundDraped = false;
   readonly basemapMode: BasemapMode;
   private _elevationSource: ElevationSource = 'none';
@@ -114,7 +140,7 @@ export class ArcGISCreekScene implements SceneBackend {
     this.basemapMode = basemapMode ?? configureApiKey();
   }
 
-  async load(data: ReachData): Promise<void> {
+  async load(data: NetworkData): Promise<void> {
     const map = new EsriMap({
       basemap: createBasemap(this.basemapMode),
       ground: createGround(this.basemapMode),
@@ -155,7 +181,7 @@ export class ArcGISCreekScene implements SceneBackend {
         spatialReference: { wkid: 4326 },
       });
       const elevationLayer = new Usgs3DepElevationLayer({
-        fullExtent: createCreekElevationExtent(data.meta.originWgs84),
+        fullExtent: createNetworkElevationExtent(data.reaches),
       });
       const preflight = await preflightElevationAtPoint(originPoint, elevationLayer);
 
@@ -166,13 +192,7 @@ export class ArcGISCreekScene implements SceneBackend {
       }
     }
 
-    const centerlinePath = data.centerline.map((pt) => [
-      pt.lon,
-      pt.lat,
-      pt.valleyMinElevationM,
-    ]);
-
-    this.reachData = data;
+    this.networkData = data;
     this.groundDraped = groundDraped;
     this.waterLayer = new GraphicsLayer({
       id: 'water-dynamic',
@@ -180,45 +200,35 @@ export class ArcGISCreekScene implements SceneBackend {
     });
     map.add(this.waterLayer);
 
-    await this.frameCamera(centerlinePath, !groundDraped);
+    await this.frameCamera(data.reaches, !groundDraped);
     this.setStageOffsetM(0);
   }
 
   setStage(stageId: string): void {
-    const stage = this.reachData?.meta.stages.find((item) => item.id === stageId);
+    const stage = this.networkData?.meta.stages.find((item) => item.id === stageId);
     if (stage) this.setStageOffsetM(stage.offsetM);
   }
 
   setStageOffsetM(offsetM: number): void {
-    if (!this.reachData || !this.waterLayer) return;
+    if (!this.networkData || !this.waterLayer) return;
 
-    const segmentRings = buildWaterRibbonSegmentRings(
-      this.reachData.centerline,
-      offsetM,
-      this.groundDraped,
-    );
+    const polygons = this.networkData.reaches
+      .map((reach) => waterPolygonForReach(reach, offsetM, this.groundDraped))
+      .filter((polygon): polygon is Polygon => polygon !== null);
 
-    if (this.waterGraphics.length !== segmentRings.length) {
+    if (this.waterGraphics.length !== polygons.length) {
       this.waterLayer.removeAll();
-      this.waterGraphics = segmentRings.map((ring) => {
+      this.waterGraphics = polygons.map((geometry) => {
         const graphic = new Graphic({
-          geometry: new Polygon({
-            rings: [ring],
-            hasZ: true,
-            spatialReference: { wkid: 4326 },
-          }),
+          geometry,
           symbol: waterSymbol,
         });
         this.waterLayer!.add(graphic);
         return graphic;
       });
     } else {
-      for (let i = 0; i < segmentRings.length; i++) {
-        this.waterGraphics[i].geometry = new Polygon({
-          rings: [segmentRings[i]],
-          hasZ: true,
-          spatialReference: { wkid: 4326 },
-        });
+      for (let i = 0; i < polygons.length; i++) {
+        this.waterGraphics[i].geometry = polygons[i];
       }
     }
 
@@ -232,25 +242,28 @@ export class ArcGISCreekScene implements SceneBackend {
     this.view = null;
     this.waterLayer = null;
     this.waterGraphics = [];
-    this.reachData = null;
+    this.networkData = null;
   }
 
-  private async frameCamera(
-    centerlinePath: number[][],
-    has3DTerrain: boolean,
-  ): Promise<void> {
+  private async frameCamera(reaches: NetworkReach[], has3DTerrain: boolean): Promise<void> {
     if (!this.view) return;
 
-    const centerlinePolyline = new Polyline({
-      paths: [centerlinePath],
+    const paths = reaches
+      .filter((reach) => reach.centerline.length >= 2)
+      .map((reach) =>
+        reach.centerline.map((pt) => [pt.lon, pt.lat, pt.valleyMinElevationM]),
+      );
+
+    const networkPolyline = new Polyline({
+      paths,
       hasZ: true,
       spatialReference: { wkid: 4326 },
     });
 
     await this.view.goTo(
       {
-        target: centerlinePolyline,
-        tilt: has3DTerrain ? 78 : 72,
+        target: networkPolyline,
+        tilt: has3DTerrain ? 68 : 62,
         heading: 25,
       },
       { duration: 0 },

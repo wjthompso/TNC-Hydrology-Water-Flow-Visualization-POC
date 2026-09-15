@@ -1,7 +1,10 @@
 /**
- * Fetches Escondido Creek centerline from TNC public FeatureServer,
- * samples USGS 3DEP valley-bottom elevation along the reach, and
- * precomputes water ribbon meshes at discrete stages (absolute meters).
+ * Fetches Dangermond Preserve NHD 1:24k flowlines, samples USGS 3DEP
+ * valley-bottom elevation on each reach, and writes public/data/reach.json.
+ *
+ * Native layer CRS is WKID 102645 / 2229 (NAD 1983 StatePlane CA V, US feet).
+ * Always query with outSR=4326 and f=geojson — default JSON geometry is feet.
+ * Vertex Z is 0 even with returnZ; do not treat it as NAVD88. Use 3DEP instead.
  */
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -30,25 +33,22 @@ const STAGES = Array.from({ length: MAX_STAGE_FT / 0.25 + 1 }, (_, i) => {
   };
 });
 
-const TARGET_REACH_M = 350;
-const SAMPLE_SPACING_M = 8;
-const BASE_HALF_WIDTH_M = 4;
+/** Off unless debugging a single short slice. */
+const TRIM_REACH_M = 0;
+const SAMPLE_SPACING_M = 12;
+/** Keep in sync with src/water-stage.ts — 20 m full width at stage 0. */
+const BASE_HALF_WIDTH_M = 10;
 const WIDTH_GROWTH_PER_M_STAGE = 1.8;
 const PROBE_DISTANCES_M = [0];
-for (const d of [4, 8, 12, 16, 20, 24, 28, 30]) {
+for (const d of [4, 8, 12, 16, 20, 24]) {
   PROBE_DISTANCES_M.push(d, -d);
 }
 const GET_SAMPLES_BATCH = 100;
+const USGS_CONCURRENCY = 4;
+const CONNECTOR_FCODE = 33400;
 
-function haversineM(lon1, lat1, lon2, lat2) {
-  const R = 6371000;
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function lonLatToLocalM(lon, lat, originLon, originLat) {
@@ -138,189 +138,286 @@ function crossSectionProbePoints(centerline, index) {
   }));
 }
 
+function lineParts(geometry) {
+  if (!geometry) return [];
+  if (geometry.type === 'LineString') return [geometry.coordinates];
+  if (geometry.type === 'MultiLineString') return geometry.coordinates;
+  return [];
+}
+
+function displayReachName(gnisName) {
+  const name = (gnisName ?? '').trim();
+  return name || 'Unnamed';
+}
+
+function shortCreekName(name) {
+  return name.replace(/\s+Creek$/i, '');
+}
+
+function bboxCenter(coords) {
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+  for (const [lon, lat] of coords) {
+    minLon = Math.min(minLon, lon);
+    minLat = Math.min(minLat, lat);
+    maxLon = Math.max(maxLon, lon);
+    maxLat = Math.max(maxLat, lat);
+  }
+  return {
+    lon: (minLon + maxLon) / 2,
+    lat: (minLat + maxLat) / 2,
+  };
+}
+
+function fillMissingValleyElevations(centerline) {
+  const values = centerline.map((pt) => pt.valleyMinElevationM);
+  let lastValid = Number.NaN;
+  for (let i = 0; i < values.length; i++) {
+    if (Number.isFinite(values[i])) lastValid = values[i];
+    else if (Number.isFinite(lastValid)) values[i] = lastValid;
+  }
+  lastValid = Number.NaN;
+  for (let i = values.length - 1; i >= 0; i--) {
+    if (Number.isFinite(values[i])) lastValid = values[i];
+    else if (Number.isFinite(lastValid)) values[i] = lastValid;
+  }
+  return centerline.map((pt, i) => ({
+    ...pt,
+    valleyMinElevationM: values[i],
+  }));
+}
+
+async function fetchSamplesBatch(batch, attempt = 1) {
+  const geometry = JSON.stringify({
+    points: batch.map((p) => [p.lon, p.lat]),
+    spatialReference: { wkid: 4326 },
+  });
+  const body = new URLSearchParams({
+    geometry,
+    geometryType: 'esriGeometryMultipoint',
+    returnFirstValueOnly: 'true',
+    f: 'json',
+  });
+
+  const res = await fetch(`${USGS_ELEVATION_URL}/getSamples`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  if (!res.ok) {
+    if (attempt < 3) {
+      await sleep(400 * attempt);
+      return fetchSamplesBatch(batch, attempt + 1);
+    }
+    throw new Error(`USGS 3DEP getSamples failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+  return json.samples ?? [];
+}
+
 async function sampleElevationsLonLat(points) {
   const elevations = new Array(points.length);
-
+  const batches = [];
   for (let start = 0; start < points.length; start += GET_SAMPLES_BATCH) {
-    const batch = points.slice(start, start + GET_SAMPLES_BATCH);
-    const geometry = JSON.stringify({
-      points: batch.map((p) => [p.lon, p.lat]),
-      spatialReference: { wkid: 4326 },
-    });
-    const body = new URLSearchParams({
-      geometry,
-      geometryType: 'esriGeometryMultipoint',
-      returnFirstValueOnly: 'true',
-      f: 'json',
-    });
+    batches.push({ start, batch: points.slice(start, start + GET_SAMPLES_BATCH) });
+  }
 
-    const res = await fetch(`${USGS_ELEVATION_URL}/getSamples`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-    if (!res.ok) {
-      throw new Error(`USGS 3DEP getSamples failed: ${res.status}`);
-    }
-
-    const json = await res.json();
-    const samples = json.samples ?? [];
-    if (samples.length !== batch.length) {
-      throw new Error(
-        `USGS 3DEP getSamples returned ${samples.length} samples for ${batch.length} points`,
-      );
-    }
-
-    for (const sample of samples) {
-      const batchIndex = sample.locationId;
-      const globalIndex = start + batchIndex;
-      const value = Number.parseFloat(sample.value);
-      if (!Number.isFinite(value)) {
-        const pt = batch[batchIndex];
-        throw new Error(`NoData elevation at lon=${pt.lon}, lat=${pt.lat}`);
-      }
-      elevations[globalIndex] = value;
+  for (let i = 0; i < batches.length; i += USGS_CONCURRENCY) {
+    const slice = batches.slice(i, i + USGS_CONCURRENCY);
+    await Promise.all(
+      slice.map(async ({ start, batch }) => {
+        const samples = await fetchSamplesBatch(batch);
+        if (samples.length !== batch.length) {
+          throw new Error(
+            `USGS 3DEP getSamples returned ${samples.length} samples for ${batch.length} points`,
+          );
+        }
+        for (const sample of samples) {
+          const batchIndex = sample.locationId;
+          const value = Number.parseFloat(sample.value);
+          elevations[start + batchIndex] = Number.isFinite(value) ? value : Number.NaN;
+        }
+      }),
+    );
+    const done = Math.min(i + USGS_CONCURRENCY, batches.length);
+    if (done === batches.length || done % 8 === 0) {
+      console.log(`  3DEP batches ${done}/${batches.length}`);
     }
   }
 
   return elevations;
 }
 
-async function computeValleyMinProfile(centerline) {
-  const probePoints = centerline.flatMap((_, index) => crossSectionProbePoints(centerline, index));
+async function computeValleyMinProfiles(reaches) {
+  const probePoints = [];
+  const owners = [];
+  for (let r = 0; r < reaches.length; r++) {
+    const centerline = reaches[r].centerline;
+    for (let i = 0; i < centerline.length; i++) {
+      const probes = crossSectionProbePoints(centerline, i);
+      for (const probe of probes) {
+        probePoints.push(probe);
+        owners.push({ r, i });
+      }
+    }
+  }
+
   console.log(
-    `Querying USGS 3DEP for ${probePoints.length} cross-section samples (${centerline.length} stations × ${PROBE_DISTANCES_M.length} probes)…`,
+    `Querying USGS 3DEP for ${probePoints.length} cross-section samples (${reaches.reduce((n, reach) => n + reach.centerline.length, 0)} stations × ${PROBE_DISTANCES_M.length} probes)…`,
   );
 
   const elevations = await sampleElevationsLonLat(probePoints);
-  const probesPerStation = PROBE_DISTANCES_M.length;
+  const mins = reaches.map((reach) =>
+    reach.centerline.map(() => ({ min: Infinity, any: false })),
+  );
 
-  return centerline.map((pt, index) => {
-    const start = index * probesPerStation;
-    const stationElevations = elevations.slice(start, start + probesPerStation);
-    const valleyMinElevationM = Math.min(...stationElevations);
-    return { ...pt, valleyMinElevationM };
+  for (let p = 0; p < elevations.length; p++) {
+    const value = elevations[p];
+    if (!Number.isFinite(value)) continue;
+    const { r, i } = owners[p];
+    mins[r][i].min = Math.min(mins[r][i].min, value);
+    mins[r][i].any = true;
+  }
+
+  return reaches.map((reach, r) => {
+    const withValley = reach.centerline.map((pt, i) => ({
+      ...pt,
+      valleyMinElevationM: mins[r][i].any ? mins[r][i].min : Number.NaN,
+    }));
+    return {
+      ...reach,
+      centerline: fillMissingValleyElevations(withValley),
+    };
   });
 }
 
-function buildRibbonMesh(centerline, stageOffsetM) {
-  const positions = [];
-  const indices = [];
-  const halfWidth = BASE_HALF_WIDTH_M + stageOffsetM * WIDTH_GROWTH_PER_M_STAGE;
-
-  for (let i = 0; i < centerline.length; i++) {
-    const pt = centerline[i];
-    const { nx, ny } = perpendicularUnitNormal(centerline, i);
-    const waterZ = pt.valleyMinElevationM + stageOffsetM;
-
-    positions.push(
-      pt.x + nx * halfWidth,
-      pt.y + ny * halfWidth,
-      waterZ,
-      pt.x - nx * halfWidth,
-      pt.y - ny * halfWidth,
-      waterZ,
-    );
-  }
-
-  for (let i = 0; i < centerline.length - 1; i++) {
-    const a = i * 2;
-    const b = a + 1;
-    const c = a + 2;
-    const d = a + 3;
-    indices.push(a, c, b, b, c, d);
-  }
-
-  return { positions, indices };
-}
-
-async function fetchEscondidoSegment() {
+/**
+ * Named streams plus unnamed perennial (FCODE 46006). All 105 Preserve
+ * flowlines (~139 km) include 84 intermittent draws and read as a drainage
+ * spiderweb at this scale. Unnamed GNIS_NAME is a single space, not NULL.
+ * Do not filter on MAJOR_RIVE=1 — that drops Espada and Gasper.
+ * maxRecordCount is 2000, so one request is enough.
+ */
+async function fetchPreserveCreeks() {
   const params = new URLSearchParams({
-    where: "GNIS_NAME = 'Escondido Creek'",
-    outFields: 'GNIS_NAME,COMID,LENGTHKM',
+    where: "GNIS_NAME NOT IN (' ','') OR FCODE=46006",
+    outFields: 'FID,COMID,GNIS_NAME,LENGTHKM,FCODE,FTYPE,MAJOR_RIVE,REACHCODE,FLOWDIR',
     f: 'geojson',
     returnGeometry: 'true',
-    resultRecordCount: '50',
+    outSR: '4326',
+    resultRecordCount: '2000',
   });
 
   const res = await fetch(`${CENTERLINE_URL}?${params}`);
   if (!res.ok) throw new Error(`Centerline fetch failed: ${res.status}`);
   const geojson = await res.json();
-
   const features = geojson.features ?? [];
-  if (!features.length) throw new Error('No Escondido Creek features returned');
+  if (!features.length) throw new Error('No Preserve creek features returned');
 
-  let best = null;
-  let bestLen = 0;
+  const sample = features[0]?.geometry?.coordinates;
+  const first = Array.isArray(sample?.[0]) && Array.isArray(sample[0][0]) ? sample[0][0] : sample?.[0];
+  if (!first || first[0] < -130 || first[0] > -110 || first[1] < 30 || first[1] > 40) {
+    throw new Error(
+      `Centerline is not WGS84 lon/lat (got ${first}). Query must use outSR=4326 — native CRS is State Plane feet.`,
+    );
+  }
+
+  return features.filter((feature) => feature.properties?.FCODE !== CONNECTOR_FCODE);
+}
+
+function buildDraftReaches(features, originLon, originLat) {
+  const mPerDegLat = 111320;
+  const mPerDegLon = 111320 * Math.cos((originLat * Math.PI) / 180);
+  const reaches = [];
 
   for (const feature of features) {
-    const coords = feature.geometry.coordinates;
-    const len = haversineM(coords[0][0], coords[0][1], coords.at(-1)[0], coords.at(-1)[1]);
-    if (len > bestLen) {
-      bestLen = len;
-      best = { coords, properties: feature.properties };
+    const name = displayReachName(feature.properties?.GNIS_NAME);
+    const comid = Number.isFinite(feature.properties?.COMID)
+      ? feature.properties.COMID
+      : null;
+
+    for (const coords of lineParts(feature.geometry)) {
+      const lonLat = coords.map(([lon, lat]) => [lon, lat]);
+      if (lonLat.length < 2) continue;
+
+      const rawLocal = lonLat.map(([lon, lat]) =>
+        lonLatToLocalM(lon, lat, originLon, originLat),
+      );
+      let sampled = resampleLine(rawLocal, SAMPLE_SPACING_M);
+      if (TRIM_REACH_M > 0) sampled = trimReach(sampled, TRIM_REACH_M);
+      if (sampled.length < 2) continue;
+
+      reaches.push({
+        comid,
+        name,
+        lengthM: sampled.at(-1)?.chainageM ?? 0,
+        centerline: sampled.map((pt) => ({
+          ...pt,
+          lon: originLon + pt.x / mPerDegLon,
+          lat: originLat + pt.y / mPerDegLat,
+        })),
+      });
     }
   }
 
-  return best;
+  return reaches;
 }
 
 async function main() {
   const stagesOnly = process.argv.includes('--stages-only');
 
   if (stagesOnly && existsSync(OUT_PATH)) {
-    console.log(`Rebuilding water stages from existing ${OUT_PATH} (skipping USGS 3DEP)…`);
+    console.log(`Updating stage metadata on ${OUT_PATH} (ribbons rebuild at runtime)…`);
     const existing = JSON.parse(readFileSync(OUT_PATH, 'utf8'));
-    const centerline = existing.centerline;
-    if (!centerline?.length) {
-      throw new Error('Existing reach.json has no centerline — run full generate-data first');
+    if (!existing.reaches?.length) {
+      throw new Error('Existing reach.json has no reaches — run full generate-data first');
     }
-
     existing.meta.maxStageFt = MAX_STAGE_FT;
     existing.meta.stages = STAGES;
-    existing.waterStages = Object.fromEntries(
-      STAGES.map((stage) => [stage.id, buildRibbonMesh(centerline, stage.offsetM)]),
-    );
-
+    existing.meta.halfWidthBaseM = BASE_HALF_WIDTH_M;
+    if (existing.meta.valleyBottomSampling) {
+      existing.meta.valleyBottomSampling.halfWidthBaseM = BASE_HALF_WIDTH_M;
+    }
+    delete existing.waterStages;
     writeFileSync(OUT_PATH, JSON.stringify(existing, null, 2));
-    console.log(
-      `Updated ${OUT_PATH} with ${STAGES.length} stages (0–${MAX_STAGE_FT} ft), ${centerline.length} stations`,
-    );
+    console.log(`Updated ${OUT_PATH} stages (0–${MAX_STAGE_FT} ft), ${existing.reaches.length} reaches`);
     return;
   }
 
-  console.log('Fetching Escondido Creek centerline from TNC public service...');
-  const segment = await fetchEscondidoSegment();
-
-  const originLon = segment.coords[0][0];
-  const originLat = segment.coords[0][1];
-
-  const rawLocal = segment.coords.map(([lon, lat]) =>
-    lonLatToLocalM(lon, lat, originLon, originLat),
+  console.log('Fetching named + perennial Preserve creeks from TNC NHD 1:24k…');
+  const features = await fetchPreserveCreeks();
+  const allCoords = features.flatMap((feature) =>
+    lineParts(feature.geometry).flatMap((part) => part.map(([lon, lat]) => [lon, lat])),
   );
+  const origin = bboxCenter(allCoords);
+  const draftReaches = buildDraftReaches(features, origin.lon, origin.lat);
+  if (!draftReaches.length) throw new Error('No usable reach geometries after resample');
 
-  const resampled = resampleLine(rawLocal, SAMPLE_SPACING_M);
-  const reach = trimReach(resampled, TARGET_REACH_M);
+  const reaches = await computeValleyMinProfiles(draftReaches);
+  const usable = reaches.filter((reach) =>
+    reach.centerline.every((pt) => Number.isFinite(pt.valleyMinElevationM)),
+  );
+  if (!usable.length) throw new Error('No reaches with valid 3DEP valley elevations');
 
-  const mPerDegLat = 111320;
-  const mPerDegLon = 111320 * Math.cos((originLat * Math.PI) / 180);
-  const centerlineDraft = reach.map((pt) => ({
-    ...pt,
-    lon: originLon + pt.x / mPerDegLon,
-    lat: originLat + pt.y / mPerDegLat,
-  }));
-
-  const centerline = await computeValleyMinProfile(centerlineDraft);
-  const reachLengthM = centerline.at(-1)?.chainageM ?? 0;
-  const valleyStats = centerline.map((pt) => pt.valleyMinElevationM);
+  const valleyStats = usable.flatMap((reach) =>
+    reach.centerline.map((pt) => pt.valleyMinElevationM),
+  );
   const minValley = Math.min(...valleyStats);
   const maxValley = Math.max(...valleyStats);
+  const totalLengthM = usable.reduce((sum, reach) => sum + reach.lengthM, 0);
+  const namedCreeks = [...new Set(
+    usable.map((reach) => shortCreekName(reach.name)).filter((name) => name !== 'Unnamed'),
+  )].sort();
 
   const payload = {
     meta: {
-      name: 'Escondido Creek reach (POC)',
+      name: 'Dangermond Preserve creek network',
       source: {
-        centerline: 'REAL — TNC JLDP NHD flowlines FeatureServer/7 (Escondido Creek)',
+        centerline:
+          'REAL — TNC JLDP NHD 1:24k flowlines FeatureServer/7 (named streams + unnamed perennial; outSR=4326)',
         centerlineUrl: CENTERLINE_URL,
         elevation: 'REAL — USGS 3DEP ImageServer getSamples (valley-bottom cross-section minimum)',
         elevationUrl: USGS_ELEVATION_URL,
@@ -337,32 +434,37 @@ async function main() {
           max: Number(maxValley.toFixed(3)),
         },
       },
-      originWgs84: { lon: originLon, lat: originLat },
-      reachLengthM: Math.round(reachLengthM),
-      comid: segment.properties.COMID,
+      originWgs84: origin,
+      totalLengthM: Math.round(totalLengthM),
+      reachCount: usable.length,
+      halfWidthBaseM: BASE_HALF_WIDTH_M,
+      namedCreeks,
       maxStageFt: MAX_STAGE_FT,
       stages: STAGES,
       approach: 'Offline USGS 3DEP valley-bottom water mesh + ArcGIS SceneView absolute-height',
       apiKeyRequired: false,
     },
-    centerline: centerline.map(({ x, y, chainageM, lon, lat, valleyMinElevationM }) => ({
-      x,
-      y,
-      chainageM,
-      lon,
-      lat,
-      valleyMinElevationM,
+    reaches: usable.map((reach) => ({
+      comid: reach.comid,
+      name: reach.name,
+      lengthM: Math.round(reach.lengthM),
+      centerline: reach.centerline.map(({ x, y, chainageM, lon, lat, valleyMinElevationM }) => ({
+        x,
+        y,
+        chainageM,
+        lon,
+        lat,
+        valleyMinElevationM,
+      })),
     })),
-    waterStages: Object.fromEntries(
-      STAGES.map((stage) => [stage.id, buildRibbonMesh(centerline, stage.offsetM)]),
-    ),
   };
 
   mkdirSync(dirname(OUT_PATH), { recursive: true });
   writeFileSync(OUT_PATH, JSON.stringify(payload, null, 2));
   console.log(
-    `Wrote ${OUT_PATH} (${reachLengthM.toFixed(0)} m reach, ${centerline.length} stations, valley ${minValley.toFixed(1)}–${maxValley.toFixed(1)} m)`,
+    `Wrote ${OUT_PATH} (${usable.length} reaches, ${(totalLengthM / 1000).toFixed(1)} km, ${usable.reduce((n, reach) => n + reach.centerline.length, 0)} stations, valley ${minValley.toFixed(1)}–${maxValley.toFixed(1)} m)`,
   );
+  console.log(`Named creeks: ${namedCreeks.join(', ') || '(none)'}`);
 }
 
 main().catch((err) => {

@@ -1,5 +1,18 @@
 # Dangermond Preserve Digital Twin: Hydrology / Water Visualization Context
 
+### Goal
+
+We want to create a 3D visualization which approximates real-life creek water levels rising and falling over time, showing changes in the shape of the creek over time and also the rise and fall of the creek's water level over time. We want to be able to correlate our 3D visualization with real-life water level data and imagery to verify the accuracy.
+
+### High Level Plan
+
+- Calculate creek segments by:
+   1. Finding WSE (Water Surface Elevation) values at every centerpoint, sampling enough centerpoints to smooth out polygon.
+   2. Finding the creek width by crosswalking to the left and right edge at the bank for every centerpoint.
+   3. Treating each centerpoint as a shared edge between two
+   segments in order to show a smoothly sloping creek rather than awkward stair step water segments.
+
+
 ### High Level Questions This POC Should Answer
 
 1. (i) Can the water level in a creek be reasonably visualized in web-based 3D, at least in a proximate way, by breaking it apart into flat horizontal polygons? 
@@ -13,11 +26,13 @@
 
 ### Additional Questions
 
-1. 
+...
 
 ### Notes
 
-1. Dan is down to provide required data.
+- Dan is down to provide required data.
+- The 2018 DP LiDAR survey was taken during the dry season, Sept 22-Oct 1, before the first real fall storm on Oct 2nd. Can provide a reasonable approximation of creek bathymetry.
+- Problem: A fixed-width ribbon will be too skinny in wide spots, too fat in narrow spots, and can spill into nearby dry side channels. Accurate viz needs water footprints that follow the actual banks at each water-surface elevation — precomputed, not guessed as a constant width.
 
 ### Previously Identified Approach
 

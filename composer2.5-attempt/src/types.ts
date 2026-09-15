@@ -9,7 +9,23 @@ export interface MeshData {
   indices: number[];
 }
 
-export interface ReachData {
+export interface CenterlineStation {
+  x: number;
+  y: number;
+  chainageM: number;
+  lon: number;
+  lat: number;
+  valleyMinElevationM: number;
+}
+
+export interface NetworkReach {
+  comid: number | null;
+  name: string;
+  lengthM: number;
+  centerline: CenterlineStation[];
+}
+
+export interface NetworkData {
   meta: {
     name: string;
     source: Record<string, string>;
@@ -20,21 +36,18 @@ export interface ReachData {
       elevationRangeM: { min: number; max: number };
     };
     originWgs84: { lon: number; lat: number };
-    reachLengthM: number;
-    comid: number;
+    totalLengthM: number;
+    reachCount: number;
+    halfWidthBaseM: number;
+    namedCreeks: string[];
     maxStageFt?: number;
     stages: StageDef[];
     approach: string;
     apiKeyRequired: boolean;
   };
-  centerline: Array<{
-    x: number;
-    y: number;
-    chainageM: number;
-    lon: number;
-    lat: number;
-    valleyMinElevationM: number;
-  }>;
-  terrain?: MeshData;
-  waterStages: Record<string, MeshData>;
+  reaches: NetworkReach[];
+}
+
+export function allCenterlineStations(data: NetworkData): CenterlineStation[] {
+  return data.reaches.flatMap((reach) => reach.centerline);
 }

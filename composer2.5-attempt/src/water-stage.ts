@@ -3,7 +3,8 @@ import type { MeshData } from './types';
 export const MAX_WATER_STAGE_FT = 3;
 export const FT_TO_M = 0.3048;
 
-const BASE_HALF_WIDTH_M = 4;
+/** Keep in sync with scripts/generate-data.mjs — 20 m full width at stage 0. */
+const BASE_HALF_WIDTH_M = 10;
 const WIDTH_GROWTH_PER_M_STAGE = 1.8;
 
 export type CenterlinePoint = {
@@ -124,4 +125,26 @@ export function buildWaterRibbonSegmentRings(
   }
 
   return rings;
+}
+
+/** One closed bank-to-bank outline per reach — one Graphic, no hole-ring ambiguity. */
+export function buildWaterRibbonOutlineRing(
+  centerline: CenterlinePoint[],
+  stageOffsetM: number,
+  groundDraped = false,
+): number[][] | null {
+  if (centerline.length < 2) return null;
+
+  const halfWidth = BASE_HALF_WIDTH_M + stageOffsetM * WIDTH_GROWTH_PER_M_STAGE;
+  const left: number[][] = [];
+  const right: number[][] = [];
+
+  for (let i = 0; i < centerline.length; i++) {
+    left.push(ribbonBankPoint(centerline, i, halfWidth, stageOffsetM, groundDraped, 1));
+    right.push(ribbonBankPoint(centerline, i, halfWidth, stageOffsetM, groundDraped, -1));
+  }
+
+  const ring = [...left, ...right.reverse()];
+  ring.push(ring[0]);
+  return ring;
 }

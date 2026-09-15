@@ -1,5 +1,5 @@
 import type { BasemapMode, ElevationSource } from './arcgis-scene';
-import type { ReachData } from './types';
+import type { NetworkData } from './types';
 import {
   MAX_WATER_STAGE_FT,
   feetToMeters,
@@ -16,7 +16,7 @@ export interface StageControls {
 }
 
 export function bindStageControls(
-  data: ReachData,
+  data: NetworkData,
   onStageChange: (offsetM: number) => void,
 ): StageControls {
   const slider = document.getElementById('stage-slider') as HTMLInputElement;
@@ -88,7 +88,11 @@ export function bindStageControls(
 
   slider.addEventListener('input', () => setFeet(Number(slider.value), true));
 
-  reachStats.textContent = `${data.meta.reachLengthM} m reach · COMID ${data.meta.comid} · origin ${data.meta.originWgs84.lat.toFixed(5)}°N`;
+  const lengthKm = (data.meta.totalLengthM / 1000).toFixed(1);
+  const named = data.meta.namedCreeks.length
+    ? data.meta.namedCreeks.join(', ')
+    : 'unnamed perennial';
+  reachStats.textContent = `${lengthKm} km · ${data.meta.reachCount} reaches · ${named}`;
 
   setFeet(0);
 
@@ -157,7 +161,7 @@ export function updateBasemapNote(
   if (elevationSource === 'usgs-3dep') {
     subtitle.textContent = 'ArcGIS SceneView · USGS imagery + 3DEP elevation (key-free)';
     note.textContent =
-      'No API key — USGS 3DEP terrain is active in a 2 km creek area. Water uses offline valley-bottom elevations from reach.json and renders at absolute height on the terrain. Optional VITE_ARCGIS_API_KEY switches to Esri imagery + world elevation.';
+      'No API key — USGS 3DEP terrain covers the creek network plus a 1.5 km buffer. Water uses offline valley-bottom elevations from reach.json and renders at absolute height on the terrain. Optional VITE_ARCGIS_API_KEY switches to Esri imagery + world elevation.';
     return;
   }
 
