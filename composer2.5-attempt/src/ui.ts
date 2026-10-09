@@ -161,7 +161,7 @@ export function updateBasemapNote(
   if (elevationSource === 'usgs-3dep') {
     subtitle.textContent = 'ArcGIS SceneView · USGS imagery + 3DEP elevation (key-free)';
     note.textContent =
-      'No API key — USGS 3DEP terrain covers the creek network plus a 1.5 km buffer. Water uses offline valley-bottom elevations from reach.json and renders at absolute height on the terrain. Optional VITE_ARCGIS_API_KEY switches to Esri imagery + world elevation.';
+      'No API key — USGS 3DEP terrain covers the creek network in a wide local scene so zooming in does not hit a clip wall. Starts on a creek corridor; pan to see the rest. Water uses offline valley-bottom elevations from reach.json at absolute height. Optional VITE_ARCGIS_API_KEY switches to Esri imagery + world elevation.';
     return;
   }
 

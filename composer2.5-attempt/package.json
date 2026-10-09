@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@arcgis/core": "^4.31.6",
-    "geotiff": "^2.1.3",
     "three": "^0.170.0"
   },
   "devDependencies": {

@@ -7,7 +7,6 @@ import Graphic from '@arcgis/core/Graphic';
 import Extent from '@arcgis/core/geometry/Extent';
 import Point from '@arcgis/core/geometry/Point';
 import Polygon from '@arcgis/core/geometry/Polygon';
-import Polyline from '@arcgis/core/geometry/Polyline';
 import PolygonSymbol3D from '@arcgis/core/symbols/PolygonSymbol3D';
 import WaterSymbol3DLayer from '@arcgis/core/symbols/WaterSymbol3DLayer';
 import esriConfig from '@arcgis/core/config.js';
@@ -23,7 +22,10 @@ export type ElevationSource = 'usgs-3dep' | 'world-elevation' | 'none';
 
 const USGS_IMAGERY_URL =
   'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer';
-const TERRAIN_BUFFER_M = 1500;
+/** Keep the local clip wall far from the creeks so zoom-in does not hit a skirt. */
+const TERRAIN_BUFFER_M = 25000;
+/** USGS Imagery Only actually caches through WM LOD 16 (~2.4 m/px). */
+const USGS_IMAGERY_MAX_LOD = 16;
 
 function configureApiKey(): BasemapMode {
   const apiKey = import.meta.env.VITE_ARCGIS_API_KEY?.trim();
@@ -34,17 +36,23 @@ function configureApiKey(): BasemapMode {
   return 'usgs-imagery';
 }
 
-function createBasemap(mode: BasemapMode): Basemap | string {
+async function createBasemap(mode: BasemapMode): Promise<Basemap | string> {
   if (mode === 'arcgis-imagery') {
     return 'arcgis/imagery';
   }
+  const imagery = new TileLayer({
+    url: USGS_IMAGERY_URL,
+    title: 'USGS Imagery',
+  });
+  await imagery.load();
+  // Cap lods instead of maxScale: maxScale hides the layer when zoomed in
+  // past LOD 16, which leaves the slate ground (that weird blue). Reusing
+  // LOD 16 tiles keeps satellite draped on the creek corridor.
+  imagery.tileInfo.lods = imagery.tileInfo.lods.filter(
+    (lod) => lod.level <= USGS_IMAGERY_MAX_LOD,
+  );
   return new Basemap({
-    baseLayers: [
-      new TileLayer({
-        url: USGS_IMAGERY_URL,
-        title: 'USGS Imagery',
-      }),
-    ],
+    baseLayers: [imagery],
     title: 'USGS Imagery',
   });
 }
@@ -57,7 +65,19 @@ function createGround(basemapMode: BasemapMode): __esri.GroundProperties | 'worl
 }
 
 function createFlatGround(): __esri.GroundProperties {
-  return { navigationConstraint: { type: 'none' } };
+  return {
+    navigationConstraint: { type: 'none' },
+    surfaceColor: [15, 23, 42],
+  };
+}
+
+function inlandFocusPoint(data: NetworkData): { lon: number; lat: number } {
+  const escondido = data.reaches.find((reach) => /escondido/i.test(reach.name));
+  if (escondido && escondido.centerline.length > 0) {
+    const mid = escondido.centerline[Math.floor(escondido.centerline.length / 2)];
+    return { lon: mid.lon, lat: mid.lat };
+  }
+  return data.meta.originWgs84;
 }
 
 function createNetworkElevationExtent(reaches: NetworkReach[]): Extent {
@@ -142,15 +162,29 @@ export class ArcGISCreekScene implements SceneBackend {
 
   async load(data: NetworkData): Promise<void> {
     const map = new EsriMap({
-      basemap: createBasemap(this.basemapMode),
+      basemap: await createBasemap(this.basemapMode),
       ground: createGround(this.basemapMode),
     });
+
+    const terrainExtent = createNetworkElevationExtent(data.reaches);
+    // Local clippingArea cannot grow past the union of layer extents. This
+    // empty layer makes the 25 km box real so zoom does not hit a textured wall.
+    map.add(
+      new GraphicsLayer({
+        id: 'local-scene-extent',
+        listMode: 'hide',
+        fullExtent: terrainExtent,
+      }),
+    );
 
     this.view = new SceneView({
       container: this.container,
       map,
       qualityProfile: 'medium',
-      viewingMode: 'global',
+      // Global globe uses a planet-scale near clip — creek zoom slices the
+      // valley into that white slab. Local mode is sized for this preserve.
+      viewingMode: 'local',
+      clippingArea: terrainExtent,
       environment: {
         background: { type: 'color', color: [15, 23, 42] },
         starsEnabled: false,
@@ -158,6 +192,12 @@ export class ArcGISCreekScene implements SceneBackend {
       },
       constraints: {
         tilt: { max: 179 },
+        collision: { enabled: false },
+        clipDistance: {
+          mode: 'manual',
+          near: 1,
+          far: 80000,
+        },
       },
       navigation: {
         actionMap: {
@@ -181,7 +221,7 @@ export class ArcGISCreekScene implements SceneBackend {
         spatialReference: { wkid: 4326 },
       });
       const elevationLayer = new Usgs3DepElevationLayer({
-        fullExtent: createNetworkElevationExtent(data.reaches),
+        fullExtent: terrainExtent,
       });
       const preflight = await preflightElevationAtPoint(originPoint, elevationLayer);
 
@@ -192,6 +232,8 @@ export class ArcGISCreekScene implements SceneBackend {
       }
     }
 
+    map.ground.navigationConstraint = { type: 'none' };
+
     this.networkData = data;
     this.groundDraped = groundDraped;
     this.waterLayer = new GraphicsLayer({
@@ -200,7 +242,7 @@ export class ArcGISCreekScene implements SceneBackend {
     });
     map.add(this.waterLayer);
 
-    await this.frameCamera(data.reaches, !groundDraped);
+    await this.frameCamera(data, !groundDraped);
     this.setStageOffsetM(0);
   }
 
@@ -245,26 +287,26 @@ export class ArcGISCreekScene implements SceneBackend {
     this.networkData = null;
   }
 
-  private async frameCamera(reaches: NetworkReach[], has3DTerrain: boolean): Promise<void> {
+  private async frameCamera(data: NetworkData, has3DTerrain: boolean): Promise<void> {
     if (!this.view) return;
 
-    const paths = reaches
-      .filter((reach) => reach.centerline.length >= 2)
-      .map((reach) =>
-        reach.centerline.map((pt) => [pt.lon, pt.lat, pt.valleyMinElevationM]),
-      );
+    const { lon, lat } = inlandFocusPoint(data);
+    const latPad = 0.012;
+    const lonPad = latPad / Math.cos((lat * Math.PI) / 180);
 
-    const networkPolyline = new Polyline({
-      paths,
-      hasZ: true,
+    const extent = new Extent({
+      xmin: lon - lonPad,
+      ymin: lat - latPad,
+      xmax: lon + lonPad,
+      ymax: lat + latPad,
       spatialReference: { wkid: 4326 },
     });
 
     await this.view.goTo(
       {
-        target: networkPolyline,
-        tilt: has3DTerrain ? 68 : 62,
-        heading: 25,
+        target: extent,
+        tilt: has3DTerrain ? 66 : 62,
+        heading: 48,
       },
       { duration: 0 },
     );

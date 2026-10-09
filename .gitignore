@@ -1,1 +1,4 @@
 composer2.5-attempt/dist/*
+
+# Personal VS Code / Cursor workspace (local theme & layout)
+*.local.code-workspace
