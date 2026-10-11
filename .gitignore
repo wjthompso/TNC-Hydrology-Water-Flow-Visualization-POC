@@ -1,4 +1,14 @@
-composer2.5-attempt/dist/*
+node_modules/
+apps/creek-visualization-browser/dist/
+
+.test-cache/
+.test-results/
+playwright-report/
+test-results/
 
 # Personal VS Code / Cursor workspace (local theme & layout)
 *.local.code-workspace
+
+# Repository-root environment files. .env.example stays tracked.
+/.env
+/.env.local

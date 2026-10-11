@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tnc.example/testing/catalog.schema.json",
+  "title": "Feature-centered test catalog",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "featureSets",
+    "features",
+    "criticalCoreAreas",
+    "examples",
+    "tests"
+  ],
+  "$defs": {
+    "approvedChange": {
+      "type": ["object", "null"],
+      "required": [
+        "reason",
+        "affectedBehaviors",
+        "consequences",
+        "approvalEvidence"
+      ],
+      "properties": {
+        "reason": { "type": "string", "minLength": 1 },
+        "affectedBehaviors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "consequences": { "type": "string", "minLength": 1 },
+        "approvalEvidence": { "type": "string", "minLength": 1 },
+        "expectedBehaviorReview": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": 3 },
+    "featureSets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^FS-[0-9]+$" },
+          "name": { "type": "string", "minLength": 1 },
+          "example": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "featureSetId",
+          "name",
+          "lifecycle",
+          "lifecycleChange"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^F-[0-9]+$" },
+          "featureSetId": { "type": "string", "pattern": "^FS-[0-9]+$" },
+          "name": { "type": "string", "minLength": 1 },
+          "lifecycle": {
+            "enum": ["active", "deprecated", "retired"]
+          },
+          "lifecycleChange": { "$ref": "#/$defs/approvedChange" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "criticalCoreAreas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^CC-[0-9]+$" },
+          "name": { "type": "string", "minLength": 1 },
+          "example": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "methodology",
+          "category",
+          "owner",
+          "sourceFile"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^(FBT|FST|CCT|SST)-E[0-9]+$" },
+          "name": { "type": "string", "minLength": 1 },
+          "methodology": { "type": "string", "minLength": 1 },
+          "category": { "enum": ["feature-behavior", "critical-core"] },
+          "owner": { "type": "string", "minLength": 1 },
+          "sourceFile": {
+            "type": "string",
+            "pattern": "\\.example\\.(test|spec)\\.ts$"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "methodology",
+          "category",
+          "owner",
+          "additionalFeatureAssociations",
+          "scope",
+          "environment",
+          "browserMode",
+          "regression",
+          "bugReference",
+          "enforcement",
+          "enforcementChange",
+          "durationBudgetMs",
+          "fast",
+          "sourceFile"
+        ],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "methodology": { "type": "string", "minLength": 1 },
+          "category": {
+            "enum": [
+              "feature-behavior",
+              "feature-supporting",
+              "critical-core",
+              "shared-supporting"
+            ]
+          },
+          "owner": { "type": ["string", "null"] },
+          "additionalFeatureAssociations": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          },
+          "scope": {
+            "enum": ["unit", "component", "integration", "end-to-end"]
+          },
+          "environment": { "enum": ["browser", "non-browser"] },
+          "browserMode": {
+            "enum": ["deterministic", "live", "not-applicable"]
+          },
+          "regression": { "type": "boolean" },
+          "bugReference": { "type": ["string", "null"] },
+          "enforcement": {
+            "enum": ["required", "nonblocking", "disabled"]
+          },
+          "enforcementChange": { "$ref": "#/$defs/approvedChange" },
+          "durationBudgetMs": { "type": "number", "exclusiveMinimum": 0 },
+          "fast": { "type": "boolean" },
+          "sourceFile": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "type": "object",
+              "required": ["category"],
+              "properties": {
+                "category": {
+                  "enum": ["feature-supporting", "shared-supporting"]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "enforcement": { "enum": ["nonblocking", "disabled"] }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "required": ["category"],
+              "properties": {
+                "category": { "const": "critical-core" }
+              }
+            },
+            "then": {
+              "properties": {
+                "enforcement": { "const": "required" }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "required": ["category"],
+              "properties": {
+                "category": { "const": "shared-supporting" }
+              }
+            },
+            "then": {
+              "properties": {
+                "owner": { "type": "null" }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "required": ["category"],
+              "properties": {
+                "category": {
+                  "enum": ["feature-behavior", "feature-supporting", "critical-core"]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "owner": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "required": ["environment"],
+              "properties": {
+                "environment": { "const": "browser" }
+              }
+            },
+            "then": {
+              "properties": {
+                "browserMode": { "enum": ["deterministic", "live"] }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "required": ["environment"],
+              "properties": {
+                "environment": { "const": "non-browser" }
+              }
+            },
+            "then": {
+              "properties": {
+                "browserMode": { "const": "not-applicable" }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

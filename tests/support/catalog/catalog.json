@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 3,
+  "featureSets": [
+    {
+      "id": "FS-900",
+      "name": "Example catalog",
+      "example": true
+    }
+  ],
+  "features": [
+    {
+      "id": "F-900",
+      "featureSetId": "FS-900",
+      "name": "Account sign-in",
+      "lifecycle": "active",
+      "lifecycleChange": null
+    }
+  ],
+  "criticalCoreAreas": [
+    {
+      "id": "CC-900",
+      "name": "Example calculations",
+      "example": true
+    }
+  ],
+  "examples": [
+    {
+      "id": "FBT-E001",
+      "name": "A new user can sign in and register for multi-factor authentication.",
+      "methodology": "This example does not run. If promoted, the browser and application flow would be real: the test would create a new account through the user interface, enroll an authenticator second factor, sign out, and sign back in with the password plus a current authenticator code before observing the account page. The identity backend would need an isolated test tenant or emulator, the authenticator-code helper would be test-only, and authentication responses would not be mocked. SMS and email enrollment are not covered.",
+      "category": "feature-behavior",
+      "owner": "F-900",
+      "sourceFile": "tests/features/FS-900-example-catalog/F-900-account-sign-in/behavior/FBT-E001.example.spec.ts"
+    },
+    {
+      "id": "FBT-E002",
+      "name": "Signing in with a wrong password shows an error and does not open the account.",
+      "methodology": "This example does not run. If promoted, it would use the real browser and application flow with an isolated test account to submit a known wrong password, observe the visible error, verify that account navigation and multi-factor enrollment do not appear, then visit the protected account URL directly and observe the sign-in page instead of account content. The account credentials would be test-only, and authentication responses would not be mocked. This checks browser-observable access and does not inspect the identity provider's internal session storage.",
+      "category": "feature-behavior",
+      "owner": "F-900",
+      "sourceFile": "tests/features/FS-900-example-catalog/F-900-account-sign-in/behavior/FBT-E002.example.spec.ts"
+    },
+    {
+      "id": "CCT-E001",
+      "name": "Water depth in meters equals the surveyed water elevation minus the surveyed bed elevation.",
+      "methodology": "This example does not run. If promoted, it would call the real production water-depth calculation through an imported production seam and compare exact known surveyed values: 103.75 m water minus 101.25 m bed equals 2.5 m, and 99.5 m water minus 100 m bed equals -0.5 m. Inputs are fixed test values; no calculation or response is mocked. It does not read a map or network response.",
+      "category": "critical-core",
+      "owner": "CC-900",
+      "sourceFile": "tests/core/CC-900-example-calculations/CCT-E001.example.test.ts"
+    }
+  ],
+  "tests": [
+    {
+      "id": "SST-001",
+      "name": "The catalog rejects a test entry that breaks the classification rules, and feature filters return each matching test once.",
+      "methodology": "Builds a sample catalog in memory, breaks one classification rule at a time, and checks that validation names that break. It also checks that a feature filter returns each matching sample once. It does not open the catalog page or run an application test.",
+      "category": "shared-supporting",
+      "owner": null,
+      "additionalFeatureAssociations": [],
+      "scope": "unit",
+      "environment": "non-browser",
+      "browserMode": "not-applicable",
+      "regression": false,
+      "bugReference": null,
+      "enforcement": "nonblocking",
+      "enforcementChange": null,
+      "durationBudgetMs": 1000,
+      "fast": true,
+      "sourceFile": "tests/shared/SST-001.test.ts"
+    },
+    {
+      "id": "SST-002",
+      "name": "The release check runs the core tests first and stops before feature tests if a core test fails.",
+      "methodology": "Calls the same release-gate function the release command uses, with stand-in results. It checks that core runs first and that a failing or inconclusive core result stops the feature phase. It does not run the application or a real failing core test.",
+      "category": "shared-supporting",
+      "owner": null,
+      "additionalFeatureAssociations": [],
+      "scope": "unit",
+      "environment": "non-browser",
+      "browserMode": "not-applicable",
+      "regression": false,
+      "bugReference": null,
+      "enforcement": "nonblocking",
+      "enforcementChange": null,
+      "durationBudgetMs": 1000,
+      "fast": true,
+      "sourceFile": "tests/shared/SST-002.test.ts"
+    }
+  ]
+}

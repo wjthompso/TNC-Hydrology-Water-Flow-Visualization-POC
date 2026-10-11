@@ -1,0 +1,51 @@
+# Feature-centered testing
+
+The test catalog at `tests/support/catalog/catalog.json` is the declarative source of truth for classification, selection, Feature lifecycle, test enforcement, duration budgets, methodology, and source files. Every test command validates that catalog and the fixture manifests through `tests/support/validation/foundations.ts` before execution. `npm run test:view-test-catalog` creates `.test-results/catalog.html`, a static human-facing view that never executes tests. The page shows Feature Set, Feature, and Feature Behavior Tests, with Critical Core collapsed by default. Supporting Tests are intentionally absent from this page. Opened rows label lifecycle, enforcement, scope, environment, and browser mode separately, and contain a Test methodology disclosure that is closed until opened. Its primary result is the effective catalog state: disabled, deprecated, and retired override a stored execution, and a missing execution is unexecuted. A stored execution on those entries is secondary evidence, such as `last execution: passed`. Active required and nonblocking tests still show a truthful passed result, and the advisory badge stays separate from that result.
+
+The current page entries are runner-shaped TypeScript examples. An example uses an `E` in its identifier, such as `FBT-E001`, is labeled Example, and lives only in `catalog.examples`. Browser examples use `.example.spec.ts`; non-browser examples use `.example.test.ts`. Playwright and Vitest explicitly exclude those suffixes, so examples are not discovered, executed, reported as skipped, or included in the release gate. Their `test.skip`, `describe.skip`, or `it.skip` declarations make the illustrative runner shape recognizable without making the files executable tests. Examples do not protect the application or reserve later release identifiers such as `FBT-001`.
+
+Promotion is deliberate: obtain approval for the permanent test identifier, sentence, methodology, protected behavior, assertions, classifications, duration budget, and target folder; replace declarations and illustrative seams with real production imports and approved test infrastructure; rename the file to the repository's executable runner convention; move its metadata from `catalog.examples` to `catalog.tests`; then verify focused discovery and the relevant broader commands.
+
+## Commands
+
+Run these commands from the repository root. The browser application package does not own test scripts.
+
+- `npm run test:view-test-catalog` writes `.test-results/catalog.html`, serves it at `http://127.0.0.1:4174/` (the next free port if that one is busy; set `TNC_CATALOG_PORT` to change the preferred port), and opens that page. Ctrl+C stops the server. `--no-open` serves without launching a browser; `--no-serve` writes the file and exits. The page shows Feature Set, Feature, and Feature Behavior Tests, with Critical Core collapsed by default. Supporting Tests are intentionally absent from this page. Each opened test keeps Test methodology collapsed until it is opened. Example entries are labeled Example and do not run. It does not execute tests.
+- `npm run test:fast-only`runs non-browser tests explicitly marked`fast: true` and reports exclusions.
+- `npm run test:features` runs enabled Feature Behavior Tests, including nonblocking tests, and excludes Supporting Tests.
+- `npm run test:core` runs enabled Critical Core Tests.
+- `npm run test:shared` runs enabled Shared Supporting Tests.
+- `npm run test:browser-deterministic` uses controlled inputs. Deterministic specs import `tests/support/browser/deterministic-network.ts`, whose automatic fixture fails unexpected external requests. Same-origin recorded fixtures and mocks stay allowed. `deterministicRequestAllowlist` in `playwright.config.ts` is the explicit external exception list.
+- `npm run test:browser-live` runs the approved live-service browser project with one worker.
+- `npm run test:browser-all` and `npm run test:browser-only` run both browser modes.
+- `npm run test:gate` uses the shared release-gate function: required Critical Core first, stop on failure or inconclusive verification, then required Feature Behavior Tests, including live tests. Supporting Tests stay outside the gate.
+- `npm run test:all` runs every enabled test plus linting and reports release eligibility separately from diagnostic health.
+- `npm run test:feature -- F-110` runs enabled tests owned by or additionally associated with one Feature.
+- `npm run test:feature-set -- FS-100` runs enabled tests associated with one Feature Set.
+
+Required inconclusive verification exits with code 2; failure exits with code 1. A passed gate exits with code 0. Local results are ignored by Git, with the latest observations in `.test-results/latest.json` and up to 20 command runs in `.test-results/history.json`.
+
+## Lifecycle and enforcement
+
+Feature lifecycle (`active`, `deprecated`, or `retired`) and test enforcement (`required`, `nonblocking`, or `disabled`) are independent catalog fields. Legal combinations follow category semantics:
+
+- Critical Core Tests use `required` enforcement.
+- Active Feature Behavior Tests default to `required`. A `nonblocking` or `disabled` exception needs approval evidence.
+- Deprecated Feature Behavior Tests may stay `required` or, with explicit approval metadata, use `nonblocking` or `disabled`.
+- Feature Supporting Tests and Shared Supporting Tests are advisory. They may be `nonblocking` or `disabled`. `required` is rejected, so those tests stay out of `test:features` and `test:gate`.
+
+Nonblocking and disabled tests remain visible. Disabled tests are not executed. A nonblocking pass is recorded as passed and stays outside the release gate. The catalog never presents disabled, deprecated, retired, or unexecuted as the primary passing result. Required inconclusive verification exits with code 2 and blocks a passed gate. Failure exits with code 1.
+
+Live readiness, layer-settle, and hit-test timeouts are failures unless concrete evidence shows approved external-service unavailability, a network, Domain Name System (DNS), or Transport Layer Security (TLS) failure, HTTP (Hypertext Transfer Protocol) 429 or 5xx responses, or a graphics-environment failure. Timeout text alone, or `net::ERR_ABORTED` alone, stays a failure.
+
+Lifecycle or legal non-default enforcement changes require a concise reason, affected behaviors, consequences, and approval evidence. Reactivation additionally requires a recorded expected-behavior review and restored required Feature Behavior verification. Preserve deprecated definitions, test metadata, and relevant implementation whenever reactivation remains plausible. Supporting Test failures still require investigation before a release is called verified.
+
+## Fixtures, cache, and reports
+
+Reviewed fixtures live in `tests/fixtures/recorded`, with source, version, checksum, review, and association metadata in `tests/fixtures/manifests`. Fixture refresh is manual: edit or replace the reviewed file, run `shasum -a 256 <fixture>`, update its manifest, and obtain review approval. No refresh automation is provided.
+
+The ignored local cache defaults to `.test-cache`. Set `TNC_TEST_CACHE_DIR` to an absolute or shared cache location when multiple clones should reuse large local test assets. Generated browser artifacts, reports, latest results, and history remain under ignored local directories.
+
+## Baseline limitation
+
+`npm run build -w creek-visualization-browser` has a known unrelated TypeScript failure: `SceneViewConstraintsProperties` rejects the `collision` property in `apps/creek-visualization-browser/src/arcgis-scene.ts`. This testing slice intentionally preserves that production configuration and does not treat the existing build error as a test-infrastructure regression.
