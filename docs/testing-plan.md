@@ -1,5 +1,5 @@
 > [!IMPORTANT]
-> **Historical exploratory guidance.** This document is earlier SceneView (Esri’s 3D map view) testing guidance. Current test governance is the repository-root [TESTING.md](../TESTING.md) and the [test catalog](../tests/support/catalog/catalog.json). When architecture or behavior conflicts, the October 9 Linear UCS-246 [Creek Water Visualization System Design](https://linear.app/ucsb-spatial-center/document/creek-water-visualization-system-design-593ddc502c13) is authoritative.
+> **Historical exploratory guidance.** This document is earlier SceneView (Esri’s 3D map view) testing guidance. Current test governance is the repository-root [TESTING.md](../TESTING.md) and the [test catalog](../tests/support/catalog/test-catalog.json). When architecture or behavior conflicts, the October 9 Linear UCS-246 [Creek Water Visualization System Design](https://linear.app/ucsb-spatial-center/document/creek-water-visualization-system-design-593ddc502c13) is authoritative.
 
 # Creek water visualization — testing plan
 

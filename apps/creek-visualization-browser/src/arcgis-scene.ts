@@ -116,6 +116,24 @@ const waterSymbol = new PolygonSymbol3D({
   ],
 });
 
+export interface ArcGISTestReferences {
+  readonly view: SceneView;
+  readonly waterLayer: GraphicsLayer;
+  readonly waterGraphics: readonly Graphic[];
+}
+
+const testReferences = new WeakMap<ArcGISCreekScene, ArcGISTestReferences>();
+const testMode = import.meta.env.VITE_TEST_MODE === 'true';
+
+/** Read-only test-mode seam; production code does not publish these references globally. */
+export function readArcGISTestReferences(
+  scene: ArcGISCreekScene,
+): ArcGISTestReferences {
+  const references = testReferences.get(scene);
+  if (!references) throw new Error('ArcGIS scene test references are not ready.');
+  return references;
+}
+
 function elevationInfoForMode(
   groundDraped: boolean,
   offsetM = 0,
@@ -241,6 +259,13 @@ export class ArcGISCreekScene implements SceneBackend {
       elevationInfo: elevationInfoForMode(groundDraped, 0),
     });
     map.add(this.waterLayer);
+    if (testMode) {
+      testReferences.set(this, {
+        view: this.view,
+        waterLayer: this.waterLayer,
+        waterGraphics: this.waterGraphics,
+      });
+    }
 
     await this.frameCamera(data, !groundDraped);
     this.setStageOffsetM(0);
@@ -252,7 +277,7 @@ export class ArcGISCreekScene implements SceneBackend {
   }
 
   setStageOffsetM(offsetM: number): void {
-    if (!this.networkData || !this.waterLayer) return;
+    if (!this.networkData || !this.waterLayer || !this.view) return;
 
     const polygons = this.networkData.reaches
       .map((reach) => waterPolygonForReach(reach, offsetM, this.groundDraped))
@@ -273,6 +298,13 @@ export class ArcGISCreekScene implements SceneBackend {
         this.waterGraphics[i].geometry = polygons[i];
       }
     }
+    if (testMode) {
+      testReferences.set(this, {
+        view: this.view,
+        waterLayer: this.waterLayer,
+        waterGraphics: this.waterGraphics,
+      });
+    }
 
     if (this.groundDraped) {
       this.waterLayer.elevationInfo = elevationInfoForMode(true, offsetM);
@@ -280,6 +312,7 @@ export class ArcGISCreekScene implements SceneBackend {
   }
 
   destroy(): void {
+    testReferences.delete(this);
     this.view?.destroy();
     this.view = null;
     this.waterLayer = null;

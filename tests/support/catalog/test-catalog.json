@@ -53,7 +53,7 @@
     {
       "id": "SST-001",
       "name": "The catalog rejects a test entry that breaks the classification rules, and feature filters return each matching test once.",
-      "methodology": "Builds a sample catalog in memory, breaks one classification rule at a time, and checks that validation names that break. It also checks that a feature filter returns each matching sample once. It does not open the catalog page or run an application test.",
+      "methodology": "Builds a sample catalog in memory, breaks one classification rule at a time, and checks that validation names that break, including a malformed catalog test identifier and a category prefix that does not match its category. It also checks that a feature filter returns each matching sample once. It does not open the catalog page, require the live catalog to contain zero tests, or run an application test.",
       "category": "shared-supporting",
       "owner": null,
       "additionalFeatureAssociations": [],

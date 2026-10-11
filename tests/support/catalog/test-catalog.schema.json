@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://tnc.example/testing/catalog.schema.json",
+  "$id": "https://tnc.example/testing/test-catalog.schema.json",
   "title": "Feature-centered test catalog",
   "type": "object",
   "required": [
@@ -98,7 +98,11 @@
           "sourceFile"
         ],
         "properties": {
-          "id": { "type": "string", "pattern": "^(FBT|FST|CCT|SST)-E[0-9]+$" },
+          "id": {
+            "description": "Example catalog test identifier, not an HTML id attribute. Category prefix, E, and a number, such as FBT-E001.",
+            "type": "string",
+            "pattern": "^(FBT|FST|CCT|SST)-E[0-9]+$"
+          },
           "name": { "type": "string", "minLength": 1 },
           "methodology": { "type": "string", "minLength": 1 },
           "category": { "enum": ["feature-behavior", "critical-core"] },
@@ -134,7 +138,11 @@
           "sourceFile"
         ],
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
+          "id": {
+            "description": "Permanent catalog test identifier, not an HTML id attribute. Category prefix and a number, such as FBT-001. Example identifiers keep the separate E form.",
+            "type": "string",
+            "pattern": "^(FBT|FST|CCT|SST)-[0-9]+$"
+          },
           "name": { "type": "string", "minLength": 1 },
           "methodology": { "type": "string", "minLength": 1 },
           "category": {

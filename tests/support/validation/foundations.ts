@@ -7,7 +7,7 @@ import type {
   ApprovedMetadataChange,
   TestCatalog,
   TestEnforcement,
-} from '../catalog/catalog.ts';
+} from '../catalog/test-catalog.ts';
 
 /**
  * Canonical catalog and fixture validation. The production test runner and
@@ -63,23 +63,23 @@ const HANDLED_KEYS = new Set([
   'then',
 ]);
 
-const catalogSchemaPath = fileURLToPath(
-  new URL('../catalog/catalog.schema.json', import.meta.url),
+const testCatalogSchemaPath = fileURLToPath(
+  new URL('../catalog/test-catalog.schema.json', import.meta.url),
 );
 const fixtureSchemaPath = fileURLToPath(
   new URL('../../fixtures/manifests/fixture-manifest.schema.json', import.meta.url),
 );
 
-let catalogSchemaCache: JsonSchema | undefined;
+let testCatalogSchemaCache: JsonSchema | undefined;
 let fixtureSchemaCache: JsonSchema | undefined;
 
 function readSchema(schemaPath: string): JsonSchema {
   return JSON.parse(readFileSync(schemaPath, 'utf8')) as JsonSchema;
 }
 
-function catalogSchema(): JsonSchema {
-  catalogSchemaCache ??= readSchema(catalogSchemaPath);
-  return catalogSchemaCache;
+function testCatalogSchema(): JsonSchema {
+  testCatalogSchemaCache ??= readSchema(testCatalogSchemaPath);
+  return testCatalogSchemaCache;
 }
 
 function fixtureSchema(): JsonSchema {
@@ -247,6 +247,48 @@ function validateWithSchema(
   }
 }
 
+/**
+ * Catalog test identifiers are classification labels such as FBT-001, not HTML id attributes.
+ * Permanent tests use a category prefix and a number. Examples keep the E form, such as FBT-E001.
+ */
+const permanentCatalogTestIdPattern = /^(FBT|FST|CCT|SST)-[0-9]+$/;
+const exampleCatalogTestIdPattern = /^(FBT|FST|CCT|SST)-E[0-9]+$/;
+const catalogTestIdentifierPrefixByCategory = {
+  'feature-behavior': 'FBT',
+  'feature-supporting': 'FST',
+  'critical-core': 'CCT',
+  'shared-supporting': 'SST',
+} as const;
+
+function catalogTestIdentifierErrors(
+  id: string,
+  category: string,
+  kind: 'permanent' | 'example',
+): string[] {
+  const pattern = kind === 'permanent' ? permanentCatalogTestIdPattern : exampleCatalogTestIdPattern;
+  const expectedShape =
+    kind === 'permanent'
+      ? 'a category prefix and number such as FBT-001'
+      : 'a category prefix, E, and number such as FBT-E001';
+  if (!pattern.test(id)) {
+    return [
+      `${id} is not a valid ${kind} catalog test identifier (${expectedShape}). Catalog test identifiers are not HTML id attributes.`,
+    ];
+  }
+
+  const prefix = id.slice(0, 3);
+  const expectedPrefix =
+    catalogTestIdentifierPrefixByCategory[
+      category as keyof typeof catalogTestIdentifierPrefixByCategory
+    ];
+  if (expectedPrefix && prefix !== expectedPrefix) {
+    return [
+      `${id} category ${category} requires catalog test identifier prefix ${expectedPrefix}.`,
+    ];
+  }
+  return [];
+}
+
 function hasCompleteApprovalEvidence(change: ApprovedMetadataChange | null): boolean {
   return Boolean(
     change?.reason.trim() &&
@@ -337,6 +379,9 @@ function validateCatalogRelations(candidate: TestCatalog): string[] {
   for (const test of candidate.tests) {
     if (seenTestIds.has(test.id)) errors.push(`Duplicate test ID: ${test.id}.`);
     seenTestIds.add(test.id);
+    if (typeof test.id === 'string' && typeof test.category === 'string') {
+      errors.push(...catalogTestIdentifierErrors(test.id, test.category, 'permanent'));
+    }
 
     const isShared = test.category === 'shared-supporting';
     const isFeature = test.category.startsWith('feature-');
@@ -431,6 +476,9 @@ function validateCatalogRelations(candidate: TestCatalog): string[] {
       errors.push(`Duplicate test ID: ${example.id}.`);
     }
     exampleIds.add(example.id);
+    if (typeof example.id === 'string' && typeof example.category === 'string') {
+      errors.push(...catalogTestIdentifierErrors(example.id, example.category, 'example'));
+    }
     if (!example.methodology.trim()) {
       errors.push(`${example.id} requires a methodology.`);
     }
@@ -455,7 +503,7 @@ function validateCatalogRelations(candidate: TestCatalog): string[] {
 
 export function validateCatalog(candidate: TestCatalog): string[] {
   const schemaErrors: string[] = [];
-  validateWithSchema(catalogSchema(), candidate, 'catalog', catalogSchema(), schemaErrors);
+  validateWithSchema(testCatalogSchema(), candidate, 'testCatalog', testCatalogSchema(), schemaErrors);
   return [...schemaErrors, ...validateCatalogRelations(candidate)];
 }
 

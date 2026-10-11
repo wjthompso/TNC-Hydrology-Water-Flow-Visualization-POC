@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  catalog,
   selectExecutableTests,
   selectFeatureBehaviorTests,
   selectFeatureSetTests,
   selectFeatureTests,
   selectGateTests,
+  testCatalog,
   validateCatalog,
   type ApprovedMetadataChange,
   type TestCatalog,
-} from '../support/catalog/catalog';
+} from '../support/catalog/test-catalog';
 import { catalogResultState } from '../support/reporting/result-state';
 
 const ruleCatalog = (): TestCatalog => ({
@@ -158,19 +158,30 @@ const approvedChange = (
 
 describe('SST-001', () => {
   it('The catalog rejects a test entry that breaks the classification rules, and feature filters return each matching test once.', () => {
-    expect(validateCatalog(catalog)).toEqual([]);
-    expect(
-      catalog.tests.filter(
-        (test) =>
-          test.category === 'feature-behavior' || test.category === 'critical-core',
-      ),
-    ).toEqual([]);
-    expect(selectGateTests(catalog)).toEqual([]);
-    expect(catalog.examples.map(({ id }) => id)).toEqual([
+    expect(validateCatalog(testCatalog)).toEqual([]);
+    expect(testCatalog.examples.map(({ id }) => id)).toEqual([
       'FBT-E001',
       'FBT-E002',
       'CCT-E001',
     ]);
+
+    const malformedIdentifier = copyCatalog();
+    malformedIdentifier.tests[2].id = 'FBT-E001';
+    expect(validateCatalog(malformedIdentifier)).toContain(
+      'FBT-E001 is not a valid permanent catalog test identifier (a category prefix and number such as FBT-001). Catalog test identifiers are not HTML id attributes.',
+    );
+
+    const htmlStyleIdentifier = copyCatalog();
+    htmlStyleIdentifier.tests[2].id = 'sign-in-button';
+    expect(validateCatalog(htmlStyleIdentifier)).toContain(
+      'sign-in-button is not a valid permanent catalog test identifier (a category prefix and number such as FBT-001). Catalog test identifiers are not HTML id attributes.',
+    );
+
+    const prefixMismatch = copyCatalog();
+    prefixMismatch.tests[4].id = 'FBT-009';
+    expect(validateCatalog(prefixMismatch)).toContain(
+      'FBT-009 category shared-supporting requires catalog test identifier prefix SST.',
+    );
 
     const duplicateIds = copyCatalog();
     duplicateIds.tests[1].id = duplicateIds.tests[0].id;

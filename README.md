@@ -1,6 +1,6 @@
 # Creek Water Visualization
 
-UCS-246 phase 1 is a path-only move. The standalone Creek Visualization Browser Application lives in `apps/creek-visualization-browser`. Shared tests, the catalog, fixtures, and test commands live at this repository root. Application code stays out of the root. This phase does not implement the seven browser components or the five HTTP (Hypertext Transfer Protocol) object contracts.
+UCS-246 phase 1 is a path-only move. The standalone Creek Visualization Browser Application lives in `apps/creek-visualization-browser`. Shared tests, the declarative test catalog at `tests/support/catalog/test-catalog.json`, fixtures, and test commands live at this repository root. Application code stays out of the root. This phase does not implement the seven browser components or the five HTTP (Hypertext Transfer Protocol) object contracts.
 
 The October 9 system design is the architecture source of truth when it conflicts with earlier notes in `docs/`.
 
@@ -8,7 +8,7 @@ The October 9 system design is the architecture source of truth when it conflict
 
 - `apps/creek-visualization-browser/` — Vite browser application. Its README is historical playground documentation.
 - `tests/` — the six approved tests, fixtures, catalog, and support code.
-- `scripts/test-runner.ts` and `scripts/view-test-catalog.mjs` — shared test commands. `npm run test:view-test-catalog` writes the catalog, serves `http://127.0.0.1:4174/`, and opens it; Ctrl+C stops the server. `--no-open` skips the browser and `--no-serve` only writes the file. The catalog viewer does not execute tests.
+- `scripts/test-runner.ts` and `scripts/view-test-catalog.mjs` — shared test commands. `npm run test:view-test-catalog` writes the catalog, serves `http://127.0.0.1:4174/`, and opens it; Ctrl+C stops the server. `--no-open` skips the browser and `--no-serve` only writes the file. The catalog viewer does not execute tests. A release gate with no required tests is inconclusive, not passed. The viewer treats a stored pass with a missing or mismatched test-definition fingerprint as unexecuted.
 - `apps/creek-visualization-browser/scripts/generate-data.mjs` — playground data generator. It stays with the app until a data-production pipeline exists.
 - `docs/` — earlier research and planning notes.
 - `TESTING.md` — current test commands, lifecycle, enforcement, and the known production build error.

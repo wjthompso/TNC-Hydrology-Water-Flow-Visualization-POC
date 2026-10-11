@@ -5,6 +5,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { catalogResultState } from '../tests/support/reporting/result-state.ts';
+import {
+  requiredGateDefinitionFingerprint,
+  testDefinitionFingerprint,
+} from '../tests/support/reporting/test-definition-fingerprint.ts';
 
 const catalogHost = '127.0.0.1';
 const defaultCatalogPort = 4174;
@@ -12,8 +16,8 @@ const maxCatalogPortAttempts = 100;
 
 const root = process.cwd();
 const resultDirectory = path.join(root, '.test-results');
-const catalog = JSON.parse(
-  await readFile(path.join(root, 'tests/support/catalog/catalog.json'), 'utf8'),
+const testCatalog = JSON.parse(
+  await readFile(path.join(root, 'tests/support/catalog/test-catalog.json'), 'utf8'),
 );
 
 async function readLatest() {
@@ -47,12 +51,37 @@ export function recordedExecutionState(latest) {
 
 export function humanFacingCatalogResult(test, feature, latest) {
   const recorded = recordedExecutionState(latest);
+  const definitionCurrent =
+    typeof latest?.definitionFingerprint === 'string' &&
+    latest.definitionFingerprint === testDefinitionFingerprint(test);
   const lifecycle = feature?.lifecycle ?? 'not-applicable';
-  const primary = catalogResultState(recorded, lifecycle, test.enforcement);
+  const primary = catalogResultState(
+    definitionCurrent ? recorded : null,
+    lifecycle,
+    test.enforcement,
+  );
+  const staleExecution = !definitionCurrent && recorded ? recorded : null;
   return {
     lifecycle,
     primary,
-    lastExecution: recorded && recorded !== primary ? recorded : null,
+    lastExecution: staleExecution ?? (recorded && recorded !== primary ? recorded : null),
+    stale: Boolean(staleExecution),
+  };
+}
+
+function currentGatePresentation(latestResults) {
+  const stored =
+    typeof latestResults?.gateStatus === 'string' ? latestResults.gateStatus : 'unexecuted';
+  const definitionCurrent =
+    typeof latestResults?.requiredGateDefinitionFingerprint === 'string' &&
+    latestResults.requiredGateDefinitionFingerprint ===
+      requiredGateDefinitionFingerprint(testCatalog.tests);
+  if (definitionCurrent) {
+    return { primary: stored, staleStored: null };
+  }
+  return {
+    primary: 'unexecuted',
+    staleStored: recordedExecutionStates.has(stored) ? stored : null,
   };
 }
 
@@ -111,11 +140,15 @@ function testCard(test, feature, latestResults) {
     field('Browser mode', test.browserMode),
     field('Budget', formatDuration(test.durationBudgetMs)),
   ];
-  if (latest) {
+  if (latest && !display.stale) {
     lines.push(field('Duration', formatDuration(latest.durationMs)));
     lines.push(field('Recorded', latest.timestamp));
   }
-  if (display.lastExecution) {
+  if (display.stale && display.lastExecution) {
+    lines.push(
+      `Last execution: ${escapeHtml(display.lastExecution)} (stale test definition).`,
+    );
+  } else if (display.lastExecution) {
     lines.push(`Last execution: ${escapeHtml(display.lastExecution)}`);
   }
   return `<details class="test-row">
@@ -162,12 +195,12 @@ function exampleNote(owner) {
 }
 
 const latest = await readLatest();
-const coreAreasHtml = catalog.criticalCoreAreas
+const coreAreasHtml = testCatalog.criticalCoreAreas
   .map((area) => {
-    const tests = catalog.tests.filter(
+    const tests = testCatalog.tests.filter(
       (test) => test.category === 'critical-core' && test.owner === area.id,
     );
-    const examples = catalog.examples.filter(
+    const examples = testCatalog.examples.filter(
       (example) => example.category === 'critical-core' && example.owner === area.id,
     );
     return `<section class="core-area">
@@ -182,17 +215,17 @@ const coreHtml = `<details class="critical-core">
   ${coreAreasHtml || '<p class="none">None declared.</p>'}
 </details>`;
 
-const featureSetsHtml = catalog.featureSets
+const featureSetsHtml = testCatalog.featureSets
   .map((featureSet) => {
-    const features = catalog.features.filter(
+    const features = testCatalog.features.filter(
       (feature) => feature.featureSetId === featureSet.id,
     );
     const featureHtml = features
       .map((feature) => {
-        const behavior = catalog.tests.filter(
+        const behavior = testCatalog.tests.filter(
           (test) => test.owner === feature.id && test.category === 'feature-behavior',
         );
-        const examples = catalog.examples.filter(
+        const examples = testCatalog.examples.filter(
           (example) =>
             example.owner === feature.id && example.category === 'feature-behavior',
         );
@@ -210,9 +243,12 @@ const featureSetsHtml = catalog.featureSets
   })
   .join('');
 
-const gateStatus = latest.gateStatus ?? 'unexecuted';
+const gate = currentGatePresentation(latest);
 const gateStatusClass =
-  gateStatus === 'passed' ? 'word-passed' : gateStatus === 'failed' ? 'word-failed' : '';
+  gate.primary === 'passed' ? 'word-passed' : gate.primary === 'failed' ? 'word-failed' : '';
+const staleGateNote = gate.staleStored
+  ? ` Earlier stored result: ${escapeHtml(statusLabel(gate.staleStored))} (stale required-test definitions).`
+  : '';
 const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -281,6 +317,12 @@ const html = `<!doctype html>
       font-weight: inherit;
       line-height: inherit;
       white-space: nowrap;
+    }
+    /* Visible catalog test identifier on a test row, such as FBT-E001. Not an HTML id attribute. */
+    .test-row .identifier {
+      font-size: 19px;
+      font-weight: 400;
+      line-height: 25px;
     }
     .none, .metadata, .field-label, .example-note {
       color: #b1b4b6;
@@ -383,7 +425,7 @@ const html = `<!doctype html>
   <main class="reading">
     <h1>Feature-centered test catalog</h1>
     <p class="notice">Opening this page runs no tests.</p>
-    <p class="gate">Latest release gate: <span class="${gateStatusClass}">${escapeHtml(statusLabel(gateStatus))}</span> · Results generated: ${escapeHtml(latest.generatedAt ?? 'never')}</p>
+    <p class="gate">Latest release gate: <span class="${gateStatusClass}">${escapeHtml(statusLabel(gate.primary))}</span>${staleGateNote} · Results generated: ${escapeHtml(latest.generatedAt ?? 'never')}</p>
     ${featureSetsHtml}
     ${coreHtml}
   </main>

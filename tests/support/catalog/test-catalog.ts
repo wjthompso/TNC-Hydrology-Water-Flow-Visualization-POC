@@ -1,4 +1,4 @@
-import catalogData from './catalog.json';
+import testCatalogData from './test-catalog.json';
 
 export type TestCategory =
   | 'feature-behavior'
@@ -60,7 +60,7 @@ export interface TestCatalog {
   tests: CatalogTest[];
 }
 
-export const catalog = catalogData as TestCatalog;
+export const testCatalog = testCatalogData as TestCatalog;
 
 export { validateCatalog } from '../validation/foundations.ts';
 
