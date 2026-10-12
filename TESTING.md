@@ -46,6 +46,6 @@ Reviewed fixtures live in `tests/fixtures/recorded`, with source, version, check
 
 The ignored local cache defaults to `.test-cache`. Set `TNC_TEST_CACHE_DIR` to an absolute or shared cache location when multiple clones should reuse large local test assets. Generated browser artifacts, reports, latest results, and history remain under ignored local directories.
 
-## Baseline limitation
+## Browser build
 
-`npm run build -w creek-visualization-browser` has a known unrelated TypeScript failure: `SceneViewConstraintsProperties` rejects the `collision` property in `apps/creek-visualization-browser/src/arcgis-scene.ts`. This testing slice intentionally preserves that production configuration and does not treat the existing build error as a test-infrastructure regression.
+`npm run build -w creek-visualization-browser` typechecks and builds. The old `constraints.collision` failure is gone: `@arcgis/core` 4.34 `SceneViewConstraintsProperties` has no `collision` property, and the scene no longer sets one.

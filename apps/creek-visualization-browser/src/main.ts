@@ -1,114 +1,110 @@
 import '@arcgis/core/assets/esri/themes/dark/main.css';
 import './style.css';
 import {
-  ArcGISCreekScene,
-  readArcGISTestReferences,
-  type ArcGISTestReferences,
-} from './arcgis-scene';
-import { CreekScene } from './scene';
+  attachCreekVisualization,
+  type CreekVisualizationAttachment,
+} from './creek-visualization-library-interface';
+import type { WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
+import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
 import {
-  bindRendererToggle,
-  bindStageControls,
-  hideLoadingOverlay,
-  updateBasemapNote,
-} from './ui';
-import type { SceneBackend } from './scene-backend';
-import type { NetworkData } from './types';
+  createStandaloneExperienceShell,
+  type BasemapMode,
+  type ElevationSource,
+} from './standalone-experience-shell';
 
-type RendererId = 'arcgis' | 'three';
-
-interface TestModeApi {
-  getState: () => Readonly<{ renderer: RendererId; stageOffsetM: number }>;
-  getArcGISReferences: () => ArcGISTestReferences;
+interface CreekVisualizationTestSeam {
+  ready: Promise<boolean>;
+  readonly selectedTimeUtcMs: number | null;
+  readonly waterSegmentIds: readonly string[];
+  readonly waterGraphicGeometryIdentity: readonly WaterGraphicGeometryIdentity[];
 }
 
-type TestModeWindow = Window & { __TNC_TEST__?: TestModeApi };
+type TestModeWindow = Window & { __TNC_TEST__?: CreekVisualizationTestSeam };
 
-async function main(): Promise<void> {
-  const arcgisContainer = document.getElementById('arcgis-view');
-  const threeContainer = document.getElementById('three-view');
-  if (!arcgisContainer || !threeContainer) {
-    throw new Error('#arcgis-view or #three-view not found');
-  }
+let attachment: CreekVisualizationAttachment | null = null;
 
-  const response = await fetch('/data/reach.json');
-  if (!response.ok) {
-    throw new Error('reach.json missing. Run: npm run generate-data -w creek-visualization-browser');
-  }
+const ready = startExperience();
+installTestSeam(ready);
 
-  const data = (await response.json()) as NetworkData;
-  const testMode = import.meta.env.VITE_TEST_MODE === 'true';
-  let activeRenderer: RendererId =
-    testMode && import.meta.env.VITE_TEST_RENDERER === 'three' ? 'three' : 'arcgis';
-  let activeScene: SceneBackend | null = null;
-  let currentOffsetM = 0;
-
-  if (testMode) {
-    Object.defineProperty(window as TestModeWindow, '__TNC_TEST__', {
-      value: Object.freeze({
-        getState: () => Object.freeze({
-          renderer: activeRenderer,
-          stageOffsetM: currentOffsetM,
-        }),
-        getArcGISReferences: () => {
-          if (!(activeScene instanceof ArcGISCreekScene)) {
-            throw new Error('ArcGIS renderer is not active.');
-          }
-          return readArcGISTestReferences(activeScene);
-        },
-      } satisfies TestModeApi),
-    });
-  }
-
-  const showRenderer = (id: RendererId): void => {
-    const arcgisActive = id === 'arcgis';
-    arcgisContainer.classList.toggle('is-active', arcgisActive);
-    arcgisContainer.classList.toggle('is-inactive', !arcgisActive);
-    threeContainer.classList.toggle('is-active', !arcgisActive);
-    threeContainer.classList.toggle('is-inactive', arcgisActive);
-  };
-
-  const createScene = async (id: RendererId): Promise<SceneBackend> => {
-    if (id === 'arcgis') {
-      const scene = new ArcGISCreekScene(arcgisContainer as HTMLDivElement);
-      await scene.load(data);
-      updateBasemapNote(scene.basemapMode, scene.elevationSource);
-      return scene;
+async function startExperience(): Promise<boolean> {
+  try {
+    const container = document.getElementById('arcgis-view');
+    const playButton = document.getElementById('timeline-play-btn');
+    const slider = document.getElementById('timeline-slider');
+    const timeReadout = document.getElementById('timeline-readout');
+    const status = document.getElementById('timeline-status');
+    if (!(container instanceof HTMLDivElement)) throw new Error('The map view is missing.');
+    if (!(playButton instanceof HTMLButtonElement)) throw new Error('The play button is missing.');
+    if (!(slider instanceof HTMLInputElement)) throw new Error('The time slider is missing.');
+    if (!(timeReadout instanceof HTMLElement) || !(status instanceof HTMLElement)) {
+      throw new Error('The time readout is missing.');
     }
 
-    updateBasemapNote('three-local');
-    const scene = new CreekScene(threeContainer);
-    scene.load(data);
-    return scene;
+    const data = await loadPublishedCreekVisualizationData();
+    const segment = data.segmentsById.get(data.station.segmentId);
+    if (!segment) throw new Error('The gauge segment is missing from the creek network.');
+
+    const shell = await createStandaloneExperienceShell(container, segment.pathWgs84);
+    setSceneNote(shell.basemapMode, shell.elevationSource);
+    attachment = attachCreekVisualization(shell.view, {
+      data,
+      playButton,
+      slider,
+      timeReadout,
+      status,
+    });
+    await attachment.flush();
+    hideLoadingOverlay();
+    return true;
+  } catch (error: unknown) {
+    console.error(error);
+    showExperienceError(error instanceof Error ? error.message : 'The scene could not be started.');
+    return false;
+  }
+}
+
+function installTestSeam(readyPromise: Promise<boolean>): void {
+  const seam: CreekVisualizationTestSeam = {
+    ready: readyPromise,
+    get selectedTimeUtcMs() {
+      return attachment?.selectedTimeUtcMs ?? null;
+    },
+    get waterSegmentIds() {
+      return attachment?.waterSegmentIds ?? [];
+    },
+    get waterGraphicGeometryIdentity() {
+      return attachment?.waterGraphicGeometryIdentity ?? [];
+    },
   };
-
-  const switchRenderer = async (id: RendererId): Promise<void> => {
-    if (id === activeRenderer && activeScene) return;
-
-    activeScene?.destroy();
-    activeScene = null;
-    showRenderer(id);
-    activeScene = await createScene(id);
-    activeScene.setStageOffsetM(currentOffsetM);
-    activeRenderer = id;
-  };
-
-  bindStageControls(data, (offsetM) => {
-    currentOffsetM = offsetM;
-    activeScene?.setStageOffsetM(offsetM);
+  Object.defineProperty(window as TestModeWindow, '__TNC_TEST__', {
+    configurable: true,
+    value: seam,
   });
+}
 
-  bindRendererToggle(activeRenderer, switchRenderer);
+function setSceneNote(basemapMode: BasemapMode, elevationSource: ElevationSource): void {
+  const note = document.getElementById('scene-note');
+  if (!note) return;
+  if (basemapMode === 'arcgis-imagery') {
+    note.textContent = 'Esri imagery and world elevation.';
+    return;
+  }
+  if (elevationSource === 'usgs-3dep') {
+    note.textContent = 'USGS imagery and USGS 3DEP terrain.';
+    return;
+  }
+  note.textContent = 'USGS imagery. Terrain elevation was unavailable, so the ground is flat.';
+}
 
-  await switchRenderer(activeRenderer);
+function showExperienceError(message: string): void {
+  const error = document.getElementById('experience-error');
+  if (error) {
+    error.textContent = message;
+    error.classList.remove('hidden');
+  }
   hideLoadingOverlay();
 }
 
-main().catch((err) => {
-  console.error(err);
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) {
-    overlay.textContent = `Failed to load: ${err instanceof Error ? err.message : String(err)}`;
-    overlay.classList.add('text-red-300');
-  }
-});
+function hideLoadingOverlay(): void {
+  document.getElementById('loading-overlay')?.remove();
+}

@@ -1,0 +1,16 @@
+{
+  "segmentNetworkVersion": "jalama-27714637-v1",
+  "monitoringStations": [
+    {
+      "stationId": "USGS-11120600",
+      "name": "Jalama Creek near Lompoc",
+      "segmentId": "27714637-026",
+      "observedSourceId": "usgs-11120600-observed-wse",
+      "locationWgs84": [
+        -120.484894,
+        34.513686
+      ],
+      "snapDistanceM": 7.73
+    }
+  ]
+}

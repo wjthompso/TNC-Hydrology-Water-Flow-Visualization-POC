@@ -4,44 +4,20 @@
 
 html,
 body,
-#app-root {
+#app-root,
+#arcgis-view {
   height: 100%;
 }
 
-#arcgis-view,
-#three-view {
+#arcgis-view {
   position: absolute;
   inset: 0;
 }
 
-.scene-viewport.is-active {
-  z-index: 1;
-  pointer-events: auto;
-  visibility: visible;
-}
-
-.scene-viewport.is-inactive {
-  z-index: 0;
-  pointer-events: none;
-  visibility: hidden;
-}
-
-.scene-viewport,
-.scene-viewport .esri-view,
-.scene-viewport .esri-view-root,
-.scene-viewport canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-  pointer-events: auto;
-}
-
-#control-panel button,
-#control-panel input[type='range'] {
-  pointer-events: auto;
-}
-
-#three-view canvas {
+/* Esri owns the view root and canvas, so Tailwind on #arcgis-view cannot size them. */
+#arcgis-view .esri-view,
+#arcgis-view .esri-view-root,
+#arcgis-view canvas {
   display: block;
   width: 100%;
   height: 100%;

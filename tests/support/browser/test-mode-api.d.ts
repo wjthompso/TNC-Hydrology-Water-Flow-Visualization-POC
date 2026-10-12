@@ -1,13 +1,13 @@
-import type { ArcGISTestReferences } from '../../../apps/creek-visualization-browser/src/arcgis-scene';
-
 declare global {
   interface Window {
     __TNC_TEST__?: {
-      getState: () => Readonly<{
-        renderer: 'arcgis' | 'three';
-        stageOffsetM: number;
-      }>;
-      getArcGISReferences: () => ArcGISTestReferences;
+      ready: Promise<boolean>;
+      readonly selectedTimeUtcMs: number | null;
+      readonly waterSegmentIds: readonly string[];
+      readonly waterGraphicGeometryIdentity: readonly {
+        segmentId: string;
+        bucketMinElevationM: number | null;
+      }[];
     };
   }
 }

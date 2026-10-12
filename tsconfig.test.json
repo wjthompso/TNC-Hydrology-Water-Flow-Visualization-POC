@@ -8,6 +8,7 @@
     "tests",
     "playwright.config.ts",
     "vitest.config.ts",
-    "scripts/test-runner.ts"
+    "scripts/test-runner.ts",
+    "pipelines/creek-visualization-data-production"
   ]
 }

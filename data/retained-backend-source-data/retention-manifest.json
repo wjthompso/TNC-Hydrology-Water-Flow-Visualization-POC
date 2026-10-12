@@ -1,0 +1,46 @@
+{
+  "sources": [
+    {
+      "file": "tnc-flowline-27714637.json",
+      "url": "https://services.arcgis.com/F7DSX1DSNSiWmOqh/arcgis/rest/services/jldp_nhd24kflowlines_streams/FeatureServer/7/query?where=COMID%3D27714637&outFields=*&returnGeometry=true&outSR=32610&f=json",
+      "retrievedAt": "2026-10-12T02:51:32.558Z"
+    },
+    {
+      "file": "usgs-11120600-station.json",
+      "url": "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/1/query?where=monitoring_location_id%3D%27USGS-11120600%27&outFields=*&returnGeometry=true&outSR=32610&f=json",
+      "retrievedAt": "2026-10-12T02:51:32.782Z"
+    },
+    {
+      "file": "usgs-11120600-observations.json",
+      "url": "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query",
+      "pageUrls": [
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=0&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=2000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=4000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=6000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=8000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=10000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=12000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=14000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=16000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=18000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=20000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=22000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=24000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=26000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=28000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=30000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=32000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=34000&f=json",
+        "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/MapServer/2/query?where=station_id%3D1&outFields=id%2Cstation_id%2Ctimestamp_utc%2Cgauge_height%2Cgauge_height_units%2Capproval_status&orderByFields=timestamp_utc+ASC%2Cid+ASC&returnGeometry=false&resultRecordCount=2000&resultOffset=36000&f=json"
+      ],
+      "rowCount": 36921,
+      "retrievedAt": "2026-10-12T02:51:36.322Z"
+    },
+    {
+      "file": "usgs-3dep-1m-window-jalama-27714637.tif",
+      "url": "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage?bbox=730686.840%2C3821795.718%2C731086.840%2C3822195.718&bboxSR=32610&imageSR=32610&size=400%2C400&format=tiff&pixelType=F32&interpolation=RSP_NearestNeighbor&f=image",
+      "retrievedAt": "2026-10-12T02:51:34.728Z"
+    }
+  ]
+}

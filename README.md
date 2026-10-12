@@ -32,6 +32,7 @@ npm run lint
 
 ## Design documents
 
+- [Glossary](docs/architecture/glossary.md) — canonical domain terms. The [Linear Glossary](https://linear.app/ucsb-spatial-center/document/glossary-a3c56f69f036) is a synced copy. New or conflicting terms need explicit approval before either copy changes.
 - [Creek Water Visualization System Design](https://linear.app/ucsb-spatial-center/document/creek-water-visualization-system-design-593ddc502c13)
 - [Creek Water Visualization Scope](https://linear.app/ucsb-spatial-center/document/creek-water-visualiation-scope-1af7965fca3e)
 - [Data Sources](https://linear.app/ucsb-spatial-center/document/data-sources-doc-9e7604461984)

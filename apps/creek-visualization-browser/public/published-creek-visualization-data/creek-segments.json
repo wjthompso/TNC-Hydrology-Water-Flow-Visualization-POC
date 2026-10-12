@@ -1,0 +1,1042 @@
+{
+  "segmentNetworkVersion": "jalama-27714637-v1",
+  "creekSegments": [
+    {
+      "segmentId": "27714637-000",
+      "comid": 27714637,
+      "vertexIndexStart": 0,
+      "vertexIndexEnd": 1,
+      "lengthM": 67.85,
+      "pathWgs84": [
+        [
+          -120.4756304,
+          34.5127211
+        ],
+        [
+          -120.4763604,
+          34.5126275
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-001",
+      "comid": 27714637,
+      "vertexIndexStart": 1,
+      "vertexIndexEnd": 2,
+      "lengthM": 89.14,
+      "pathWgs84": [
+        [
+          -120.4763604,
+          34.5126275
+        ],
+        [
+          -120.4773294,
+          34.5125832
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-002",
+      "comid": 27714637,
+      "vertexIndexStart": 2,
+      "vertexIndexEnd": 3,
+      "lengthM": 38.44,
+      "pathWgs84": [
+        [
+          -120.4773294,
+          34.5125832
+        ],
+        [
+          -120.4777341,
+          34.5124952
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-003",
+      "comid": 27714637,
+      "vertexIndexStart": 3,
+      "vertexIndexEnd": 4,
+      "lengthM": 73.88,
+      "pathWgs84": [
+        [
+          -120.4777341,
+          34.5124952
+        ],
+        [
+          -120.4784574,
+          34.5122038
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-004",
+      "comid": 27714637,
+      "vertexIndexStart": 4,
+      "vertexIndexEnd": 5,
+      "lengthM": 30.49,
+      "pathWgs84": [
+        [
+          -120.4784574,
+          34.5122038
+        ],
+        [
+          -120.4787893,
+          34.5122037
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-005",
+      "comid": 27714637,
+      "vertexIndexStart": 5,
+      "vertexIndexEnd": 6,
+      "lengthM": 14.08,
+      "pathWgs84": [
+        [
+          -120.4787893,
+          34.5122037
+        ],
+        [
+          -120.4789354,
+          34.5122421
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-006",
+      "comid": 27714637,
+      "vertexIndexStart": 6,
+      "vertexIndexEnd": 7,
+      "lengthM": 18.28,
+      "pathWgs84": [
+        [
+          -120.4789354,
+          34.5122421
+        ],
+        [
+          -120.4790946,
+          34.5123409
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-007",
+      "comid": 27714637,
+      "vertexIndexStart": 7,
+      "vertexIndexEnd": 8,
+      "lengthM": 54.39,
+      "pathWgs84": [
+        [
+          -120.4790946,
+          34.5123409
+        ],
+        [
+          -120.4794931,
+          34.5127034
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-008",
+      "comid": 27714637,
+      "vertexIndexStart": 8,
+      "vertexIndexEnd": 9,
+      "lengthM": 55.63,
+      "pathWgs84": [
+        [
+          -120.4794931,
+          34.5127034
+        ],
+        [
+          -120.4798385,
+          34.5131153
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-009",
+      "comid": 27714637,
+      "vertexIndexStart": 9,
+      "vertexIndexEnd": 10,
+      "lengthM": 19.28,
+      "pathWgs84": [
+        [
+          -120.4798385,
+          34.5131153
+        ],
+        [
+          -120.4799049,
+          34.5132801
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-010",
+      "comid": 27714637,
+      "vertexIndexStart": 10,
+      "vertexIndexEnd": 11,
+      "lengthM": 16.41,
+      "pathWgs84": [
+        [
+          -120.4799049,
+          34.5132801
+        ],
+        [
+          -120.4800245,
+          34.5133899
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-011",
+      "comid": 27714637,
+      "vertexIndexStart": 11,
+      "vertexIndexEnd": 12,
+      "lengthM": 22.41,
+      "pathWgs84": [
+        [
+          -120.4800245,
+          34.5133899
+        ],
+        [
+          -120.4802501,
+          34.5134668
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-012",
+      "comid": 27714637,
+      "vertexIndexStart": 12,
+      "vertexIndexEnd": 13,
+      "lengthM": 37.88,
+      "pathWgs84": [
+        [
+          -120.4802501,
+          34.5134668
+        ],
+        [
+          -120.4806617,
+          34.5134886
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-013",
+      "comid": 27714637,
+      "vertexIndexStart": 13,
+      "vertexIndexEnd": 14,
+      "lengthM": 18.53,
+      "pathWgs84": [
+        [
+          -120.4806617,
+          34.5134886
+        ],
+        [
+          -120.4808607,
+          34.5134611
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-014",
+      "comid": 27714637,
+      "vertexIndexStart": 14,
+      "vertexIndexEnd": 15,
+      "lengthM": 17.73,
+      "pathWgs84": [
+        [
+          -120.4808607,
+          34.5134611
+        ],
+        [
+          -120.4810333,
+          34.5133896
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-015",
+      "comid": 27714637,
+      "vertexIndexStart": 15,
+      "vertexIndexEnd": 16,
+      "lengthM": 16.39,
+      "pathWgs84": [
+        [
+          -120.4810333,
+          34.5133896
+        ],
+        [
+          -120.4811593,
+          34.5132851
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-016",
+      "comid": 27714637,
+      "vertexIndexStart": 16,
+      "vertexIndexEnd": 17,
+      "lengthM": 123.67,
+      "pathWgs84": [
+        [
+          -120.4811593,
+          34.5132851
+        ],
+        [
+          -120.4819951,
+          34.5124113
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-017",
+      "comid": 27714637,
+      "vertexIndexStart": 17,
+      "vertexIndexEnd": 18,
+      "lengthM": 13.18,
+      "pathWgs84": [
+        [
+          -120.4819951,
+          34.5124113
+        ],
+        [
+          -120.4821145,
+          34.5123454
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-018",
+      "comid": 27714637,
+      "vertexIndexStart": 18,
+      "vertexIndexEnd": 19,
+      "lengthM": 19.52,
+      "pathWgs84": [
+        [
+          -120.4821145,
+          34.5123454
+        ],
+        [
+          -120.4823269,
+          34.5123398
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-019",
+      "comid": 27714637,
+      "vertexIndexStart": 19,
+      "vertexIndexEnd": 20,
+      "lengthM": 45.81,
+      "pathWgs84": [
+        [
+          -120.4823269,
+          34.5123398
+        ],
+        [
+          -120.4827783,
+          34.5125155
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-020",
+      "comid": 27714637,
+      "vertexIndexStart": 20,
+      "vertexIndexEnd": 21,
+      "lengthM": 13.16,
+      "pathWgs84": [
+        [
+          -120.4827783,
+          34.5125155
+        ],
+        [
+          -120.4829177,
+          34.5125429
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-021",
+      "comid": 27714637,
+      "vertexIndexStart": 21,
+      "vertexIndexEnd": 22,
+      "lengthM": 42.09,
+      "pathWgs84": [
+        [
+          -120.4829177,
+          34.5125429
+        ],
+        [
+          -120.4833758,
+          34.5125537
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-022",
+      "comid": 27714637,
+      "vertexIndexStart": 22,
+      "vertexIndexEnd": 23,
+      "lengthM": 22.37,
+      "pathWgs84": [
+        [
+          -120.4833758,
+          34.5125537
+        ],
+        [
+          -120.4836081,
+          34.5126141
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-023",
+      "comid": 27714637,
+      "vertexIndexStart": 23,
+      "vertexIndexEnd": 24,
+      "lengthM": 64.16,
+      "pathWgs84": [
+        [
+          -120.4836081,
+          34.5126141
+        ],
+        [
+          -120.4841525,
+          34.5129764
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-024",
+      "comid": 27714637,
+      "vertexIndexStart": 24,
+      "vertexIndexEnd": 25,
+      "lengthM": 26.72,
+      "pathWgs84": [
+        [
+          -120.4841525,
+          34.5129764
+        ],
+        [
+          -120.4843584,
+          34.5131466
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-025",
+      "comid": 27714637,
+      "vertexIndexStart": 25,
+      "vertexIndexEnd": 26,
+      "lengthM": 72.2,
+      "pathWgs84": [
+        [
+          -120.4843584,
+          34.5131466
+        ],
+        [
+          -120.4847901,
+          34.5136904
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-026",
+      "comid": 27714637,
+      "vertexIndexStart": 26,
+      "vertexIndexEnd": 27,
+      "lengthM": 20.37,
+      "pathWgs84": [
+        [
+          -120.4847901,
+          34.5136904
+        ],
+        [
+          -120.4849295,
+          34.5138332
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-027",
+      "comid": 27714637,
+      "vertexIndexStart": 27,
+      "vertexIndexEnd": 28,
+      "lengthM": 23.75,
+      "pathWgs84": [
+        [
+          -120.4849295,
+          34.5138332
+        ],
+        [
+          -120.4851221,
+          34.513976
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-028",
+      "comid": 27714637,
+      "vertexIndexStart": 28,
+      "vertexIndexEnd": 29,
+      "lengthM": 53.11,
+      "pathWgs84": [
+        [
+          -120.4851221,
+          34.513976
+        ],
+        [
+          -120.4856134,
+          34.5142285
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-029",
+      "comid": 27714637,
+      "vertexIndexStart": 29,
+      "vertexIndexEnd": 30,
+      "lengthM": 19.63,
+      "pathWgs84": [
+        [
+          -120.4856134,
+          34.5142285
+        ],
+        [
+          -120.4858059,
+          34.5143053
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-030",
+      "comid": 27714637,
+      "vertexIndexStart": 30,
+      "vertexIndexEnd": 31,
+      "lengthM": 14.67,
+      "pathWgs84": [
+        [
+          -120.4858059,
+          34.5143053
+        ],
+        [
+          -120.4859651,
+          34.5143163
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-031",
+      "comid": 27714637,
+      "vertexIndexStart": 31,
+      "vertexIndexEnd": 32,
+      "lengthM": 9.65,
+      "pathWgs84": [
+        [
+          -120.4859651,
+          34.5143163
+        ],
+        [
+          -120.4860647,
+          34.5142887
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-032",
+      "comid": 27714637,
+      "vertexIndexStart": 32,
+      "vertexIndexEnd": 33,
+      "lengthM": 34.51,
+      "pathWgs84": [
+        [
+          -120.4860647,
+          34.5142887
+        ],
+        [
+          -120.4863699,
+          34.5141073
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-033",
+      "comid": 27714637,
+      "vertexIndexStart": 33,
+      "vertexIndexEnd": 34,
+      "lengthM": 32.99,
+      "pathWgs84": [
+        [
+          -120.4863699,
+          34.5141073
+        ],
+        [
+          -120.4867216,
+          34.5140468
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-034",
+      "comid": 27714637,
+      "vertexIndexStart": 34,
+      "vertexIndexEnd": 35,
+      "lengthM": 48.26,
+      "pathWgs84": [
+        [
+          -120.4867216,
+          34.5140468
+        ],
+        [
+          -120.487246,
+          34.5140191
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-035",
+      "comid": 27714637,
+      "vertexIndexStart": 35,
+      "vertexIndexEnd": 36,
+      "lengthM": 38.78,
+      "pathWgs84": [
+        [
+          -120.487246,
+          34.5140191
+        ],
+        [
+          -120.487651,
+          34.5141178
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-036",
+      "comid": 27714637,
+      "vertexIndexStart": 36,
+      "vertexIndexEnd": 37,
+      "lengthM": 14.08,
+      "pathWgs84": [
+        [
+          -120.487651,
+          34.5141178
+        ],
+        [
+          -120.4878037,
+          34.5141287
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-037",
+      "comid": 27714637,
+      "vertexIndexStart": 37,
+      "vertexIndexEnd": 38,
+      "lengthM": 18.9,
+      "pathWgs84": [
+        [
+          -120.4878037,
+          34.5141287
+        ],
+        [
+          -120.4880094,
+          34.5141231
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-038",
+      "comid": 27714637,
+      "vertexIndexStart": 38,
+      "vertexIndexEnd": 39,
+      "lengthM": 18.78,
+      "pathWgs84": [
+        [
+          -120.4880094,
+          34.5141231
+        ],
+        [
+          -120.4882085,
+          34.5140846
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-039",
+      "comid": 27714637,
+      "vertexIndexStart": 39,
+      "vertexIndexEnd": 40,
+      "lengthM": 49.34,
+      "pathWgs84": [
+        [
+          -120.4882085,
+          34.5140846
+        ],
+        [
+          -120.4887194,
+          34.5139471
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-040",
+      "comid": 27714637,
+      "vertexIndexStart": 40,
+      "vertexIndexEnd": 41,
+      "lengthM": 35.02,
+      "pathWgs84": [
+        [
+          -120.4887194,
+          34.5139471
+        ],
+        [
+          -120.4890313,
+          34.5137656
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-041",
+      "comid": 27714637,
+      "vertexIndexStart": 41,
+      "vertexIndexEnd": 42,
+      "lengthM": 29.36,
+      "pathWgs84": [
+        [
+          -120.4890313,
+          34.5137656
+        ],
+        [
+          -120.4892701,
+          34.5135897
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-042",
+      "comid": 27714637,
+      "vertexIndexStart": 42,
+      "vertexIndexEnd": 43,
+      "lengthM": 22.16,
+      "pathWgs84": [
+        [
+          -120.4892701,
+          34.5135897
+        ],
+        [
+          -120.4893961,
+          34.5134194
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-043",
+      "comid": 27714637,
+      "vertexIndexStart": 43,
+      "vertexIndexEnd": 44,
+      "lengthM": 29.5,
+      "pathWgs84": [
+        [
+          -120.4893961,
+          34.5134194
+        ],
+        [
+          -120.4894955,
+          34.5131666
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-044",
+      "comid": 27714637,
+      "vertexIndexStart": 44,
+      "vertexIndexEnd": 45,
+      "lengthM": 23.37,
+      "pathWgs84": [
+        [
+          -120.4894955,
+          34.5131666
+        ],
+        [
+          -120.4895286,
+          34.5129578
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-045",
+      "comid": 27714637,
+      "vertexIndexStart": 45,
+      "vertexIndexEnd": 46,
+      "lengthM": 33.02,
+      "pathWgs84": [
+        [
+          -120.4895286,
+          34.5129578
+        ],
+        [
+          -120.4895019,
+          34.5126611
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-046",
+      "comid": 27714637,
+      "vertexIndexStart": 46,
+      "vertexIndexEnd": 47,
+      "lengthM": 76.84,
+      "pathWgs84": [
+        [
+          -120.4895019,
+          34.5126611
+        ],
+        [
+          -120.489528,
+          34.5119689
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-047",
+      "comid": 27714637,
+      "vertexIndexStart": 47,
+      "vertexIndexEnd": 48,
+      "lengthM": 90.29,
+      "pathWgs84": [
+        [
+          -120.489528,
+          34.5119689
+        ],
+        [
+          -120.489408,
+          34.5111613
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-048",
+      "comid": 27714637,
+      "vertexIndexStart": 48,
+      "vertexIndexEnd": 49,
+      "lengthM": 9.92,
+      "pathWgs84": [
+        [
+          -120.489408,
+          34.5111613
+        ],
+        [
+          -120.4894279,
+          34.5110734
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-049",
+      "comid": 27714637,
+      "vertexIndexStart": 49,
+      "vertexIndexEnd": 50,
+      "lengthM": 17.72,
+      "pathWgs84": [
+        [
+          -120.4894279,
+          34.5110734
+        ],
+        [
+          -120.4895539,
+          34.5109525
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-050",
+      "comid": 27714637,
+      "vertexIndexStart": 50,
+      "vertexIndexEnd": 51,
+      "lengthM": 10.15,
+      "pathWgs84": [
+        [
+          -120.4895539,
+          34.5109525
+        ],
+        [
+          -120.4896468,
+          34.5109029
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-051",
+      "comid": 27714637,
+      "vertexIndexStart": 51,
+      "vertexIndexEnd": 52,
+      "lengthM": 27.6,
+      "pathWgs84": [
+        [
+          -120.4896468,
+          34.5109029
+        ],
+        [
+          -120.4899454,
+          34.5108754
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-052",
+      "comid": 27714637,
+      "vertexIndexStart": 52,
+      "vertexIndexEnd": 53,
+      "lengthM": 9.85,
+      "pathWgs84": [
+        [
+          -120.4899454,
+          34.5108754
+        ],
+        [
+          -120.490045,
+          34.5109083
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-053",
+      "comid": 27714637,
+      "vertexIndexStart": 53,
+      "vertexIndexEnd": 54,
+      "lengthM": 15.14,
+      "pathWgs84": [
+        [
+          -120.490045,
+          34.5109083
+        ],
+        [
+          -120.4901712,
+          34.5109961
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-054",
+      "comid": 27714637,
+      "vertexIndexStart": 54,
+      "vertexIndexEnd": 55,
+      "lengthM": 18.52,
+      "pathWgs84": [
+        [
+          -120.4901712,
+          34.5109961
+        ],
+        [
+          -120.490231,
+          34.5111555
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-055",
+      "comid": 27714637,
+      "vertexIndexStart": 55,
+      "vertexIndexEnd": 56,
+      "lengthM": 56.16,
+      "pathWgs84": [
+        [
+          -120.490231,
+          34.5111555
+        ],
+        [
+          -120.4902645,
+          34.5116609
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-056",
+      "comid": 27714637,
+      "vertexIndexStart": 56,
+      "vertexIndexEnd": 57,
+      "lengthM": 12.92,
+      "pathWgs84": [
+        [
+          -120.4902645,
+          34.5116609
+        ],
+        [
+          -120.490311,
+          34.5117708
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-057",
+      "comid": 27714637,
+      "vertexIndexStart": 57,
+      "vertexIndexEnd": 58,
+      "lengthM": 15.15,
+      "pathWgs84": [
+        [
+          -120.490311,
+          34.5117708
+        ],
+        [
+          -120.4904173,
+          34.5118752
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-058",
+      "comid": 27714637,
+      "vertexIndexStart": 58,
+      "vertexIndexEnd": 59,
+      "lengthM": 10.98,
+      "pathWgs84": [
+        [
+          -120.4904173,
+          34.5118752
+        ],
+        [
+          -120.4905301,
+          34.5119081
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-059",
+      "comid": 27714637,
+      "vertexIndexStart": 59,
+      "vertexIndexEnd": 60,
+      "lengthM": 22.09,
+      "pathWgs84": [
+        [
+          -120.4905301,
+          34.5119081
+        ],
+        [
+          -120.4907692,
+          34.5119299
+        ]
+      ]
+    },
+    {
+      "segmentId": "27714637-060",
+      "comid": 27714637,
+      "vertexIndexStart": 60,
+      "vertexIndexEnd": 61,
+      "lengthM": 59.94,
+      "pathWgs84": [
+        [
+          -120.4907692,
+          34.5119299
+        ],
+        [
+          -120.4914196,
+          34.5118856
+        ]
+      ]
+    }
+  ]
+}
