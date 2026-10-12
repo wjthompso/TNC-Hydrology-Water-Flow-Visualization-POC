@@ -17,8 +17,8 @@ import {
  * title value and checks that none contain a water number, the words stage or
  * discharge, or the published water-surface elevations for those times rounded
  * to 1, 2, or 3 decimals. The browser page and committed published data are
- * real. USGS imagery and USGS 3DEP terrain tiles are live; if they are
- * unavailable the result is inconclusive rather than passed. Nothing is mocked
+ * real. Esri World Imagery and Esri World Elevation tiles are live; if they
+ * are unavailable the result is inconclusive rather than passed. Nothing is mocked
  * or saved. Console output and the visual appearance of the water are not
  * checked.
  */

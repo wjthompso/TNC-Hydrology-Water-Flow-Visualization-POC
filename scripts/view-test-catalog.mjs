@@ -41,7 +41,6 @@ const recordedExecutionStates = new Set([
   'skipped',
   'quarantined',
   'inconclusive',
-  'flaky',
 ]);
 
 export function recordedExecutionState(latest) {
@@ -96,7 +95,6 @@ function statusLabel(primary) {
     skipped: 'Skipped',
     quarantined: 'Quarantined',
     inconclusive: 'Inconclusive',
-    flaky: 'Flaky',
     disabled: 'Disabled',
     deprecated: 'Deprecated',
     retired: 'Retired',
@@ -121,10 +119,50 @@ function formatDuration(milliseconds) {
   return `${milliseconds} ms (${seconds} s)`;
 }
 
-function methodologyDetails(methodology) {
+function disclosure(title, body) {
   return `<details class="methodology">
-      <summary>Test methodology</summary>
-      <p>${escapeHtml(methodology)}</p>
+      <summary>${escapeHtml(title)}</summary>
+      <p>${escapeHtml(body)}</p>
+    </details>`;
+}
+
+function methodologyDetails(methodology) {
+  return disclosure('Test methodology', methodology);
+}
+
+function bugCheckBadge(test) {
+  if (!test.regression) return '';
+  return '<span class="tag tag-bug-check">Bug Check</span>';
+}
+
+function testDisclosures(test) {
+  const methodology = methodologyDetails(test.methodology);
+  if (!test.regression) return methodology;
+  return `${methodology}
+    ${disclosure('Root Cause Analysis', test.rootCauseAnalysis ?? '')}`;
+}
+
+function passedAfterRetry(latest, primary) {
+  return primary === 'passed' && latest?.passedAfterRetry === true;
+}
+
+function retryAttemptDetails(latest, primary) {
+  if (!passedAfterRetry(latest, primary)) return '';
+  const attempts = Array.isArray(latest.failedAttempts) ? latest.failedAttempts : [];
+  const rows = attempts
+    .map((attempt) => {
+      const artifacts =
+        Array.isArray(attempt.artifacts) && attempt.artifacts.length
+          ? attempt.artifacts.join(', ')
+          : 'none';
+      return `<p>Attempt ${escapeHtml(attempt.attempt)}: ${escapeHtml(attempt.status)}</p>
+      <p class="retry-error">${escapeHtml(attempt.errorMessage ?? '')}</p>
+      <p>Artifacts: ${escapeHtml(artifacts)}</p>`;
+    })
+    .join('');
+  return `<details class="methodology">
+      <summary>Passed after retry</summary>
+      ${rows}
     </details>`;
 }
 
@@ -142,6 +180,9 @@ function testCard(test, feature, latestResults) {
   ];
   if (latest && !display.stale) {
     lines.push(field('Duration', formatDuration(latest.durationMs)));
+    if (typeof latest.totalDurationMs === 'number' && latest.totalDurationMs !== latest.durationMs) {
+      lines.push(field('Total duration', formatDuration(latest.totalDurationMs)));
+    }
     lines.push(field('Recorded', latest.timestamp));
   }
   if (display.stale && display.lastExecution) {
@@ -154,12 +195,19 @@ function testCard(test, feature, latestResults) {
   return `<details class="test-row">
     <summary>
       <span class="scan"><span class="identifier">${escapeHtml(test.id)}</span>&nbsp;<span class="behavior">${escapeHtml(test.name)}</span></span>
-      <span class="tag ${statusTagClass(display.primary)}">${escapeHtml(statusLabel(display.primary))}</span>
+      <span class="tags">
+        <span class="result-badges">
+          <span class="tag ${statusTagClass(display.primary)}">${escapeHtml(statusLabel(display.primary))}</span>
+          ${bugCheckBadge(test)}
+        </span>
+        ${passedAfterRetry(latest, display.primary) ? '<span class="tag tag-retry">Passed after retry</span>' : ''}
+      </span>
     </summary>
     <div class="metadata">
       ${lines.map((line) => `<p>${line}</p>`).join('')}
     </div>
-    ${methodologyDetails(test.methodology)}
+    ${testDisclosures(test)}
+    ${retryAttemptDetails(latest, display.primary)}
   </details>`;
 }
 
@@ -353,6 +401,7 @@ const html = `<!doctype html>
       line-height: 22px;
       padding: 0 0 8px 28px;
     }
+    .retry-error { white-space: pre-wrap; }
     summary {
       align-items: flex-start;
       color: #ffffff;
@@ -379,6 +428,18 @@ const html = `<!doctype html>
       transform: rotate(45deg);
     }
     .scan { flex: 1 1 auto; min-width: 0; }
+    .tags {
+      align-items: flex-start;
+      display: flex;
+      flex: 0 0 auto;
+      gap: 8px;
+    }
+    .result-badges {
+      align-items: flex-end;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
     .behavior {
       color: #ffffff;
       font-size: 19px;
@@ -393,6 +454,8 @@ const html = `<!doctype html>
       padding: 2px 8px;
     }
     .tag-passed { background: #cfe4dc; color: #083d29; }
+    .tag-bug-check { background: #efe4f7; color: #3b1764; }
+    .tag-retry { background: #d9e2ec; color: #243b53; }
     .tag-failed { background: #f4d7d7; color: #651b1b; }
     .tag-neutral { background: #f3f3f3; color: #484949; }
     .critical-core { border-top: 1px solid #5c5c5c; margin-top: 30px; }

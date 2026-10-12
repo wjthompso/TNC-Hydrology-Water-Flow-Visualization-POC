@@ -2,7 +2,7 @@
 
 Standalone experience for observed water on one Creek Segment of Jalama Creek, next to the Jalama Near Lompoc gauge (USGS site 11120600).
 
-An ArcGIS SceneView opens framed on that segment, over USGS (United States Geological Survey) imagery and USGS 3DEP (3D Elevation Program) terrain. Play, Pause, and the time slider walk a regular 15-minute clock from the first observed timestamp to the last, in America/Los_Angeles. The page selects a prepared water-surface polygon for the selected time. It does not build water geometry, fill a missing reading, or show a water-surface elevation, stage, or discharge. A time with no observation shows no water. Neighbouring segments stay empty.
+An ArcGIS SceneView opens framed on that segment, over Esri World Imagery and Esri World Elevation terrain. Play, Pause, and the time slider walk a regular 15-minute clock from the first observed timestamp to the last, in America/Los_Angeles. The page selects a prepared water-surface polygon for the selected time. It does not build water geometry, fill a missing reading, or show a water-surface elevation, stage, or discharge. A time with no observation shows no water. Neighbouring segments stay empty.
 
 ## Run
 
@@ -13,7 +13,7 @@ npm install
 npm run dev -w creek-visualization-browser
 ```
 
-Optional `VITE_ARCGIS_API_KEY` switches the basemap to Esri imagery and world elevation. See `.env.example`.
+Optional `VITE_ARCGIS_API_KEY` is sent with ArcGIS requests and can raise tile quota. Imagery and terrain load without it. See `.env.example`.
 
 ## Published data
 
@@ -29,11 +29,10 @@ Files that carry `segmentNetworkVersion` must agree. A mismatch, or any other fa
 
 ## Code map
 
-- `standalone-experience-shell.ts` — page SceneView, imagery, terrain, and camera
+- `standalone-experience-shell.ts` — page SceneView, Esri imagery, world elevation, and camera
 - `creek-visualization-library-interface.ts` — `attachCreekVisualization(view, options)`
 - `http-data-contract-loader.ts` — fetch and validate the five files
 - `creek-data-contract.ts` — contract types, indexes, and the 15-minute clock
 - `selected-time-creek-state-resolver.ts` — exact-time bucket selection
 - `arcgis-scene-renderer.ts` — one reused water graphic per prepared segment
 - `observation-timeline-controls.ts` — Play, Pause, and scrub
-- `usgs-elevation-layer.ts` — USGS 3DEP terrain tiles

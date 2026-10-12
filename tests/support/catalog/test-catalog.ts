@@ -38,6 +38,7 @@ export interface CatalogTest {
   browserMode: BrowserMode;
   regression: boolean;
   bugReference: string | null;
+  rootCauseAnalysis: string | null;
   enforcement: TestEnforcement;
   enforcementChange: ApprovedMetadataChange | null;
   durationBudgetMs: number;

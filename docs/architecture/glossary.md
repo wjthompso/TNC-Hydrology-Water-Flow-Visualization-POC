@@ -2,6 +2,14 @@
 
 This file is the canonical glossary. The [Linear Glossary](https://linear.app/ucsb-spatial-center/document/glossary-a3c56f69f036) is a synced copy. A term is added, renamed, or redefined only after explicit developer approval.
 
+## Bug Check
+
+A Feature Behavior Test that checks for the absence of one known or likely bug. Passing means the bug's user-visible behavior was not observed under the documented test methodology. Every Bug Check records its bug reference and Root Cause Analysis separately from its test methodology and is proven through a Bug Reproduction Run when safe and practical.
+
+## Bug Reproduction Run (with bug-producing environment enabled)
+
+A controlled test run against a safely restored bug-producing environment. The test must fail for the intended behavioral reason, proving it detects the bug, and then pass in the fixed environment. A Bug Reproduction Run is review evidence only and never replaces or updates the test's recorded release result. Remove the bug-producing environment after review unless its continued maintenance is explicitly approved.
+
 ## California Natural Flows Database
 
 A database of modeled California stream flow rates, also called the Flow Modeler. It gives a flow rate on a coarse stream line, not a water level at a gauge. The current feature does not use it.
@@ -17,6 +25,14 @@ The stretch of creek between two adjacent original vertices on a TNC (The Nature
 ## Digital Twin
 
 The larger product an Experience belongs to.
+
+## Esri World Elevation
+
+Esri's global terrain service, used as the 3D scene's ground surface. It is coarser than USGS 3DEP (3D Elevation Program) 1 m terrain, so prepared water-surface polygons can sit slightly above or below it.
+
+## Esri World Imagery
+
+Esri's global aerial and satellite photography, draped on the 3D scene's ground. It is the scene's imagery and also covers the ocean and coast.
 
 ## Experience
 

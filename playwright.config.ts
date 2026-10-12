@@ -16,6 +16,9 @@ export default defineConfig<DeterministicProjectOptions>({
   testIgnore: '**/*.example.spec.ts',
   outputDir: artifactDirectory,
   fullyParallel: false,
+  // Keep every attempt directory. A failed attempt's trace and screenshot stay
+  // when a later retry passes; see TESTING.md.
+  preserveOutput: 'always',
   timeout: 30000,
   expect: { timeout: 10000 },
   reporter: [['line']],
@@ -24,6 +27,7 @@ export default defineConfig<DeterministicProjectOptions>({
     headless: true,
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 1,
+    // Playwright 1.64 keeps a failed attempt's trace when a later retry passes.
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

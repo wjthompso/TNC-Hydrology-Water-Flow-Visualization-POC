@@ -10,6 +10,10 @@ import {
   type ApprovedMetadataChange,
   type TestCatalog,
 } from '../support/catalog/test-catalog';
+import {
+  executionStatus,
+  normalizePlaywrightResults,
+} from '../support/reporting/playwright-results';
 import { catalogResultState } from '../support/reporting/result-state';
 
 const ruleCatalog = (): TestCatalog => ({
@@ -46,6 +50,7 @@ const ruleCatalog = (): TestCatalog => ({
       browserMode: 'not-applicable',
       regression: false,
       bugReference: null,
+      rootCauseAnalysis: null,
       enforcement: 'required',
       enforcementChange: null,
       durationBudgetMs: 200,
@@ -64,6 +69,7 @@ const ruleCatalog = (): TestCatalog => ({
       browserMode: 'not-applicable',
       regression: false,
       bugReference: null,
+      rootCauseAnalysis: null,
       enforcement: 'nonblocking',
       enforcementChange: null,
       durationBudgetMs: 300,
@@ -82,6 +88,7 @@ const ruleCatalog = (): TestCatalog => ({
       browserMode: 'deterministic',
       regression: false,
       bugReference: null,
+      rootCauseAnalysis: null,
       enforcement: 'required',
       enforcementChange: null,
       durationBudgetMs: 15000,
@@ -100,6 +107,7 @@ const ruleCatalog = (): TestCatalog => ({
       browserMode: 'live',
       regression: false,
       bugReference: null,
+      rootCauseAnalysis: null,
       enforcement: 'required',
       enforcementChange: null,
       durationBudgetMs: 90000,
@@ -118,6 +126,7 @@ const ruleCatalog = (): TestCatalog => ({
       browserMode: 'not-applicable',
       regression: false,
       bugReference: null,
+      rootCauseAnalysis: null,
       enforcement: 'nonblocking',
       enforcementChange: null,
       durationBudgetMs: 1000,
@@ -136,6 +145,7 @@ const ruleCatalog = (): TestCatalog => ({
       browserMode: 'not-applicable',
       regression: false,
       bugReference: null,
+      rootCauseAnalysis: null,
       enforcement: 'nonblocking',
       enforcementChange: null,
       durationBudgetMs: 1000,
@@ -286,10 +296,221 @@ describe('SST-001', () => {
       'FBT-001',
     );
 
+    for (const test of testCatalog.tests) {
+      if (test.regression) {
+        expect(test.category).toBe('feature-behavior');
+        expect(test.bugReference?.trim().length ?? 0).toBeGreaterThan(0);
+        expect(test.rootCauseAnalysis?.trim().length ?? 0).toBeGreaterThan(0);
+        expect(test.methodology.includes('Regression RCA:')).toBe(false);
+      } else {
+        expect(test.bugReference).toBeNull();
+        expect(test.rootCauseAnalysis).toBeNull();
+      }
+    }
+
+    const missingBugReference = copyCatalog();
+    missingBugReference.tests[2].regression = true;
+    missingBugReference.tests[2].rootCauseAnalysis = 'Sample root cause.';
+    expect(validateCatalog(missingBugReference)).toContain(
+      'FBT-001 Bug Check requires a nonempty bug reference.',
+    );
+
+    const missingRootCause = copyCatalog();
+    missingRootCause.tests[2].regression = true;
+    missingRootCause.tests[2].bugReference = 'sample bug';
+    missingRootCause.tests[2].rootCauseAnalysis = '   ';
+    expect(validateCatalog(missingRootCause)).toContain(
+      'FBT-001 Bug Check requires a nonempty root cause analysis.',
+    );
+
+    const baselineWithReference = copyCatalog();
+    baselineWithReference.tests[2].bugReference = 'sample bug';
+    expect(validateCatalog(baselineWithReference)).toContain(
+      'FBT-001 baseline test must leave bug reference and root cause analysis null.',
+    );
+
+    const supportingBugCheck = copyCatalog();
+    supportingBugCheck.tests[1].regression = true;
+    supportingBugCheck.tests[1].bugReference = 'sample bug';
+    supportingBugCheck.tests[1].rootCauseAnalysis = 'Sample root cause.';
+    expect(validateCatalog(supportingBugCheck)).toContain(
+      'FST-001 Bug Check is only valid on a Feature Behavior Test.',
+    );
+
+    const validBugCheck = copyCatalog();
+    validBugCheck.tests[2].regression = true;
+    validBugCheck.tests[2].bugReference = 'sample bug';
+    validBugCheck.tests[2].rootCauseAnalysis = 'Sample root cause.';
+    expect(validateCatalog(validBugCheck)).toEqual([]);
+
     expect(catalogResultState('passed', 'active', 'disabled')).toBe('disabled');
     expect(catalogResultState('passed', 'deprecated', 'required')).toBe(
       'deprecated',
     );
     expect(catalogResultState(null, 'active', 'required')).toBe('unexecuted');
+
+    const selected = [
+      {
+        id: 'FBT-003',
+        sourceFile: 'tests/sample/FBT-003.live.spec.ts',
+        name: 'Sample retry check.',
+        enforcement: 'required',
+      },
+    ];
+    const repoRoot = '/repo';
+    const playwrightReport = (
+      results: Array<Record<string, unknown>>,
+      title = 'Sample retry check.',
+    ) => ({
+      suites: [
+        {
+          title,
+          file: 'tests/sample/FBT-003.live.spec.ts',
+          specs: [
+            {
+              title,
+              file: 'tests/sample/FBT-003.live.spec.ts',
+              tests: [{ results }],
+            },
+          ],
+        },
+      ],
+    });
+    const normalize = (results: Array<Record<string, unknown>>, title?: string) =>
+      normalizePlaywrightResults(
+        playwrightReport(results, title),
+        selected,
+        false,
+        repoRoot,
+      )[0];
+
+    const failedThenPassed = normalize([
+      {
+        retry: 0,
+        status: 'timedOut',
+        duration: 1200.4,
+        error: {
+          message: `\u001b[31mTimed out waiting for water\u001b[0m\n${'extra\n'.repeat(24)}`,
+          location: { file: '/repo/tests/sample/FBT-003.live.spec.ts', line: 12 },
+        },
+        stdout: [{ text: Array.from({ length: 45 }, (_, index) => `out ${index}`).join('\n') }],
+        stderr: [{ text: 'err detail\n' }],
+        attachments: [
+          {
+            name: 'trace',
+            contentType: 'application/zip',
+            path: '/repo/.test-results/playwright-artifacts/trace.zip',
+          },
+          {
+            name: 'screenshot',
+            contentType: 'image/png',
+            path: '/repo/.test-results/playwright-artifacts/shot.png',
+          },
+        ],
+      },
+      { retry: 1, status: 'passed', duration: 800.2 },
+    ]);
+    expect(failedThenPassed).toMatchObject({
+      id: 'FBT-003',
+      state: 'passed',
+      durationMs: 800,
+      totalDurationMs: 2000,
+      passedAfterRetry: true,
+    });
+    expect(failedThenPassed.failedAttempts).toEqual([
+      {
+        attempt: 1,
+        status: 'timedOut',
+        durationMs: 1200,
+        errorMessage: `Timed out waiting for water\n${'extra\n'.repeat(19)}`.trimEnd(),
+        errorLocation: 'tests/sample/FBT-003.live.spec.ts:12',
+        stdoutTail: Array.from({ length: 40 }, (_, index) => `out ${index + 5}`).join('\n'),
+        stderrTail: 'err detail\n',
+        artifacts: [
+          '.test-results/playwright-artifacts/trace.zip',
+          '.test-results/playwright-artifacts/shot.png',
+        ],
+      },
+    ]);
+    expect(executionStatus(selected, [failedThenPassed])).toEqual({
+      name: 'passed',
+      exitCode: 0,
+    });
+
+    const inconclusiveThenPassed = normalize([
+      {
+        retry: 0,
+        status: 'failed',
+        duration: 10,
+        errors: [{ message: 'INCONCLUSIVE: USGS tiles unavailable' }],
+      },
+      { retry: 1, status: 'passed', duration: 20 },
+    ]);
+    expect(inconclusiveThenPassed.state).toBe('passed');
+    expect(inconclusiveThenPassed.passedAfterRetry).toBe(true);
+    expect(inconclusiveThenPassed.failedAttempts?.[0]).toMatchObject({
+      attempt: 1,
+      status: 'inconclusive',
+      errorMessage: 'INCONCLUSIVE: USGS tiles unavailable',
+    });
+
+    const passedOnce = normalize([{ retry: 0, status: 'passed', duration: 15 }]);
+    expect(passedOnce.state).toBe('passed');
+    expect(passedOnce.passedAfterRetry).toBeUndefined();
+    expect(passedOnce.failedAttempts).toBeUndefined();
+    expect(passedOnce.durationMs).toBe(15);
+
+    const markerOnlyInTitle = normalizePlaywrightResults(
+      {
+        suites: [
+          {
+            title: 'INCONCLUSIVE: this suite label is not an attempt error.',
+            file: 'tests/sample/FBT-003.live.spec.ts',
+            specs: [
+              {
+                title: 'Sample retry check.',
+                file: 'tests/sample/FBT-003.live.spec.ts',
+                tests: [{ results: [{ retry: 0, status: 'passed', duration: 15 }] }],
+              },
+            ],
+          },
+        ],
+      },
+      selected,
+      false,
+      repoRoot,
+    )[0];
+    expect(markerOnlyInTitle.state).toBe('passed');
+    expect(markerOnlyInTitle.passedAfterRetry).toBeUndefined();
+
+    const failedTwice = normalize([
+      { retry: 0, status: 'failed', duration: 5, error: { message: 'first' } },
+      { retry: 1, status: 'failed', duration: 6, error: { message: 'second' } },
+    ]);
+    expect(failedTwice.state).toBe('failed');
+    expect(failedTwice.passedAfterRetry).toBeUndefined();
+    expect(failedTwice.durationMs).toBe(6);
+    expect(failedTwice.totalDurationMs).toBe(11);
+    expect(executionStatus(selected, [failedTwice])).toEqual({
+      name: 'failed',
+      exitCode: 1,
+    });
+
+    const failedThenInconclusive = normalize([
+      { retry: 0, status: 'failed', duration: 5, error: { message: 'first' } },
+      {
+        retry: 1,
+        status: 'timedOut',
+        duration: 7,
+        error: { message: 'INCONCLUSIVE: terrain tiles did not load' },
+      },
+    ]);
+    expect(failedThenInconclusive.state).toBe('inconclusive');
+    expect(failedThenInconclusive.passedAfterRetry).toBeUndefined();
+    expect(failedThenInconclusive.durationMs).toBe(7);
+    expect(executionStatus(selected, [failedThenInconclusive])).toEqual({
+      name: 'inconclusive',
+      exitCode: 2,
+    });
   });
 });

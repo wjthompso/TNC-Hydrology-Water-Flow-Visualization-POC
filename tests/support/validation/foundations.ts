@@ -446,8 +446,20 @@ function validateCatalogRelations(candidate: TestCatalog): string[] {
         `${test.id} deprecated non-required enforcement requires approval evidence.`,
       );
     }
-    if (test.regression && !test.bugReference?.trim()) {
-      errors.push(`${test.id} regression tests require a bug reference.`);
+    if (test.regression) {
+      if (test.category !== 'feature-behavior') {
+        errors.push(`${test.id} Bug Check is only valid on a Feature Behavior Test.`);
+      }
+      if (!test.bugReference?.trim()) {
+        errors.push(`${test.id} Bug Check requires a nonempty bug reference.`);
+      }
+      if (!test.rootCauseAnalysis?.trim()) {
+        errors.push(`${test.id} Bug Check requires a nonempty root cause analysis.`);
+      }
+    } else if (test.bugReference !== null || test.rootCauseAnalysis !== null) {
+      errors.push(
+        `${test.id} baseline test must leave bug reference and root cause analysis null.`,
+      );
     }
     if (test.environment === 'browser' && test.browserMode === 'not-applicable') {
       errors.push(`${test.id} browser tests require deterministic or live mode.`);

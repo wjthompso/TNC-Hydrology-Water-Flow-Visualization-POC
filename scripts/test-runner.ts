@@ -5,6 +5,12 @@ import process from 'node:process';
 import type { CatalogTest, TestCatalog } from '../tests/support/catalog/test-catalog.ts';
 import { runReleaseGate } from '../tests/support/reporting/gate.ts';
 import {
+  executionStatus,
+  normalizePlaywrightResults,
+  passedAfterRetryLines,
+  type NormalizedTestResult,
+} from '../tests/support/reporting/playwright-results.ts';
+import {
   requiredGateDefinitionFingerprint,
   testDefinitionFingerprint,
 } from '../tests/support/reporting/test-definition-fingerprint.ts';
@@ -21,11 +27,7 @@ const testCatalog = JSON.parse(
 
 type ExecutionStateName = 'passed' | 'failed' | 'inconclusive';
 
-interface NormalizedResult {
-  id: string;
-  state: string;
-  durationMs: number;
-}
+type NormalizedResult = NormalizedTestResult;
 
 interface Execution {
   name: ExecutionStateName;
@@ -147,6 +149,7 @@ function vitestResults(
     const perfStats = asRecord(file?.perfStats);
     const runtime = typeof perfStats?.runtime === 'number' ? perfStats.runtime : 0;
     const duration = typeof assertion?.duration === 'number' ? assertion.duration : runtime;
+    const durationMs = Math.round(duration);
     return {
       id: test.id,
       state:
@@ -157,30 +160,9 @@ function vitestResults(
             : processFailed
               ? 'failed'
               : 'unexecuted',
-      durationMs: Math.round(duration),
+      durationMs,
+      totalDurationMs: durationMs,
     };
-  });
-}
-
-function flattenPlaywrightSuites(
-  suites: unknown,
-  inheritedFile = '',
-): Array<Record<string, unknown>> {
-  if (!Array.isArray(suites)) return [];
-  return suites.flatMap((suite) => {
-    const record = asRecord(suite);
-    const file = typeof record?.file === 'string' ? record.file : inheritedFile;
-    const specs = Array.isArray(record?.specs) ? record.specs : [];
-    return [
-      ...specs.map((spec) => {
-        const specRecord = asRecord(spec) ?? {};
-        return {
-          ...specRecord,
-          file: typeof specRecord.file === 'string' ? specRecord.file : file,
-        };
-      }),
-      ...flattenPlaywrightSuites(record?.suites, file),
-    ];
   });
 }
 
@@ -189,52 +171,7 @@ function playwrightResults(
   selected: CatalogTest[],
   processFailed: boolean,
 ): NormalizedResult[] {
-  const specs = flattenPlaywrightSuites(asRecord(report)?.suites);
-  return selected.map((catalogTest) => {
-    const spec = specs.find((candidate) => {
-      const file = typeof candidate.file === 'string' ? candidate.file : '';
-      return (
-        (file.endsWith(catalogTest.sourceFile) ||
-          catalogTest.sourceFile.endsWith(file)) &&
-        candidate.title === catalogTest.name
-      );
-    });
-    const tests = Array.isArray(spec?.tests) ? spec.tests : [];
-    const attempts = tests.flatMap((test) => {
-      const results = asRecord(test)?.results;
-      if (!Array.isArray(results)) return [];
-      return results
-        .map(asRecord)
-        .filter((item): item is Record<string, unknown> => item !== null);
-    });
-    const serialized = JSON.stringify(spec ?? {});
-    const passed = attempts.some(({ status }) => status === 'passed');
-    const failed = attempts.some(({ status }) =>
-      ['failed', 'timedOut', 'interrupted'].includes(String(status)),
-    );
-    const inconclusive = serialized.includes('INCONCLUSIVE:');
-    return {
-      id: catalogTest.id,
-      state: inconclusive
-        ? 'inconclusive'
-        : passed && failed
-          ? 'flaky'
-          : passed
-            ? 'passed'
-            : attempts.length && attempts.every(({ status }) => status === 'skipped')
-              ? 'skipped'
-              : processFailed
-                ? 'failed'
-                : 'unexecuted',
-      durationMs: Math.round(
-        attempts.reduce(
-          (total, attempt) =>
-            total + (typeof attempt.duration === 'number' ? attempt.duration : 0),
-          0,
-        ),
-      ),
-    };
-  });
+  return normalizePlaywrightResults(report, selected, processFailed, root);
 }
 
 async function runNonBrowser(selected: CatalogTest[], runKey: string): Promise<Execution> {
@@ -283,22 +220,6 @@ async function runBrowser(
     durationMs: processResult.durationMs,
     results,
   };
-}
-
-function executionStatus(
-  selected: CatalogTest[],
-  results: NormalizedResult[],
-): { name: ExecutionStateName; exitCode: number } {
-  const requiredStates = results
-    .filter(({ id }) => selected.some((test) => test.id === id && test.enforcement === 'required'))
-    .map(({ state }) => state);
-  if (results.some(({ state }) => ['failed', 'flaky'].includes(state))) {
-    return { name: 'failed', exitCode: 1 };
-  }
-  if (requiredStates.some((state) => ['inconclusive', 'skipped', 'unexecuted'].includes(state))) {
-    return { name: 'inconclusive', exitCode: 2 };
-  }
-  return { name: 'passed', exitCode: 0 };
 }
 
 async function execute(selected: CatalogTest[], runKey: string): Promise<Execution> {
@@ -356,6 +277,7 @@ async function recordRun(
   gateStatus?: string,
 ) {
   const timestamp = new Date().toISOString();
+  // durationMs is the final attempt. Earlier attempts stay in totalDurationMs.
   const budgetWarnings = execution.results.flatMap((result) => {
     const test = testCatalog.tests.find(({ id }) => id === result.id);
     return test && result.durationMs > test.durationBudgetMs
@@ -406,9 +328,26 @@ async function recordRun(
   await writeFile(historyFile, `${JSON.stringify(history.slice(-20), null, 2)}\n`);
 
   console.log(`Total test duration: ${execution.durationMs} ms.`);
+  const retryLines = passedAfterRetryLines(execution.results);
+  for (const line of retryLines) console.log(line);
+  if (retryLines.length) {
+    const retryIds = execution.results.flatMap((result) =>
+      result.passedAfterRetry ? [result.id] : [],
+    );
+    console.log(`Passed after retry: ${retryIds.join(', ')}.`);
+  }
   console.log(
     `Slowest tests: ${JSON.stringify(
-      [...execution.results].sort((first, second) => second.durationMs - first.durationMs).slice(0, 5),
+      [...execution.results]
+        .sort((first, second) => second.durationMs - first.durationMs)
+        .slice(0, 5)
+        .map(({ id, state, durationMs, totalDurationMs, passedAfterRetry }) => ({
+          id,
+          state,
+          durationMs,
+          totalDurationMs,
+          ...(passedAfterRetry ? { passedAfterRetry: true } : {}),
+        })),
     )}.`,
   );
   if (budgetWarnings.length) {

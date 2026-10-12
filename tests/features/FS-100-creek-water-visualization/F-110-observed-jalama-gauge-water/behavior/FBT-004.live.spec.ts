@@ -14,9 +14,9 @@ import {
  * on 2026-06-09 and a null-reading slot from that same series, using the real
  * time slider. It checks that the water-segment list is empty and that the
  * status "No observation at this time" is visible in both cases. The browser
- * page and committed published data are real. USGS imagery and USGS 3DEP
- * terrain tiles are live; if they are unavailable the result is inconclusive
- * rather than passed. Nothing is mocked or saved. It does not check the visual
+ * page and committed published data are real. Esri World Imagery and Esri
+ * World Elevation tiles are live; if they are unavailable the result is
+ * inconclusive rather than passed. Nothing is mocked or saved. It does not check the visual
  * appearance of the water.
  */
 test('Select a Jalama gauge time with no observation and show no water on its Creek Segment.', async ({

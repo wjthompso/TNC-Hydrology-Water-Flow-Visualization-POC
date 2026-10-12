@@ -9,11 +9,7 @@ import {
 } from './creek-visualization-library-interface';
 import type { WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
-import {
-  createStandaloneExperienceShell,
-  type BasemapMode,
-  type ElevationSource,
-} from './standalone-experience-shell';
+import { createStandaloneExperienceShell } from './standalone-experience-shell';
 
 interface CreekVisualizationTestSeam {
   ready: Promise<boolean>;
@@ -22,6 +18,26 @@ interface CreekVisualizationTestSeam {
   readonly waterGraphicGeometryIdentity: readonly WaterGraphicGeometryIdentity[];
   /** SceneView center in WGS84. Read-only; nothing is added to the page. */
   readonly cameraTargetWgs84: readonly [number, number] | null;
+  /** True while SceneView is drawing or loading. Read-only. */
+  readonly sceneUpdating: boolean;
+  /** Camera position height in meters. Read-only; null before the view exists. */
+  readonly cameraAltitudeM: number | null;
+  /**
+   * Elevations of the terrain mesh actually drawn in the SceneView.
+   * Read-only; nothing is added to the page.
+   */
+  sampleRenderedGroundHeights(
+    screenPoints: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderedGroundHeight[];
+}
+
+interface RenderedGroundHeight {
+  readonly x: number;
+  readonly y: number;
+  /** Meters from the drawn ground hit. Null when the screen ray misses that mesh. */
+  readonly elevationM: number | null;
+  readonly longitude: number | null;
+  readonly latitude: number | null;
 }
 
 type TestModeWindow = Window & { __TNC_TEST__?: CreekVisualizationTestSeam };
@@ -50,10 +66,9 @@ async function startExperience(): Promise<boolean> {
     const segment = data.segmentsById.get(data.station.segmentId);
     if (!segment) throw new Error('The gauge segment is missing from the creek network.');
 
-    const shell = await createStandaloneExperienceShell(container, segment.pathWgs84);
-    sceneView = shell.view;
-    setSceneNote(shell.basemapMode, shell.elevationSource);
-    attachment = attachCreekVisualization(shell.view, {
+    sceneView = await createStandaloneExperienceShell(container, segment.pathWgs84);
+    setSceneNote();
+    attachment = attachCreekVisualization(sceneView, {
       data,
       playButton,
       slider,
@@ -85,6 +100,16 @@ function installTestSeam(readyPromise: Promise<boolean>): void {
     get cameraTargetWgs84() {
       return readCameraTargetWgs84(sceneView);
     },
+    get sceneUpdating() {
+      return sceneView?.updating ?? true;
+    },
+    get cameraAltitudeM() {
+      const altitudeM = sceneView?.camera?.position?.z;
+      return typeof altitudeM === 'number' && Number.isFinite(altitudeM) ? altitudeM : null;
+    },
+    sampleRenderedGroundHeights(screenPoints) {
+      return readRenderedGroundHeights(sceneView, screenPoints);
+    },
   };
   Object.defineProperty(window as TestModeWindow, '__TNC_TEST__', {
     configurable: true,
@@ -104,6 +129,43 @@ function readCameraTargetWgs84(view: SceneView | null): [number, number] | null 
   return [longitude, latitude];
 }
 
+/**
+ * Screen rays against the drawn ground mesh (`SceneView.toMap`), not `ground.queryElevation`.
+ * `toMap` hits the terrain surface the view is rendering.
+ */
+function readRenderedGroundHeights(
+  view: SceneView | null,
+  screenPoints: readonly { readonly x: number; readonly y: number }[],
+): readonly RenderedGroundHeight[] {
+  const ground = view?.map?.ground;
+  return screenPoints.map((screenPoint) => {
+    const missed: RenderedGroundHeight = {
+      x: screenPoint.x,
+      y: screenPoint.y,
+      elevationM: null,
+      longitude: null,
+      latitude: null,
+    };
+    if (!view) return missed;
+    let hit: Point | null | undefined;
+    try {
+      hit = ground ? view.toMap(screenPoint, { include: ground }) : view.toMap(screenPoint);
+    } catch {
+      return missed;
+    }
+    if (!hit) return missed;
+    const elevationM = typeof hit.z === 'number' && Number.isFinite(hit.z) ? hit.z : null;
+    const geographic = geographicPoint(hit);
+    const longitude = finiteCoordinate(geographic?.longitude);
+    const latitude = finiteCoordinate(geographic?.latitude);
+    return { x: screenPoint.x, y: screenPoint.y, elevationM, longitude, latitude };
+  });
+}
+
+function finiteCoordinate(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function geographicPoint(point: Point): Point | null {
   const wkid = point.spatialReference?.wkid;
   if (wkid === 4326 || wkid === 4269 || (Math.abs(point.x) <= 180 && Math.abs(point.y) <= 90)) {
@@ -114,18 +176,11 @@ function geographicPoint(point: Point): Point | null {
   return geographic as Point;
 }
 
-function setSceneNote(basemapMode: BasemapMode, elevationSource: ElevationSource): void {
+function setSceneNote(): void {
   const note = document.getElementById('scene-note');
   if (!note) return;
-  if (basemapMode === 'arcgis-imagery') {
-    note.textContent = 'Esri imagery and world elevation.';
-    return;
-  }
-  if (elevationSource === 'usgs-3dep') {
-    note.textContent = 'USGS imagery and USGS 3DEP terrain.';
-    return;
-  }
-  note.textContent = 'USGS imagery. Terrain elevation was unavailable, so the ground is flat.';
+  note.textContent =
+    'Imagery: Esri, Maxar, Earthstar Geographics, and the GIS User Community. Terrain: Esri World Elevation.';
 }
 
 function showExperienceError(message: string): void {

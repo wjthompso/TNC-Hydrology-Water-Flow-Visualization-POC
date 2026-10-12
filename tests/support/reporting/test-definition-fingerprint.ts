@@ -22,6 +22,7 @@ export function testDefinitionFingerprint(test: CatalogTest): string {
     browserMode: test.browserMode,
     regression: test.regression,
     bugReference: test.bugReference,
+    rootCauseAnalysis: test.rootCauseAnalysis,
     enforcement: test.enforcement,
     durationBudgetMs: test.durationBudgetMs,
     sourceFile: test.sourceFile,

@@ -131,6 +131,7 @@
           "browserMode",
           "regression",
           "bugReference",
+          "rootCauseAnalysis",
           "enforcement",
           "enforcementChange",
           "durationBudgetMs",
@@ -168,6 +169,7 @@
           },
           "regression": { "type": "boolean" },
           "bugReference": { "type": ["string", "null"] },
+          "rootCauseAnalysis": { "type": ["string", "null"] },
           "enforcement": {
             "enum": ["required", "nonblocking", "disabled"]
           },
@@ -263,6 +265,37 @@
             "then": {
               "properties": {
                 "browserMode": { "const": "not-applicable" }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "required": ["regression"],
+              "properties": {
+                "regression": { "const": true }
+              }
+            },
+            "then": {
+              "properties": {
+                "category": { "const": "feature-behavior" },
+                "bugReference": { "type": "string", "minLength": 1 },
+                "rootCauseAnalysis": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "required": ["regression"],
+              "properties": {
+                "regression": { "const": false }
+              }
+            },
+            "then": {
+              "properties": {
+                "bugReference": { "type": "null" },
+                "rootCauseAnalysis": { "type": "null" }
               }
             }
           }

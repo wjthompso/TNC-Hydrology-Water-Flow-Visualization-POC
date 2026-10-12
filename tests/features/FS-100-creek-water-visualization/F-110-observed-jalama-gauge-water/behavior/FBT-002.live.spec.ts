@@ -14,9 +14,9 @@ import {
  * slider to the published 2026-01-03T15:15Z flood peak and checks that the
  * selected time and water-bucket identity change while exactly one water
  * graphic remains on Creek Segment 27714637-026. The browser page and
- * committed published data are real. USGS imagery and USGS 3DEP terrain tiles
- * are live; if they are unavailable the result is inconclusive rather than
- * passed. Nothing is mocked or saved. It does not check the visual appearance
+ * committed published data are real. Esri World Imagery and Esri World
+ * Elevation tiles are live; if they are unavailable the result is inconclusive
+ * rather than passed. Nothing is mocked or saved. It does not check the visual appearance
  * of the water.
  */
 test('Scrub to a different observation time and replace the shown water without leaving the previous water in place.', async ({

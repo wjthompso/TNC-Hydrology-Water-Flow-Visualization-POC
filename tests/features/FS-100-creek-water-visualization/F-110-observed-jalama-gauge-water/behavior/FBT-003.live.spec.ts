@@ -14,9 +14,9 @@ import {
  * from the committed series, presses the Play button, and samples the selected
  * time until the samples have moved forward by 15-minute steps, then presses
  * Pause and checks that the time stays unchanged for 1 second. The browser
- * page and committed published data are real. USGS imagery and USGS 3DEP
- * terrain tiles are live; if they are unavailable the result is inconclusive
- * rather than passed. Nothing is mocked or saved. It does not check the visual
+ * page and committed published data are real. Esri World Imagery and Esri
+ * World Elevation tiles are live; if they are unavailable the result is
+ * inconclusive rather than passed. Nothing is mocked or saved. It does not check the visual
  * appearance of the water.
  */
 test('Play the Jalama gauge observations in chronological order, and stop that advance when Pause is pressed.', async ({

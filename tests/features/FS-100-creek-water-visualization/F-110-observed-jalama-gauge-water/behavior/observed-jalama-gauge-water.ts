@@ -266,9 +266,9 @@ export async function openObservedWaterPage(page: Page, watch: LiveServiceWatch)
     pageErrors: watch.pageErrors,
     network: watch.summarize(),
   });
-  if (evidence || /nationalmap\.gov|usgs|3dep|terrain tile/i.test(`${banner}\n${watch.pageErrors.join('\n')}`)) {
+  if (evidence || /arcgisonline\.com|elevation3d\.arcgis\.com|ibasemaps/i.test(`${banner}\n${watch.pageErrors.join('\n')}`)) {
     throw new Error(
-      `INCONCLUSIVE: USGS imagery or USGS 3DEP terrain did not become available. ${evidence ?? (banner || outcome)}`,
+      `INCONCLUSIVE: Esri World Imagery or Esri World Elevation did not become available. ${evidence ?? (banner || outcome)}`,
     );
   }
   throw new Error(banner || `Timeout waiting for the observed-water scene (${outcome}).`);

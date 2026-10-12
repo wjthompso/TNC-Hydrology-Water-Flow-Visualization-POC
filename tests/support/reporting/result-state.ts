@@ -8,8 +8,7 @@ export type RecordedResultState =
   | 'failed'
   | 'skipped'
   | 'quarantined'
-  | 'inconclusive'
-  | 'flaky';
+  | 'inconclusive';
 export type CatalogResultState =
   | RecordedResultState
   | 'disabled'

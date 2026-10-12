@@ -9,14 +9,4 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@arcgis/core'],
   },
-  server: {
-    proxy: {
-      '/api/usgs-elevation': {
-        target:
-          'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/usgs-elevation/, ''),
-      },
-    },
-  },
 });
