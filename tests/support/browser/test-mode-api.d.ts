@@ -8,6 +8,8 @@ declare global {
         segmentId: string;
         bucketMinElevationM: number | null;
       }[];
+      /** SceneView center as longitude, latitude. Null before the view exists. */
+      readonly cameraTargetWgs84: readonly [number, number] | null;
     };
   }
 }

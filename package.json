@@ -7,6 +7,7 @@
     "apps/creek-visualization-browser"
   ],
   "scripts": {
+    "dev": "npm run dev -w creek-visualization-browser",
     "lint": "eslint apps/creek-visualization-browser/src tests playwright.config.ts vitest.config.ts scripts/test-runner.ts pipelines/creek-visualization-data-production",
     "pipeline:acquire": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/acquire.ts",
     "pipeline:publish": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/publish.ts",

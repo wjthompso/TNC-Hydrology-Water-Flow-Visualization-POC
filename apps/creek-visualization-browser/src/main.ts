@@ -1,5 +1,8 @@
 import '@arcgis/core/assets/esri/themes/dark/main.css';
 import './style.css';
+import type Point from '@arcgis/core/geometry/Point';
+import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
+import type SceneView from '@arcgis/core/views/SceneView';
 import {
   attachCreekVisualization,
   type CreekVisualizationAttachment,
@@ -17,11 +20,14 @@ interface CreekVisualizationTestSeam {
   readonly selectedTimeUtcMs: number | null;
   readonly waterSegmentIds: readonly string[];
   readonly waterGraphicGeometryIdentity: readonly WaterGraphicGeometryIdentity[];
+  /** SceneView center in WGS84. Read-only; nothing is added to the page. */
+  readonly cameraTargetWgs84: readonly [number, number] | null;
 }
 
 type TestModeWindow = Window & { __TNC_TEST__?: CreekVisualizationTestSeam };
 
 let attachment: CreekVisualizationAttachment | null = null;
+let sceneView: SceneView | null = null;
 
 const ready = startExperience();
 installTestSeam(ready);
@@ -45,6 +51,7 @@ async function startExperience(): Promise<boolean> {
     if (!segment) throw new Error('The gauge segment is missing from the creek network.');
 
     const shell = await createStandaloneExperienceShell(container, segment.pathWgs84);
+    sceneView = shell.view;
     setSceneNote(shell.basemapMode, shell.elevationSource);
     attachment = attachCreekVisualization(shell.view, {
       data,
@@ -75,11 +82,36 @@ function installTestSeam(readyPromise: Promise<boolean>): void {
     get waterGraphicGeometryIdentity() {
       return attachment?.waterGraphicGeometryIdentity ?? [];
     },
+    get cameraTargetWgs84() {
+      return readCameraTargetWgs84(sceneView);
+    },
   };
   Object.defineProperty(window as TestModeWindow, '__TNC_TEST__', {
     configurable: true,
     value: seam,
   });
+}
+
+/** View center, converted to longitude/latitude. This is the camera's framed target. */
+function readCameraTargetWgs84(view: SceneView | null): [number, number] | null {
+  const center = view?.center;
+  if (!center) return null;
+  const geographic = geographicPoint(center);
+  if (!geographic) return null;
+  const { longitude, latitude } = geographic;
+  if (typeof longitude !== 'number' || typeof latitude !== 'number') return null;
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
+  return [longitude, latitude];
+}
+
+function geographicPoint(point: Point): Point | null {
+  const wkid = point.spatialReference?.wkid;
+  if (wkid === 4326 || wkid === 4269 || (Math.abs(point.x) <= 180 && Math.abs(point.y) <= 90)) {
+    return point;
+  }
+  const geographic = webMercatorUtils.webMercatorToGeographic(point);
+  if (!geographic || geographic.type !== 'point') return null;
+  return geographic as Point;
 }
 
 function setSceneNote(basemapMode: BasemapMode, elevationSource: ElevationSource): void {

@@ -2,12 +2,23 @@
   "schemaVersion": 3,
   "featureSets": [
     {
+      "id": "FS-100",
+      "name": "Creek Water Visualization"
+    },
+    {
       "id": "FS-900",
       "name": "Example catalog",
       "example": true
     }
   ],
   "features": [
+    {
+      "id": "F-110",
+      "featureSetId": "FS-100",
+      "name": "Observed Jalama gauge water",
+      "lifecycle": "active",
+      "lifecycleChange": null
+    },
     {
       "id": "F-900",
       "featureSetId": "FS-900",
@@ -50,6 +61,96 @@
     }
   ],
   "tests": [
+    {
+      "id": "FBT-001",
+      "name": "Open the page on water for the Jalama Near Lompoc gauge Creek Segment only, with the camera framed there and no leftover synthetic ribbons.",
+      "methodology": "Opens the locally served page and waits until the read-only test seam reports ready. The browser page, ArcGIS SceneView, and committed published creek data are real. USGS imagery and USGS 3DEP terrain tiles are live external services; if they are unavailable the result is inconclusive rather than passed. Nothing is mocked or saved. The test-only seam supplies the water-segment list, water-graphic identity, and camera target. The test checks that only Creek Segment 27714637-026 has water, that exactly one water graphic exists for that segment, that the camera target is within 300 m of that segment's midpoint from the committed path, and that the removed synthetic controls are absent. It does not check the visual appearance of the water.",
+      "category": "feature-behavior",
+      "owner": "F-110",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 90000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-001.live.spec.ts"
+    },
+    {
+      "id": "FBT-002",
+      "name": "Scrub to a different observation time and replace the shown water without leaving the previous water in place.",
+      "methodology": "Starts from the opening observation, then sets the real time slider to the published 2026-01-03T15:15Z flood peak and checks that the selected time and water-bucket identity change while exactly one water graphic remains on Creek Segment 27714637-026. The browser page and committed published data are real. USGS imagery and USGS 3DEP terrain tiles are live; if they are unavailable the result is inconclusive rather than passed. Nothing is mocked or saved. It does not check the visual appearance of the water.",
+      "category": "feature-behavior",
+      "owner": "F-110",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 90000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-002.live.spec.ts"
+    },
+    {
+      "id": "FBT-003",
+      "name": "Play the Jalama gauge observations in chronological order, and stop that advance when Pause is pressed.",
+      "methodology": "Scrubs the real time slider to a mid-record observation taken from the committed series, presses the Play button, and samples the selected time until the samples have moved forward by 15-minute steps, then presses Pause and checks that the time stays unchanged for 1 second. The browser page and committed published data are real. USGS imagery and USGS 3DEP terrain tiles are live; if they are unavailable the result is inconclusive rather than passed. Nothing is mocked or saved. It does not check the visual appearance of the water.",
+      "category": "feature-behavior",
+      "owner": "F-110",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 90000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-003.live.spec.ts"
+    },
+    {
+      "id": "FBT-004",
+      "name": "Select a Jalama gauge time with no observation and show no water on its Creek Segment.",
+      "methodology": "Selects a gap slot inside the committed series' 135-minute gap on 2026-06-09 and a null-reading slot from that same series, using the real time slider. It checks that the water-segment list is empty and that the status \"No observation at this time\" is visible in both cases. The browser page and committed published data are real. USGS imagery and USGS 3DEP terrain tiles are live; if they are unavailable the result is inconclusive rather than passed. Nothing is mocked or saved. It does not check the visual appearance of the water.",
+      "category": "feature-behavior",
+      "owner": "F-110",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 90000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-004.live.spec.ts"
+    },
+    {
+      "id": "FBT-005",
+      "name": "Hide every numeric water-surface elevation, stage, and discharge value on the page.",
+      "methodology": "At the opening time, the published flood peak, and a gap slot, reads document.body.innerText plus every aria-label, aria-valuetext, and title value and checks that none contain a water number, the words stage or discharge, or the published water-surface elevations for those times rounded to 1, 2, or 3 decimals. The browser page and committed published data are real. USGS imagery and USGS 3DEP terrain tiles are live; if they are unavailable the result is inconclusive rather than passed. Nothing is mocked or saved. Console output and the visual appearance of the water are not checked.",
+      "category": "feature-behavior",
+      "owner": "F-110",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 90000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-005.live.spec.ts"
+    },
     {
       "id": "SST-001",
       "name": "The catalog rejects a test entry that breaks the classification rules, and feature filters return each matching test once.",
