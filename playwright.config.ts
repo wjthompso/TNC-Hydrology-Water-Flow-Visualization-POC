@@ -21,7 +21,7 @@ export default defineConfig<DeterministicProjectOptions>({
   preserveOutput: 'always',
   timeout: 30000,
   expect: { timeout: 10000 },
-  reporter: [['line']],
+  reporter: [['./tests/support/reporting/quiet-stdio-reporter.ts']],
   use: {
     baseURL: testBaseUrl,
     headless: true,
@@ -54,7 +54,7 @@ export default defineConfig<DeterministicProjectOptions>({
       testMatch: '**/*.live.spec.ts',
       timeout: 90000,
       retries: 1,
-      workers: 1,
+      workers: 2,
       use: { ...devices['Desktop Chrome'] },
     },
   ],

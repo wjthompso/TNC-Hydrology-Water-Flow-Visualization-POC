@@ -5,6 +5,11 @@ import process from 'node:process';
 import type { CatalogTest, TestCatalog } from '../tests/support/catalog/test-catalog.ts';
 import { runReleaseGate } from '../tests/support/reporting/gate.ts';
 import {
+  commandReportLines,
+  commandReportUsesColor,
+  formatWallClock,
+} from '../tests/support/reporting/command-report.ts';
+import {
   executionStatus,
   normalizePlaywrightResults,
   passedAfterRetryLines,
@@ -202,7 +207,14 @@ async function runBrowser(
   const report = path.join(resultsDirectory, `raw-playwright-${runKey}-${mode}.json`);
   const processResult = await runProcess(
     'npx',
-    ['--no-install', 'playwright', 'test', ...sourceFiles(selected), `--project=${mode}`, '--reporter=json'],
+    [
+      '--no-install',
+      'playwright',
+      'test',
+      ...sourceFiles(selected),
+      `--project=${mode}`,
+      '--reporter=json,tests/support/reporting/quiet-stdio-reporter.ts',
+    ],
     {
       VITE_TEST_MODE: 'true',
       VITE_TEST_RENDERER: mode === 'deterministic' ? 'three' : 'arcgis',
@@ -272,6 +284,7 @@ function pruneRetiredTestResults(latestTests: Record<string, unknown>) {
 
 async function recordRun(
   command: string,
+  selector: string | null,
   selected: CatalogTest[],
   execution: Execution,
   gateStatus?: string,
@@ -287,16 +300,21 @@ async function recordRun(
   const latestFile = path.join(resultsDirectory, 'latest.json');
   const storedLatest = asRecord(await readJson(latestFile));
   const latestTests = asRecord(storedLatest?.tests) ?? {};
+  const selectedTestIds = selected.map(({ id }) => id);
   const latest = {
     ...(storedLatest ?? {}),
     generatedAt: timestamp,
     lastCommand: command,
+    lastSelector: selector,
+    lastSelectedTestIds: selectedTestIds,
     lastCommandStatus: execution.name,
     lastCommandDurationMs: execution.durationMs,
     tests: latestTests,
     ...(gateStatus
       ? {
           gateStatus,
+          gateGeneratedAt: timestamp,
+          gateDurationMs: execution.durationMs,
           requiredGateDefinitionFingerprint: requiredGateDefinitionFingerprint(testCatalog.tests),
         }
       : {}),
@@ -313,7 +331,8 @@ async function recordRun(
   history.push({
     timestamp,
     command,
-    selectedTestIds: selected.map(({ id }) => id),
+    selector,
+    selectedTestIds,
     status: execution.name,
     durationMs: execution.durationMs,
     budgetWarnings,
@@ -321,35 +340,23 @@ async function recordRun(
     ...(gateStatus
       ? {
           gateStatus,
+          gateGeneratedAt: timestamp,
+          gateDurationMs: execution.durationMs,
           requiredGateDefinitionFingerprint: requiredGateDefinitionFingerprint(testCatalog.tests),
         }
       : {}),
   });
   await writeFile(historyFile, `${JSON.stringify(history.slice(-20), null, 2)}\n`);
 
-  console.log(`Total test duration: ${execution.durationMs} ms.`);
-  const retryLines = passedAfterRetryLines(execution.results);
-  for (const line of retryLines) console.log(line);
-  if (retryLines.length) {
-    const retryIds = execution.results.flatMap((result) =>
-      result.passedAfterRetry ? [result.id] : [],
-    );
-    console.log(`Passed after retry: ${retryIds.join(', ')}.`);
+  for (const line of commandReportLines(
+    testCatalog.tests,
+    execution.results,
+    commandReportUsesColor(),
+  )) {
+    console.log(line);
   }
-  console.log(
-    `Slowest tests: ${JSON.stringify(
-      [...execution.results]
-        .sort((first, second) => second.durationMs - first.durationMs)
-        .slice(0, 5)
-        .map(({ id, state, durationMs, totalDurationMs, passedAfterRetry }) => ({
-          id,
-          state,
-          durationMs,
-          totalDurationMs,
-          ...(passedAfterRetry ? { passedAfterRetry: true } : {}),
-        })),
-    )}.`,
-  );
+  console.log(`Total time: ${formatWallClock(execution.durationMs)}`);
+  for (const line of passedAfterRetryLines(execution.results)) console.log(line);
   if (budgetWarnings.length) {
     console.warn(`Duration budget warnings: ${JSON.stringify(budgetWarnings)}.`);
   }
@@ -364,6 +371,7 @@ async function runGate(): Promise<number> {
     console.error('Release gate inconclusive: no required tests are configured.');
     await recordRun(
       'gate',
+      null,
       [],
       { name: 'inconclusive', exitCode: 2, durationMs: 0, results: [] },
       'inconclusive',
@@ -392,6 +400,7 @@ async function runGate(): Promise<number> {
   const exitCode = gate.status === 'passed' ? 0 : gate.status === 'inconclusive' ? 2 : 1;
   await recordRun(
     'gate',
+    null,
     executed.flatMap((entry) => entry.selected),
     {
       name: gate.status,
@@ -452,7 +461,7 @@ try {
         }.`,
       );
     }
-    await recordRun(mode, selected, execution);
+    await recordRun(mode, selector ?? null, selected, execution);
     process.exitCode = lintExitCode ? 1 : execution.exitCode;
   }
 } catch (error) {

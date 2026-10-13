@@ -103,6 +103,59 @@ function statusLabel(primary) {
   return labels[primary] ?? primary;
 }
 
+function statusWord(primary) {
+  const status = typeof primary === 'string' ? primary : 'unexecuted';
+  const className =
+    status === 'passed' ? 'word-passed' : status === 'failed' ? 'word-failed' : '';
+  const classAttribute = className ? ` class="${className}"` : '';
+  return `<span${classAttribute}>${escapeHtml(statusLabel(status))}</span>`;
+}
+
+function latestRunTestCount(latestResults) {
+  if (Array.isArray(latestResults?.lastSelectedTestIds)) {
+    return latestResults.lastSelectedTestIds.length;
+  }
+  // Older result files omit lastSelectedTestIds. Tests stamped at generatedAt belong to that run.
+  const generatedAt = latestResults?.generatedAt;
+  const tests = latestResults?.tests;
+  if (typeof generatedAt !== 'string' || tests === null || typeof tests !== 'object') {
+    return 0;
+  }
+  return Object.values(tests).filter(
+    (entry) => entry && typeof entry === 'object' && entry.timestamp === generatedAt,
+  ).length;
+}
+
+function latestRunSummary(latestResults) {
+  const command =
+    typeof latestResults?.lastCommand === 'string' ? latestResults.lastCommand : '';
+  if (!command) {
+    return '<p class="summary">Latest run: none</p>';
+  }
+  const parts = [escapeHtml(command)];
+  const selector = latestResults?.lastSelector;
+  if (typeof selector === 'string' && selector.length > 0) {
+    parts.push(escapeHtml(selector));
+  }
+  const count = latestRunTestCount(latestResults);
+  parts.push(`${count} ${count === 1 ? 'test' : 'tests'}`);
+  parts.push(statusWord(latestResults.lastCommandStatus));
+  parts.push(escapeHtml(formatWallClock(latestResults.lastCommandDurationMs)));
+  return `<p class="summary">Latest run: ${parts.join(' · ')}</p>`;
+}
+
+function releaseGateSummary(latestResults, gate) {
+  const stale = gate.staleStored
+    ? ` Earlier stored result: ${escapeHtml(statusLabel(gate.staleStored))} (stale required-test definitions).`
+    : '';
+  const command = latestResults?.lastCommand;
+  const notRerun =
+    typeof command === 'string' && command !== 'gate'
+      ? ' This command did not rerun the release gate.'
+      : '';
+  return `<p class="summary summary-last">Release gate: ${statusWord(gate.primary)}.${stale}${notRerun}</p>`;
+}
+
 function statusTagClass(primary) {
   if (primary === 'passed') return 'tag-passed';
   if (primary === 'failed') return 'tag-failed';
@@ -117,6 +170,30 @@ function formatDuration(milliseconds) {
   const tenthsOfASecond = Math.round(milliseconds / 100);
   const seconds = (tenthsOfASecond / 10).toFixed(1);
   return `${milliseconds} ms (${seconds} s)`;
+}
+
+function formatWallClock(milliseconds) {
+  if (typeof milliseconds !== 'number' || !Number.isFinite(milliseconds) || milliseconds < 0) {
+    return 'duration unavailable';
+  }
+  if (milliseconds < 60_000) {
+    const tenths = Math.round(milliseconds / 100) / 10;
+    return `${tenths.toFixed(1)} s`;
+  }
+  const roundedSeconds = Math.round(milliseconds / 1000);
+  const minutes = Math.floor(roundedSeconds / 60);
+  const seconds = roundedSeconds % 60;
+  return `${minutes} min ${seconds} s`;
+}
+
+function formatSeconds(milliseconds) {
+  return `${(milliseconds / 1000).toFixed(1)} s`;
+}
+
+function resultMark(primary) {
+  if (primary === 'passed') return { symbol: '✓', label: 'Passed', className: 'mark-passed' };
+  if (primary === 'failed') return { symbol: '✕', label: 'Failed', className: 'mark-failed' };
+  return null;
 }
 
 function disclosure(title, body) {
@@ -192,15 +269,18 @@ function testCard(test, feature, latestResults) {
   } else if (display.lastExecution) {
     lines.push(`Last execution: ${escapeHtml(display.lastExecution)}`);
   }
+  const measured = latest && !display.stale ? formatSeconds(latest.durationMs) : '—';
+  const mark = resultMark(display.primary);
   return `<details class="test-row">
     <summary>
       <span class="scan"><span class="identifier">${escapeHtml(test.id)}</span>&nbsp;<span class="behavior">${escapeHtml(test.name)}</span></span>
       <span class="tags">
+        <span class="timing">${escapeHtml(measured)} / ${escapeHtml(formatSeconds(test.durationBudgetMs))}</span>
+        ${mark ? `<span class="mark ${mark.className}" role="img" aria-label="${mark.label}">${mark.symbol}</span>` : `<span class="tag ${statusTagClass(display.primary)}">${escapeHtml(statusLabel(display.primary))}</span>`}
         <span class="result-badges">
-          <span class="tag ${statusTagClass(display.primary)}">${escapeHtml(statusLabel(display.primary))}</span>
           ${bugCheckBadge(test)}
+          ${passedAfterRetry(latest, display.primary) ? '<span class="tag tag-retry">Passed after retry</span>' : ''}
         </span>
-        ${passedAfterRetry(latest, display.primary) ? '<span class="tag tag-retry">Passed after retry</span>' : ''}
       </span>
     </summary>
     <div class="metadata">
@@ -292,11 +372,6 @@ const featureSetsHtml = testCatalog.featureSets
   .join('');
 
 const gate = currentGatePresentation(latest);
-const gateStatusClass =
-  gate.primary === 'passed' ? 'word-passed' : gate.primary === 'failed' ? 'word-failed' : '';
-const staleGateNote = gate.staleStored
-  ? ` Earlier stored result: ${escapeHtml(statusLabel(gate.staleStored))} (stale required-test definitions).`
-  : '';
 const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -334,12 +409,13 @@ const html = `<!doctype html>
       line-height: 25px;
       margin-bottom: 10px;
     }
-    .gate {
+    .summary {
       color: #b1b4b6;
       font-size: 16px;
-      line-height: 20px;
-      margin-bottom: 30px;
+      line-height: 22px;
+      margin: 0 0 4px;
     }
+    .summary-last { margin-bottom: 30px; }
     .word-passed { color: #6fcf97; }
     .word-failed { color: #e07a7a; }
     h2 {
@@ -429,11 +505,32 @@ const html = `<!doctype html>
     }
     .scan { flex: 1 1 auto; min-width: 0; }
     .tags {
-      align-items: flex-start;
+      align-items: center;
       display: flex;
       flex: 0 0 auto;
-      gap: 8px;
+      gap: 10px;
     }
+    .timing {
+      color: #b1b4b6;
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+      line-height: 22px;
+      white-space: nowrap;
+    }
+    .mark {
+      align-items: center;
+      border-radius: 999px;
+      display: inline-flex;
+      flex: 0 0 auto;
+      font-size: 18px;
+      font-weight: 700;
+      height: 28px;
+      justify-content: center;
+      line-height: 1;
+      width: 28px;
+    }
+    .mark-passed { background: #00703c; color: #ffffff; }
+    .mark-failed { background: #d4351c; color: #ffffff; }
     .result-badges {
       align-items: flex-end;
       display: flex;
@@ -479,7 +576,8 @@ const html = `<!doctype html>
     }
     summary:focus-visible .behavior,
     summary:focus-visible .identifier,
-    summary:focus-visible .tag {
+    summary:focus-visible .tag,
+    summary:focus-visible .timing {
       color: #0b0c0c;
     }
   </style>
@@ -488,7 +586,8 @@ const html = `<!doctype html>
   <main class="reading">
     <h1>Feature-centered test catalog</h1>
     <p class="notice">Opening this page runs no tests.</p>
-    <p class="gate">Latest release gate: <span class="${gateStatusClass}">${escapeHtml(statusLabel(gate.primary))}</span>${staleGateNote} · Results generated: ${escapeHtml(latest.generatedAt ?? 'never')}</p>
+    ${latestRunSummary(latest)}
+    ${releaseGateSummary(latest, gate)}
     ${featureSetsHtml}
     ${coreHtml}
   </main>

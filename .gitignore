@@ -12,3 +12,4 @@ test-results/
 # Repository-root environment files. .env.example stays tracked.
 /.env
 /.env.local
+TNC-Hydrology-Water-Flow.local.code-workspace
