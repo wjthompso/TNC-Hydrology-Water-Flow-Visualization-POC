@@ -13,5 +13,7 @@ test-results/
 /.env
 /.env.local
 TNC-Hydrology-Water-Flow.local.code-workspace
+
+# macOS Finder metadata
 .DS_Store
-.DS_Store
+**/.DS_Store
