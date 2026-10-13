@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import playwrightConfig from '../playwright.config.ts';
 import type { CatalogTest, TestCatalog } from '../tests/support/catalog/test-catalog.ts';
 import { runReleaseGate } from '../tests/support/reporting/gate.ts';
 import {
@@ -19,6 +21,10 @@ import {
   requiredGateDefinitionFingerprint,
   testDefinitionFingerprint,
 } from '../tests/support/reporting/test-definition-fingerprint.ts';
+import {
+  introductionLines,
+  type PlannedTest,
+} from '../tests/support/reporting/run-progress.ts';
 import { validateTestingFoundations } from '../tests/support/validation/foundations.ts';
 
 const root = process.cwd();
@@ -179,17 +185,48 @@ function playwrightResults(
   return normalizePlaywrightResults(report, selected, processFailed, root);
 }
 
+function plannedTests(selected: CatalogTest[]): PlannedTest[] {
+  return selected.map(({ id, name, durationBudgetMs }) => ({ id, name, durationBudgetMs }));
+}
+
+function vitestWorkerCount(): number {
+  const processors =
+    typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
+  // Same cap Vitest uses for a non-watch forks pool: one fewer than the available processors, at least one.
+  return Math.max(processors - 1, 1);
+}
+
+function playwrightWorkerCount(mode: 'deterministic' | 'live'): number {
+  const project = playwrightConfig.projects?.find((entry) => entry.name === mode);
+  const workers = project?.workers;
+  return typeof workers === 'number' && workers > 0 ? workers : 1;
+}
+
+function announceRun(selected: CatalogTest[], workers: number): string {
+  const tests = plannedTests(selected);
+  for (const line of introductionLines(tests, workers)) console.log(line);
+  return JSON.stringify({ tests });
+}
+
 async function runNonBrowser(selected: CatalogTest[], runKey: string): Promise<Execution> {
   if (!selected.length) return { name: 'passed', exitCode: 0, durationMs: 0, results: [] };
+  const workers = vitestWorkerCount();
   const output = path.join(resultsDirectory, `raw-vitest-${runKey}.json`);
-  const processResult = await runProcess('npx', [
-    '--no-install',
-    'vitest',
-    'run',
-    ...sourceFiles(selected),
-    '--reporter=json',
-    `--outputFile=${output}`,
-  ]);
+  const processResult = await runProcess(
+    'npx',
+    [
+      '--no-install',
+      'vitest',
+      'run',
+      ...sourceFiles(selected),
+      '--reporter=json',
+      '--reporter=tests/support/reporting/vitest-progress-reporter.ts',
+      `--outputFile.json=${output}`,
+      '--maxWorkers',
+      String(workers),
+    ],
+    { TNC_TEST_RUN_PLAN: announceRun(selected, workers) },
+  );
   const results = vitestResults(await readJson(output), selected, processResult.exitCode !== 0);
   return {
     ...executionStatus(selected, results),
@@ -205,6 +242,7 @@ async function runBrowser(
 ): Promise<Execution> {
   if (!selected.length) return { name: 'passed', exitCode: 0, durationMs: 0, results: [] };
   const report = path.join(resultsDirectory, `raw-playwright-${runKey}-${mode}.json`);
+  const workers = playwrightWorkerCount(mode);
   const processResult = await runProcess(
     'npx',
     [
@@ -216,6 +254,7 @@ async function runBrowser(
       '--reporter=json,tests/support/reporting/quiet-stdio-reporter.ts',
     ],
     {
+      TNC_TEST_RUN_PLAN: announceRun(selected, workers),
       VITE_TEST_MODE: 'true',
       VITE_TEST_RENDERER: mode === 'deterministic' ? 'three' : 'arcgis',
       TNC_TEST_PORT: process.env.TNC_TEST_PORT ?? String(42000 + (process.pid % 10000)),
@@ -348,6 +387,7 @@ async function recordRun(
   });
   await writeFile(historyFile, `${JSON.stringify(history.slice(-20), null, 2)}\n`);
 
+  console.log('');
   for (const line of commandReportLines(
     testCatalog.tests,
     execution.results,

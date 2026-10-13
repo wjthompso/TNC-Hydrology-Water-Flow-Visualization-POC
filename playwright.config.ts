@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { deterministicRequestAllowlist } from './tests/support/browser/deterministic-allowlist';
+import { deterministicRequestAllowlist } from './tests/support/browser/deterministic-allowlist.ts';
 
 type DeterministicProjectOptions = {
   deterministicRequestAllowlist: string[];
