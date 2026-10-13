@@ -12,8 +12,14 @@ declare global {
       readonly cameraTargetWgs84: readonly [number, number] | null;
       /** True while SceneView is drawing or loading. */
       readonly sceneUpdating: boolean;
+      /** True when no camera animation or user navigation is in progress. */
+      readonly sceneStationary: boolean;
       /** Camera position height in meters. Null before the view exists. */
       readonly cameraAltitudeM: number | null;
+      /** Camera position, heading, and tilt. Null before the view exists. */
+      readonly cameraPose: TestCameraPose | null;
+      /** Moves the camera instantly. Present only when the page is served in test mode. */
+      moveCamera?(pose: TestCameraPose): Promise<void>;
       /**
        * Drawn-ground elevations at screen points, from SceneView `toMap`.
        * `elevationM` is null when that ray misses the rendered terrain mesh.
@@ -31,4 +37,9 @@ declare global {
   }
 }
 
-export {};
+export interface TestCameraPose {
+  /** Longitude, latitude, and height in meters. */
+  readonly positionWgs84: readonly [number, number, number];
+  readonly headingDegrees: number;
+  readonly tiltDegrees: number;
+}

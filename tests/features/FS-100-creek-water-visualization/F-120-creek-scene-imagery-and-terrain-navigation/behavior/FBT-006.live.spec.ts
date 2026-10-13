@@ -1,38 +1,35 @@
-import { test } from '@playwright/test';
+import { test } from '../../../../support/browser/esri-response-cache.ts';
 import { openObservedWaterPage, watchLiveServices } from '../../F-110-observed-jalama-gauge-water/behavior/observed-jalama-gauge-water.ts';
+import { COAST_CAMERA, moveCameraAndSettle, settleScene } from './scene-camera.ts';
 import {
-  COAST_WHEEL_EVENTS,
-  WHEEL_DELTA_Y,
-  finishFlatColorCheck,
-  moveToWheelPoint,
+  finishSceneCheck,
   rethrowSceneFailure,
-  sampleFlatFrame,
-  settleAfterZoom,
-  settleOpening,
   sidebarMask,
   watchTerrainTraffic,
-  wheelBurst,
-} from './scene-flat-color.ts';
+} from './scene-check-outcome.ts';
+import { sampleFlatFrame } from './scene-flat-color.ts';
 
 /**
- * Methodology: Opens the locally served page and waits until the read-only
- * test seam reports ready, then until SceneView stops updating and live tile
- * requests stay quiet. The browser page, ArcGIS SceneView, and committed
- * published creek data are real. Esri World Imagery and Esri World Elevation
- * tiles are live external services; if those requests fail with DNS, TLS,
- * HTTP 429, or HTTP 5xx, or no initial terrain tiles arrive, the result is
- * inconclusive rather than passed. Nothing is mocked or saved. From a settled
- * opening frame the test sends real mouse-wheel events at a fixed point on the
- * scene canvas outside the sidebar, one grouped notch of three events
- * (deltaY 420), far enough to reach a coast-scale camera around 12 km. At the
- * opening frame and the coast frame it screenshots a 640×480 clip of the
- * scene, masks the sidebar using its DOM bounding box, samples every fourth
- * pixel, and fails when the share of those pixels whose RGB exactly equals the
- * single most common RGB exceeds 10%. The failure names the step, camera
- * height, flat color, and share, and attaches the screenshot. It does not zoom
- * past the coast frame, zoom back in, or check a white far-zoom frame. It does
- * not check imagery sharpness, tile vintage differences, terrain accuracy, or
- * water appearance.
+ * Methodology: Opens the locally served page in test mode and waits until the
+ * test seam reports ready and SceneView has finished loading with a still
+ * camera. The browser page, ArcGIS SceneView, and committed published creek
+ * data are real. Esri World Imagery and Esri World Elevation responses are real
+ * and are reused from a local disk cache; a response missing from the cache is
+ * fetched live and saved. When a live fetch fails with DNS, TLS, HTTP 429, or
+ * HTTP 5xx and no frame failed, or no terrain tiles arrive, the result is
+ * inconclusive rather than passed. Nothing else is mocked. After the opening
+ * frame, the test-mode camera command moves the camera instantly to a fixed
+ * coast-scale pose about 12 km up, the pose three mouse-wheel notches reach,
+ * and waits again until the scene has finished loading. At the opening frame
+ * and the coast frame it screenshots a 640×480 clip of the scene, masks the
+ * sidebar using its DOM bounding box, samples every fourth pixel, and fails
+ * when the share of those pixels whose RGB exactly equals the single most
+ * common RGB exceeds 10%. A measured flat-color failure stays a failure even
+ * when Esri also reported an outage. The failure names the step, camera
+ * height, flat color, and share, and attaches the screenshot. It does not
+ * check mouse-wheel input, intermediate zoom levels, a white far-zoom frame,
+ * imagery sharpness, tile vintage differences, terrain accuracy, or water
+ * appearance.
  */
 
 /**
@@ -51,41 +48,23 @@ test('Zoom out from the Jalama Creek Segment without exposing an empty flat-colo
 }, testInfo) => {
   const watch = watchLiveServices(page);
   const terrain = watchTerrainTraffic(page);
+  const evidenceDir = process.env.FBT006_EVIDENCE_DIR;
   const samples: string[] = [];
   const failures: string[] = [];
 
   try {
     await openObservedWaterPage(page, watch);
-    await settleOpening(page, terrain);
+    await settleScene(page, 'opening');
     const sidebar = await sidebarMask(page);
-    await moveToWheelPoint(page);
     const cdp = await page.context().newCDPSession(page);
 
-    const openingAltitudeM = await sampleFlatFrame(
-      page,
-      cdp,
-      testInfo,
-      'opening',
-      samples,
-      failures,
-      process.env.FBT006_EVIDENCE_DIR,
-      sidebar,
-    );
-    await wheelBurst(page, COAST_WHEEL_EVENTS, WHEEL_DELTA_Y, sidebar);
-    await settleAfterZoom(page, terrain, openingAltitudeM);
-    await sampleFlatFrame(
-      page,
-      cdp,
-      testInfo,
-      'coast',
-      samples,
-      failures,
-      process.env.FBT006_EVIDENCE_DIR,
-      sidebar,
-    );
+    await sampleFlatFrame(page, cdp, testInfo, 'opening', samples, failures, evidenceDir, sidebar);
+    await moveCameraAndSettle(page, COAST_CAMERA, 'coast');
+    await sampleFlatFrame(page, cdp, testInfo, 'coast', samples, failures, evidenceDir, sidebar);
 
     await cdp.detach();
-    finishFlatColorCheck(samples, failures, terrain, watch);
+    console.log(samples.join('\n'));
+    finishSceneCheck(failures, terrain, watch);
   } catch (error) {
     rethrowSceneFailure(error, failures, watch);
   }

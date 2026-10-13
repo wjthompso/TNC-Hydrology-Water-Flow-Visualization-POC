@@ -1,5 +1,6 @@
 import '@arcgis/core/assets/esri/themes/dark/main.css';
 import './style.css';
+import Camera from '@arcgis/core/Camera';
 import type Point from '@arcgis/core/geometry/Point';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
 import type SceneView from '@arcgis/core/views/SceneView';
@@ -20,8 +21,17 @@ interface CreekVisualizationTestSeam {
   readonly cameraTargetWgs84: readonly [number, number] | null;
   /** True while SceneView is drawing or loading. Read-only. */
   readonly sceneUpdating: boolean;
+  /** True when no camera animation or user navigation is in progress. Read-only. */
+  readonly sceneStationary: boolean;
   /** Camera position height in meters. Read-only; null before the view exists. */
   readonly cameraAltitudeM: number | null;
+  /** Camera position, heading, and tilt. Read-only; null before the view exists. */
+  readonly cameraPose: CameraPose | null;
+  /**
+   * Moves the camera instantly, the same way the opening frame is set.
+   * Present only when the page is served in test mode.
+   */
+  moveCamera?(pose: CameraPose): Promise<void>;
   /**
    * Elevations of the terrain mesh actually drawn in the SceneView.
    * Read-only; nothing is added to the page.
@@ -38,6 +48,13 @@ interface RenderedGroundHeight {
   readonly elevationM: number | null;
   readonly longitude: number | null;
   readonly latitude: number | null;
+}
+
+interface CameraPose {
+  /** Longitude, latitude, and height in meters. */
+  readonly positionWgs84: readonly [number, number, number];
+  readonly headingDegrees: number;
+  readonly tiltDegrees: number;
 }
 
 type TestModeWindow = Window & { __TNC_TEST__?: CreekVisualizationTestSeam };
@@ -103,13 +120,27 @@ function installTestSeam(readyPromise: Promise<boolean>): void {
     get sceneUpdating() {
       return sceneView?.updating ?? true;
     },
+    get sceneStationary() {
+      return sceneView?.stationary ?? false;
+    },
     get cameraAltitudeM() {
       const altitudeM = sceneView?.camera?.position?.z;
       return typeof altitudeM === 'number' && Number.isFinite(altitudeM) ? altitudeM : null;
     },
+    get cameraPose() {
+      return readCameraPose(sceneView);
+    },
     sampleRenderedGroundHeights(screenPoints) {
       return readRenderedGroundHeights(sceneView, screenPoints);
     },
+    ...(import.meta.env.VITE_TEST_MODE === 'true'
+      ? {
+          async moveCamera(pose: CameraPose) {
+            if (!sceneView) throw new Error('The scene view is not ready.');
+            await moveCamera(sceneView, pose);
+          },
+        }
+      : {}),
   };
   Object.defineProperty(window as TestModeWindow, '__TNC_TEST__', {
     configurable: true,
@@ -127,6 +158,34 @@ function readCameraTargetWgs84(view: SceneView | null): [number, number] | null 
   if (typeof longitude !== 'number' || typeof latitude !== 'number') return null;
   if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
   return [longitude, latitude];
+}
+
+function readCameraPose(view: SceneView | null): CameraPose | null {
+  const camera = view?.camera;
+  const position = camera?.position ? geographicPoint(camera.position) : null;
+  if (!camera || !position) return null;
+  const { longitude, latitude } = position;
+  const z = camera.position.z;
+  if (typeof longitude !== 'number' || typeof latitude !== 'number' || typeof z !== 'number') {
+    return null;
+  }
+  return {
+    positionWgs84: [longitude, latitude, z],
+    headingDegrees: camera.heading,
+    tiltDegrees: camera.tilt,
+  };
+}
+
+async function moveCamera(view: SceneView, pose: CameraPose): Promise<void> {
+  const [longitude, latitude, z] = pose.positionWgs84;
+  await view.goTo(
+    new Camera({
+      position: { longitude, latitude, z, spatialReference: { wkid: 4326 } },
+      heading: pose.headingDegrees,
+      tilt: pose.tiltDegrees,
+    }),
+    { duration: 0 },
+  );
 }
 
 /**

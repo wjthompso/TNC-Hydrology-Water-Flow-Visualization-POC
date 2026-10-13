@@ -36,6 +36,8 @@ export default defineConfig<DeterministicProjectOptions>({
     url: testBaseUrl,
     reuseExistingServer: false,
     timeout: 120000,
+    // Test mode adds the camera command to the page's test seam; see TESTING.md.
+    env: { VITE_TEST_MODE: 'true' },
   },
   projects: [
     {
@@ -52,10 +54,12 @@ export default defineConfig<DeterministicProjectOptions>({
     {
       name: 'live',
       testMatch: '**/*.live.spec.ts',
-      timeout: 90000,
+      timeout: 20000,
       retries: 1,
-      workers: 2,
-      use: { ...devices['Desktop Chrome'] },
+      workers: 3,
+      // The chromium channel draws WebGL on the GPU. The default headless shell uses
+      // SwiftShader, a CPU renderer that made each scene test about 5× slower.
+      use: { ...devices['Desktop Chrome'], channel: 'chromium' },
     },
   ],
 });

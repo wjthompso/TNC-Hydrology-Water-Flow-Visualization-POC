@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../../../support/browser/esri-response-cache.ts';
 import {
   gapSlotOn9June2026,
   nullReadingSlot,
@@ -15,8 +15,10 @@ import {
  * time slider. It checks that the water-segment list is empty and that the
  * status "No observation at this time" is visible in both cases. The browser
  * page and committed published data are real. Esri World Imagery and Esri
- * World Elevation tiles are live; if they are unavailable the result is
- * inconclusive rather than passed. Nothing is mocked or saved. It does not check the visual
+ * World Elevation responses are real and are reused from a local disk cache; a
+ * response missing from the cache is fetched live, and if that fetch is
+ * unavailable the result is inconclusive rather than passed. Nothing else is
+ * mocked. It does not check the visual
  * appearance of the water.
  */
 test('Select a Jalama gauge time with no observation and show no water on its Creek Segment.', async ({

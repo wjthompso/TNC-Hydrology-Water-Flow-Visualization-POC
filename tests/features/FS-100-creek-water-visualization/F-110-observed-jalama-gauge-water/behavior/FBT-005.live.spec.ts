@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../../../support/browser/esri-response-cache.ts';
 import {
   floodPeakObservation,
   gapSlotOn9June2026,
@@ -17,9 +17,10 @@ import {
  * title value and checks that none contain a water number, the words stage or
  * discharge, or the published water-surface elevations for those times rounded
  * to 1, 2, or 3 decimals. The browser page and committed published data are
- * real. Esri World Imagery and Esri World Elevation tiles are live; if they
- * are unavailable the result is inconclusive rather than passed. Nothing is mocked
- * or saved. Console output and the visual appearance of the water are not
+ * real. Esri World Imagery and Esri World Elevation responses are real and are
+ * reused from a local disk cache; a response missing from the cache is fetched
+ * live, and if that fetch is unavailable the result is inconclusive rather than
+ * passed. Nothing else is mocked. Console output and the visual appearance of the water are not
  * checked.
  */
 test('Hide every numeric water-surface elevation, stage, and discharge value on the page.', async ({

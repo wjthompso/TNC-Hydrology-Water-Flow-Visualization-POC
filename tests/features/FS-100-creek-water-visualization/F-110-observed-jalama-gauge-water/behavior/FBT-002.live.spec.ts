@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../../../../support/browser/esri-response-cache.ts';
 import {
   floodPeakObservation,
   GAUGE_SEGMENT_ID,
@@ -15,8 +15,10 @@ import {
  * selected time and water-bucket identity change while exactly one water
  * graphic remains on Creek Segment 27714637-026. The browser page and
  * committed published data are real. Esri World Imagery and Esri World
- * Elevation tiles are live; if they are unavailable the result is inconclusive
- * rather than passed. Nothing is mocked or saved. It does not check the visual appearance
+ * Elevation responses are real and are reused from a local disk cache; a
+ * response missing from the cache is fetched live, and if that fetch is
+ * unavailable the result is inconclusive rather than passed. Nothing else is
+ * mocked. It does not check the visual appearance
  * of the water.
  */
 test('Scrub to a different observation time and replace the shown water without leaving the previous water in place.', async ({

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -25,6 +25,7 @@ import {
   introductionLines,
   type PlannedTest,
 } from '../tests/support/reporting/run-progress.ts';
+import { ESRI_RESPONSE_CACHE_FOLDER } from '../tests/support/browser/esri-response-cache-location.ts';
 import { validateTestingFoundations } from '../tests/support/validation/foundations.ts';
 
 const root = process.cwd();
@@ -81,6 +82,7 @@ function selectTests(mode: string | undefined, selector: string | undefined): Ca
     case 'browser-deterministic':
       return enabled.filter((test) => test.browserMode === 'deterministic');
     case 'browser-live':
+    case 'refresh-map-cache':
       return enabled.filter((test) => test.browserMode === 'live');
     case 'browser-all':
       return enabled.filter((test) => test.environment === 'browser');
@@ -255,6 +257,7 @@ async function runBrowser(
     ],
     {
       TNC_TEST_RUN_PLAN: announceRun(selected, workers),
+      TNC_TEST_CACHE_DIR: cacheDirectory,
       VITE_TEST_MODE: 'true',
       VITE_TEST_RENDERER: mode === 'deterministic' ? 'three' : 'arcgis',
       TNC_TEST_PORT: process.env.TNC_TEST_PORT ?? String(42000 + (process.pid % 10000)),
@@ -467,6 +470,13 @@ try {
     process.exitCode = await runGate();
   } else {
     const selected = selectTests(mode, selector);
+    if (mode === 'refresh-map-cache') {
+      const savedEsriResponses = path.join(cacheDirectory, ESRI_RESPONSE_CACHE_FOLDER);
+      await rm(savedEsriResponses, { recursive: true, force: true });
+      console.log(
+        `Deleted saved Esri responses in ${savedEsriResponses}. Every live browser test will download them again.`,
+      );
+    }
     if (mode === 'fast-only') {
       const excluded = testCatalog.tests.filter(
         (test) => isExecutable(test) && test.environment === 'non-browser' && !test.fast,

@@ -38,4 +38,21 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['**/*.live.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@playwright/test',
+              message:
+                'Import test and expect from tests/support/browser/esri-response-cache.ts so live tests reuse saved Esri responses.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

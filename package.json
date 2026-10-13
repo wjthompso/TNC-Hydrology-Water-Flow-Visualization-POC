@@ -17,6 +17,7 @@
     "test:shared": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts shared",
     "test:browser-deterministic": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts browser-deterministic",
     "test:browser-live": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts browser-live",
+    "test:refresh-map-cache": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts refresh-map-cache",
     "test:browser-all": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts browser-all",
     "test:browser-only": "npm run test:browser-all",
     "test:gate": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts gate",
