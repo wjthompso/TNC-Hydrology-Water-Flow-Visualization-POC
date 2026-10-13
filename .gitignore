@@ -13,3 +13,4 @@ test-results/
 /.env
 /.env.local
 TNC-Hydrology-Water-Flow.local.code-workspace
+.DS_Store
