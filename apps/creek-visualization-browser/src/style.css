@@ -22,3 +22,11 @@ body,
   width: 100%;
   height: 100%;
 }
+
+/*
+ * A click focuses the scene surface. Esri then paints a light-blue frame
+ * on :focus::after. Keyboard focus keeps that ring.
+ */
+#arcgis-view .esri-view-surface:focus:not(:focus-visible)::after {
+  outline: none;
+}
