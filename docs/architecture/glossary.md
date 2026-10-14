@@ -32,7 +32,7 @@ A Distinct Population Segment (DPS) is a geographically and genetically distinct
 
 ## Esri World Elevation
 
-Esri's global terrain service, used as the 3D scene's ground surface. It is coarser than USGS 3DEP (3D Elevation Program) 1 m terrain, so prepared water-surface polygons can sit slightly above or below it.
+Esri's global terrain service, used as the 3D scene's far-zoom fallback ground surface beyond the ~25 km window around the creek, beneath the USGS 3DEP (3D Elevation Program) 1 m terrain the scene draws near the creek (UCS-275). It is coarser than USGS 3DEP 1 m terrain, so prepared water-surface polygons can sit slightly above or below it.
 
 ## Esri World Imagery
 
@@ -76,7 +76,7 @@ A creek centerline published by TNC (The Nature Conservancy). Creek Segments are
 
 ## USGS 3DEP
 
-The USGS (United States Geological Survey) 3D Elevation Program bare-earth terrain model. It is the terrain used to build prepared water-surface polygons.
+The USGS (United States Geological Survey) 3D Elevation Program (3DEP) bare-earth terrain model. It is the terrain used to build prepared water-surface polygons, and (UCS-275) the surface the live 3D scene draws near the creek, composited over Esri World Elevation for far zoom.
 
 ## Water-surface elevation (WSE)
 

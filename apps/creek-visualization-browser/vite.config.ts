@@ -9,4 +9,16 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@arcgis/core'],
   },
+  server: {
+    proxy: {
+      // The USGS 3DEP ImageServer has no CORS headers for localhost. The custom
+      // elevation layer fetches tiles through this same-origin path instead.
+      '/api/usgs-elevation': {
+        target:
+          'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/usgs-elevation/, ''),
+      },
+    },
+  },
 });

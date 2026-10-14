@@ -1,18 +1,54 @@
 import EsriMap from '@arcgis/core/Map';
 import Camera from '@arcgis/core/Camera';
 import SceneView from '@arcgis/core/views/SceneView';
+import Extent from '@arcgis/core/geometry/Extent';
 import Point from '@arcgis/core/geometry/Point';
 import esriConfig from '@arcgis/core/config.js';
+import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
+import Usgs3DepElevationLayer, { preflightElevationAtPoint } from './usgs-elevation-layer';
 
 /** Slant range from the segment midpoint, close enough for a ~20 m segment. */
 const CAMERA_SLANT_RANGE_M = 180;
 /** Degrees from straight down. */
 const CAMERA_TILT_DEGREES = 58;
+/** Pads the 3DEP request window around the segment so zoom-in never hits its edge. */
+const TERRAIN_BUFFER_M = 25000;
 
 /** A developer key raises tile quota. World Imagery and World Elevation load without one. */
 function configureApiKey(): void {
   const apiKey = import.meta.env.VITE_ARCGIS_API_KEY?.trim();
   if (apiKey) esriConfig.apiKey = apiKey;
+}
+
+/**
+ * Web Mercator box covering the creek segment plus a 25 km buffer. The custom
+ * USGS 3DEP layer uses this as its `fullExtent`, so SceneView only requests 1 m
+ * tiles near the creek and reuses Esri World Elevation everywhere else.
+ */
+function terrainRequestExtent(path: readonly (readonly [number, number])[]): Extent {
+  let xmin = Infinity;
+  let ymin = Infinity;
+  let xmax = -Infinity;
+  let ymax = -Infinity;
+  for (const [lon, lat] of path) {
+    xmin = Math.min(xmin, lon);
+    ymin = Math.min(ymin, lat);
+    xmax = Math.max(xmax, lon);
+    ymax = Math.max(ymax, lat);
+  }
+  const southwest = webMercatorUtils.geographicToWebMercator(
+    new Point({ longitude: xmin, latitude: ymin, spatialReference: { wkid: 4326 } }),
+  ) as Point;
+  const northeast = webMercatorUtils.geographicToWebMercator(
+    new Point({ longitude: xmax, latitude: ymax, spatialReference: { wkid: 4326 } }),
+  ) as Point;
+  return new Extent({
+    xmin: southwest.x - TERRAIN_BUFFER_M,
+    ymin: southwest.y - TERRAIN_BUFFER_M,
+    xmax: northeast.x + TERRAIN_BUFFER_M,
+    ymax: northeast.y + TERRAIN_BUFFER_M,
+    spatialReference: { wkid: 3857 },
+  });
 }
 
 export async function createStandaloneExperienceShell(
@@ -27,7 +63,8 @@ export async function createStandaloneExperienceShell(
   const map = new EsriMap({
     // Esri basemap id "satellite" is World Imagery and does not require an API key.
     basemap: 'satellite',
-    // world-elevation is the Terrain3D surface. A second ElevationLayer would duplicate it.
+    // world-elevation is the Terrain3D base surface. The USGS 3DEP layer composites
+    // on top of it near the creek; world-elevation still covers far-zoom terrain.
     ground: 'world-elevation',
   });
 
@@ -58,11 +95,44 @@ export async function createStandaloneExperienceShell(
   });
 
   map.ground.navigationConstraint = { type: 'none' };
+
+  // Attach USGS 3DEP 1 m terrain over Esri World Elevation near the creek. A
+  // preflight validates one real 3DEP tile first; if USGS is unreachable the
+  // scene still renders on World Elevation alone.
+  const center = pathCenter(segmentPathWgs84);
+  const groundElevationM = await attachUsgsTerrain(map, segmentPathWgs84, center);
+
   await view.when();
 
-  const groundElevationM = await sampleWorldElevation(map, pathCenter(segmentPathWgs84));
-  await frameSegment(view, segmentPathWgs84, groundElevationM ?? 0);
+  const framingElevationM =
+    groundElevationM ?? (await sampleWorldElevation(map, center)) ?? 0;
+  await frameSegment(view, segmentPathWgs84, framingElevationM);
   return view;
+}
+
+/**
+ * Builds the USGS 3DEP layer, preflights one tile at the creek, and adds it to
+ * the ground when that tile is valid. Returns the sampled 3DEP ground height so
+ * the opening camera frames against the real terrain, or null when the layer
+ * was not attached.
+ */
+async function attachUsgsTerrain(
+  map: EsriMap,
+  segmentPathWgs84: readonly (readonly [number, number])[],
+  center: { lon: number; lat: number },
+): Promise<number | null> {
+  const elevationLayer = new Usgs3DepElevationLayer({
+    fullExtent: terrainRequestExtent(segmentPathWgs84),
+  });
+  const origin = new Point({
+    longitude: center.lon,
+    latitude: center.lat,
+    spatialReference: { wkid: 4326 },
+  });
+  const preflight = await preflightElevationAtPoint(origin, elevationLayer);
+  if (!preflight) return null;
+  map.ground.layers.add(elevationLayer);
+  return preflight.elevationM;
 }
 
 async function sampleWorldElevation(
