@@ -26,6 +26,10 @@ The stretch of creek between two adjacent original vertices on a TNC (The Nature
 
 The larger product an Experience belongs to.
 
+## Distinct Population Segment (DPS)
+
+A Distinct Population Segment (DPS) is a geographically and genetically distinct population that NOAA (National Oceanic and Atmospheric Administration) Fisheries can list under the ESA (Endangered Species Act) separately from the species as a whole. The fish relevant to this Experience are the Southern California Steelhead DPS of Oncorhynchus mykiss irideus (the anadromous, ocean-going form of coastal rainbow trout), spanning coastal watersheds from the Santa Maria River to the U.S.–Mexico border and listed as endangered. Because Jalama Creek has no steelhead observations of its own, condition data from other watersheds inside this same DPS — such as the Santa Ynez and Ventura rivers — are the closest defensible proxy. It is not a biological subspecies boundary.
+
 ## Esri World Elevation
 
 Esri's global terrain service, used as the 3D scene's ground surface. It is coarser than USGS 3DEP (3D Elevation Program) 1 m terrain, so prepared water-surface polygons can sit slightly above or below it.
