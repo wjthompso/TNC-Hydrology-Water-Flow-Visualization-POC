@@ -49,6 +49,18 @@ interface Execution {
 }
 
 const isExecutable = (test: CatalogTest) => test.enforcement !== 'disabled';
+const catalogTestIdentifier = /^(?:FBT|FST|CCT|SST)-\d+$/;
+
+function explicitCatalogTest(selector: string | undefined): CatalogTest | null {
+  if (!selector || !catalogTestIdentifier.test(selector)) return null;
+  const test = testCatalog.tests.find(({ id }) => id === selector);
+  if (!test) throw new Error(`Unknown test identifier: ${selector}.`);
+  return test;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 const sourceFiles = (tests: CatalogTest[]) => [
   ...new Set(tests.map(({ sourceFile }) => sourceFile)),
 ];
@@ -86,11 +98,21 @@ function selectTests(mode: string | undefined, selector: string | undefined): Ca
       return enabled.filter((test) => test.browserMode === 'live');
     case 'browser-all':
       return enabled.filter((test) => test.environment === 'browser');
-    case 'feature':
+    case 'id': {
+      const named = explicitCatalogTest(selector);
+      if (!named) {
+        throw new Error(`Unknown test identifier: ${selector ?? '(missing)'}.`);
+      }
+      return [named];
+    }
+    case 'feature': {
+      const named = explicitCatalogTest(selector);
+      if (named) return [named];
       if (!testCatalog.features.some(({ id }) => id === selector)) {
         throw new Error(`Unknown Feature selector: ${selector ?? '(missing)'}.`);
       }
       return enabled.filter((test) => associatedWithFeature(test, selector ?? ''));
+    }
     case 'feature-set':
       if (!testCatalog.featureSets.some(({ id }) => id === selector)) {
         throw new Error(`Unknown Feature Set selector: ${selector ?? '(missing)'}.`);
@@ -210,7 +232,11 @@ function announceRun(selected: CatalogTest[], workers: number): string {
   return JSON.stringify({ tests });
 }
 
-async function runNonBrowser(selected: CatalogTest[], runKey: string): Promise<Execution> {
+async function runNonBrowser(
+  selected: CatalogTest[],
+  runKey: string,
+  titlePattern?: string,
+): Promise<Execution> {
   if (!selected.length) return { name: 'passed', exitCode: 0, durationMs: 0, results: [] };
   const workers = vitestWorkerCount();
   const output = path.join(resultsDirectory, `raw-vitest-${runKey}.json`);
@@ -221,6 +247,7 @@ async function runNonBrowser(selected: CatalogTest[], runKey: string): Promise<E
       'vitest',
       'run',
       ...sourceFiles(selected),
+      ...(titlePattern ? ['--testNamePattern', titlePattern] : []),
       '--reporter=json',
       '--reporter=tests/support/reporting/vitest-progress-reporter.ts',
       `--outputFile.json=${output}`,
@@ -241,6 +268,7 @@ async function runBrowser(
   selected: CatalogTest[],
   mode: 'deterministic' | 'live',
   runKey: string,
+  titlePattern?: string,
 ): Promise<Execution> {
   if (!selected.length) return { name: 'passed', exitCode: 0, durationMs: 0, results: [] };
   const report = path.join(resultsDirectory, `raw-playwright-${runKey}-${mode}.json`);
@@ -253,6 +281,7 @@ async function runBrowser(
       'test',
       ...sourceFiles(selected),
       `--project=${mode}`,
+      ...(titlePattern ? ['--grep', titlePattern] : []),
       '--reporter=json,tests/support/reporting/quiet-stdio-reporter.ts',
     ],
     {
@@ -276,20 +305,27 @@ async function runBrowser(
   };
 }
 
-async function execute(selected: CatalogTest[], runKey: string): Promise<Execution> {
+async function execute(
+  selected: CatalogTest[],
+  runKey: string,
+  titlePattern?: string,
+): Promise<Execution> {
   const nonBrowser = await runNonBrowser(
     selected.filter(({ environment }) => environment === 'non-browser'),
     runKey,
+    titlePattern,
   );
   const deterministic = await runBrowser(
     selected.filter(({ browserMode }) => browserMode === 'deterministic'),
     'deterministic',
     runKey,
+    titlePattern,
   );
   const live = await runBrowser(
     selected.filter(({ browserMode }) => browserMode === 'live'),
     'live',
     runKey,
+    titlePattern,
   );
   const runs = [nonBrowser, deterministic, live];
   const results = runs.flatMap((run) => run.results);
@@ -487,7 +523,18 @@ try {
         }.`,
       );
     }
-    const execution = await execute(selected, `${mode}-${Date.now()}`);
+    const directTest =
+      selected.length === 1 && selected[0]?.id === selector ? selected[0] : undefined;
+    if (directTest?.enforcement === 'disabled') {
+      console.log(
+        `${directTest.id} is disabled. This direct check runs it and leaves feature commands and the release gate unchanged.`,
+      );
+    }
+    const execution = await execute(
+      selected,
+      `${mode}-${Date.now()}`,
+      directTest ? escapeRegExp(directTest.name) : undefined,
+    );
     let lintExitCode = 0;
     if (mode === 'all') {
       lintExitCode = (await runProcess('npm', ['run', 'lint'])).exitCode;

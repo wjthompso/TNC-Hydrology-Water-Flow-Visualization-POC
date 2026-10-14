@@ -5,6 +5,7 @@ import {
   selectFeatureSetTests,
   selectFeatureTests,
   selectGateTests,
+  selectTestById,
   testCatalog,
   validateCatalog,
   type ApprovedMetadataChange,
@@ -294,6 +295,13 @@ describe('SST-001', () => {
     );
     expect(selectGateTests(disabled).map(({ id }) => id)).not.toContain(
       'FBT-001',
+    );
+    expect(selectTestById(disabled, 'FBT-001')).toMatchObject({
+      id: 'FBT-001',
+      enforcement: 'disabled',
+    });
+    expect(() => selectTestById(disabled, 'FBT-999')).toThrow(
+      'Unknown test identifier: FBT-999.',
     );
 
     for (const test of testCatalog.tests) {

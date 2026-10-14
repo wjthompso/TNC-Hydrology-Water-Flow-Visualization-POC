@@ -1,7 +1,10 @@
 import type SceneView from '@arcgis/core/views/SceneView';
 import { createArcGISSceneRenderer, type WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { LoadedCreekVisualization } from './creek-data-contract';
-import { bindObservationTimelineControls } from './observation-timeline-controls';
+import {
+  bindObservationTimelineControls,
+  type PlaybackSpeedControl,
+} from './observation-timeline-controls';
 import { resolveSelectedTimeCreekState } from './selected-time-creek-state-resolver';
 
 export interface AttachCreekVisualizationOptions {
@@ -10,6 +13,7 @@ export interface AttachCreekVisualizationOptions {
   slider: HTMLInputElement;
   timeReadout: HTMLElement;
   status: HTMLElement;
+  speedButtons: readonly PlaybackSpeedControl[];
 }
 
 export interface CreekVisualizationAttachment {
@@ -54,6 +58,7 @@ export function attachCreekVisualization(
       playButton: options.playButton,
       slider: options.slider,
       timeReadout: options.timeReadout,
+      speedButtons: options.speedButtons,
     },
     options.data.clock,
     options.data.openingGridIndex,

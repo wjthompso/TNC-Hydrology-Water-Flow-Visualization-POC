@@ -377,7 +377,7 @@ const html = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Feature-centered test catalog</title>
+  <title>Test catalog: Feature Behavior Tests and Critical Core Tests</title>
   <style>
     :root { color-scheme: dark; }
     body {

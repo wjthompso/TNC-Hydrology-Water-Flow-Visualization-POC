@@ -3,15 +3,24 @@ import type { NormalizedTestResult } from './playwright-results.ts';
 
 const green = '\u001b[32m';
 const red = '\u001b[31m';
+/** 256-color gray #767676. Quieter than the theme foreground, still readable on a dark terminal. */
+const darkGray = '\u001b[38;5;243m';
 const reset = '\u001b[0m';
 const durationColumnWidth = 7;
 
 type StatusLabel = 'PASSED' | 'PASSED after retry' | 'FAILED' | 'INCONCLUSIVE' | 'NOT RUN';
+type EntryTone = 'passed' | 'failed' | 'not-run';
 
 interface StatusView {
   label: StatusLabel;
-  passed: boolean;
+  tone: EntryTone;
   durationMs: number | null;
+}
+
+function entryColor(tone: EntryTone): string {
+  if (tone === 'passed') return green;
+  if (tone === 'failed') return red;
+  return darkGray;
 }
 
 function paint(text: string, color: string, enabled: boolean): string {
@@ -21,21 +30,21 @@ function paint(text: string, color: string, enabled: boolean): string {
 
 function statusView(result: NormalizedTestResult | undefined): StatusView {
   if (!result || result.state === 'unexecuted' || result.state === 'skipped') {
-    return { label: 'NOT RUN', passed: false, durationMs: null };
+    return { label: 'NOT RUN', tone: 'not-run', durationMs: null };
   }
   if (result.state === 'passed' && result.passedAfterRetry) {
-    return { label: 'PASSED after retry', passed: true, durationMs: result.durationMs };
+    return { label: 'PASSED after retry', tone: 'passed', durationMs: result.durationMs };
   }
   if (result.state === 'passed') {
-    return { label: 'PASSED', passed: true, durationMs: result.durationMs };
+    return { label: 'PASSED', tone: 'passed', durationMs: result.durationMs };
   }
   if (result.state === 'inconclusive') {
-    return { label: 'INCONCLUSIVE', passed: false, durationMs: result.durationMs };
+    return { label: 'INCONCLUSIVE', tone: 'failed', durationMs: result.durationMs };
   }
   if (result.state === 'failed') {
-    return { label: 'FAILED', passed: false, durationMs: result.durationMs };
+    return { label: 'FAILED', tone: 'failed', durationMs: result.durationMs };
   }
-  return { label: 'NOT RUN', passed: false, durationMs: null };
+  return { label: 'NOT RUN', tone: 'not-run', durationMs: null };
 }
 
 function wrapWords(text: string, width: number): string[] {
@@ -69,7 +78,7 @@ function testEntry(
       : formatSeconds(status.durationMs).padStart(durationColumnWidth);
   const heading = `${test.id.padEnd(idWidth)}  ${duration}  ${status.label}`;
   const titleLines = wrapWords(test.name, columns - 2).map((line) => `  ${line}`);
-  return [heading, ...titleLines].map((line) => paint(line, status.passed ? green : red, color));
+  return [heading, ...titleLines].map((line) => paint(line, entryColor(status.tone), color));
 }
 
 function formatSeconds(milliseconds: number): string {

@@ -107,3 +107,12 @@ export function selectGateTests(candidate: TestCatalog): CatalogTest[] {
       (test.category === 'critical-core' || test.category === 'feature-behavior'),
   );
 }
+
+/** One catalog test, including a disabled test. Feature and gate selection still skip those. */
+export function selectTestById(candidate: TestCatalog, testId: string): CatalogTest {
+  const test = candidate.tests.find(({ id }) => id === testId);
+  if (!test) {
+    throw new Error(`Unknown test identifier: ${testId || '(missing)'}.`);
+  }
+  return test;
+}

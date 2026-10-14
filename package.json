@@ -24,6 +24,7 @@
     "test:all": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts all",
     "test:view-test-catalog": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/view-test-catalog.mjs",
     "test:feature": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts feature",
+    "test:id": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts id",
     "test:feature-set": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts feature-set"
   },
   "devDependencies": {

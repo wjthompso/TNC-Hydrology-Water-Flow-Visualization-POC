@@ -45,6 +45,53 @@
             aria-valuetext="Loading time"
             class="w-full accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           />
+          <div class="mt-2 grid grid-cols-5 gap-1.5" role="group" aria-label="Playback speed">
+            <button
+              id="timeline-speed-0-5x"
+              type="button"
+              aria-label="0.5 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none whitespace-nowrap rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              0.5×
+            </button>
+            <button
+              id="timeline-speed-1x"
+              type="button"
+              aria-label="1 times speed"
+              aria-pressed="true"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              1×
+            </button>
+            <button
+              id="timeline-speed-2x"
+              type="button"
+              aria-label="2 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              2×
+            </button>
+            <button
+              id="timeline-speed-5x"
+              type="button"
+              aria-label="5 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              5×
+            </button>
+            <button
+              id="timeline-speed-10x"
+              type="button"
+              aria-label="10 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              10×
+            </button>
+          </div>
           <p id="timeline-status" class="mt-2 min-h-5 text-sm text-slate-300" aria-live="polite"></p>
         </section>
 

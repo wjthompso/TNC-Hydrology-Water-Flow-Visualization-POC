@@ -185,13 +185,13 @@ function clockCovering(timestampsUtcMs: readonly number[]): ObservationClock {
   };
 }
 
-/** Latest grid slot whose reading is present. Zero when every reading is missing. */
+/** First grid slot whose reading is present. Zero when every reading is missing. */
 function openingGridIndexFor(
   clock: ObservationClock,
   timestampsUtcMs: readonly number[],
   readings: readonly (number | null)[],
 ): number {
-  for (let index = readings.length - 1; index >= 0; index -= 1) {
+  for (let index = 0; index < readings.length; index += 1) {
     if (typeof readings[index] !== 'number') continue;
     const gridIndex = gridIndexForTimestamp(clock, timestampsUtcMs[index]);
     if (gridIndex != null) return gridIndex;
