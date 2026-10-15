@@ -13,8 +13,6 @@ export const OBSERVATION_STEP_MS = 15 * 60 * 1000;
 /** Verified against the committed observed series: this slot's reading is the flood peak. */
 export const FLOOD_PEAK_UTC = '2026-01-03T15:15:00.000Z';
 
-const WATER_QUANTITY =
-  /\d+(\.\d+)?\s*(m|meters?|ft|feet|cfs|ft³\/s|ft\^3\/s)\b/i;
 const SCENE_READY_MS = 75_000;
 
 const publishedDataRoot = path.resolve(
@@ -322,31 +320,3 @@ export async function scrubToTime(page: Page, timeUtcMs: number): Promise<void> 
   await expect.poll(async () => (await readSeam(page)).selectedTimeUtcMs).toBe(timeUtcMs);
 }
 
-export async function visibleWaterCopy(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const parts = [document.body.innerText];
-    for (const element of document.querySelectorAll('[aria-label], [aria-valuetext], [title]')) {
-      for (const attribute of ['aria-label', 'aria-valuetext', 'title']) {
-        const value = element.getAttribute(attribute);
-        if (value) parts.push(value);
-      }
-    }
-    return parts.join('\n');
-  });
-}
-
-export function waterNumberViolations(text: string, elevationsM: readonly number[]): string[] {
-  const violations: string[] = [];
-  const unitMatch = WATER_QUANTITY.exec(text);
-  if (unitMatch) violations.push(`unit quantity "${unitMatch[0]}"`);
-  if (/stage/i.test(text)) violations.push('the word stage');
-  if (/discharge/i.test(text)) violations.push('the word discharge');
-  for (const elevation of elevationsM) {
-    for (const digits of [1, 2, 3]) {
-      const rounded = elevation.toFixed(digits);
-      const pattern = new RegExp(`(?<![\\d.])${rounded.replaceAll('.', '\\.')}(?![\\d.])`);
-      if (pattern.test(text)) violations.push(`published elevation ${rounded}`);
-    }
-  }
-  return violations;
-}

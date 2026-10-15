@@ -45,7 +45,7 @@ export function createArcGISSceneRenderer(
   if (!view.map) throw new Error('SceneView has no map.');
 
   const layer = new GraphicsLayer({
-    id: 'water-dynamic',
+    id: 'water-surface-elevation-polygons',
     listMode: 'hide',
     elevationInfo: { mode: 'absolute-height' },
   });
@@ -73,11 +73,18 @@ export function createArcGISSceneRenderer(
       if (bucket) {
         graphic.geometry = polygonForBucket(bucket);
         graphic.visible = true;
+        // Dev HUD and feature-behavior tests read these through view.hitTest.
+        graphic.attributes = {
+          segmentId,
+          bucketMinElevationM: bucket.minWaterSurfaceElevationM,
+          bucketMaxElevationM: bucket.maxWaterSurfaceElevationM,
+        };
         // A graphic with no geometry logs a SceneView warning, so it joins the layer only once it has a polygon.
         if (!graphic.layer) layer.add(graphic);
         writtenElevationM.set(segmentId, bucket.minWaterSurfaceElevationM);
       } else {
         graphic.visible = false;
+        graphic.attributes = null;
         writtenElevationM.delete(segmentId);
       }
     }

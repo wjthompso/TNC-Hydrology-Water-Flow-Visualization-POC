@@ -1,7 +1,7 @@
 import '@arcgis/core/assets/esri/themes/dark/main.css';
 import './style.css';
 import Camera from '@arcgis/core/Camera';
-import type Point from '@arcgis/core/geometry/Point';
+import Point from '@arcgis/core/geometry/Point';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
 import type SceneView from '@arcgis/core/views/SceneView';
 import {
@@ -9,6 +9,7 @@ import {
   type CreekVisualizationAttachment,
 } from './creek-visualization-library-interface';
 import type { WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
+import type { HitTestCapture, HitTestCaptureHit } from './dev-tools-capture-schema';
 import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
 import { readPlaybackSpeedButtons } from './observation-timeline-controls';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
@@ -40,6 +41,38 @@ interface CreekVisualizationTestSeam {
   sampleRenderedGroundHeights(
     screenPoints: readonly { readonly x: number; readonly y: number }[],
   ): readonly RenderedGroundHeight[];
+  /**
+   * Runs `SceneView.hitTest` at a screen point and returns a frozen snapshot
+   * of the camera pose, ground hit, and every reported graphic. Available in
+   * all environments so the dev HUD and future replay tests share one path.
+   */
+  hitTestAtScreen(screen: { x: number; y: number }): Promise<HitTestCapture>;
+  /**
+   * Projects a WGS84 ground point to a screen pixel. Returns null when the
+   * point is off-screen. Available in all environments so viewport-independent
+   * hit-testing fixtures do not require test mode.
+   */
+  projectMapPointToScreen(mapPoint: {
+    longitude: number;
+    latitude: number;
+    z?: number | null;
+  }): { x: number; y: number } | null;
+  /**
+   * Test-only pin that forces a specific water-surface elevation on one Creek
+   * Segment. Setting `elevationM` to `null` clears the pin. Present only when
+   * the page is served in test mode. Awaits a renderer flush so the frame
+   * reflects the pin before resolving.
+   */
+  pinSegmentWaterSurfaceElevationM?(segmentId: string, elevationM: number | null): Promise<void>;
+  /**
+   * Frozen view of the current segment identity list the renderer last applied.
+   * Mirrors `waterGraphicGeometryIdentity` and is kept so dev tooling can
+   * capture placements with a short, replay-friendly name.
+   */
+  readonly segmentPlacements: readonly {
+    segmentId: string;
+    bucketMinElevationM: number | null;
+  }[];
 }
 
 interface RenderedGroundHeight {
@@ -96,6 +129,10 @@ async function startExperience(): Promise<boolean> {
     });
     await attachment.flush();
     hideLoadingOverlay();
+    if (new URLSearchParams(location.search).has('devtools')) {
+      const { installDevToolsHud } = await import('./dev-tools-hud');
+      installDevToolsHud({ view: sceneView!, attachment: attachment!, container: document.body });
+    }
     return true;
   } catch (error: unknown) {
     console.error(error);
@@ -135,11 +172,28 @@ function installTestSeam(readyPromise: Promise<boolean>): void {
     sampleRenderedGroundHeights(screenPoints) {
       return readRenderedGroundHeights(sceneView, screenPoints);
     },
+    async hitTestAtScreen(screen) {
+      if (!sceneView) throw new Error('The scene view is not ready.');
+      return captureHitTestAtScreen(sceneView, screen);
+    },
+    projectMapPointToScreen(mapPoint) {
+      return projectMapPointToScreen(sceneView, mapPoint);
+    },
+    get segmentPlacements() {
+      return attachment?.waterGraphicGeometryIdentity ?? [];
+    },
     ...(import.meta.env.VITE_TEST_MODE === 'true'
       ? {
           async moveCamera(pose: CameraPose) {
             if (!sceneView) throw new Error('The scene view is not ready.');
             await moveCamera(sceneView, pose);
+          },
+          async pinSegmentWaterSurfaceElevationM(
+            segmentId: string,
+            elevationM: number | null,
+          ) {
+            if (!attachment) throw new Error('The scene view is not ready.');
+            await attachment.pinSegmentWaterSurfaceElevationM(segmentId, elevationM);
           },
         }
       : {}),
@@ -188,6 +242,146 @@ async function moveCamera(view: SceneView, pose: CameraPose): Promise<void> {
     }),
     { duration: 0 },
   );
+}
+
+/**
+ * One-shot capture of the camera pose, ground hit, and every reported graphic
+ * at a screen point. Shared by the dev HUD and future replay tests through
+ * `__TNC_TEST__.hitTestAtScreen`.
+ */
+async function captureHitTestAtScreen(
+  view: SceneView,
+  screen: { x: number; y: number },
+): Promise<HitTestCapture> {
+  const screenPoint = { x: screen.x, y: screen.y };
+  const cameraPose = readCameraPose(view);
+  // Camera pose is reported after the view is ready; if it is missing we fall
+  // back to zeros so the capture still has a complete shape.
+  const pose: HitTestCapture['cameraPose'] = cameraPose
+    ? {
+        positionWgs84: [...cameraPose.positionWgs84] as [number, number, number],
+        headingDegrees: cameraPose.headingDegrees,
+        tiltDegrees: cameraPose.tiltDegrees,
+      }
+    : { positionWgs84: [0, 0, 0], headingDegrees: 0, tiltDegrees: 0 };
+
+  let mapHitWgs84: HitTestCapture['mapHitWgs84'];
+  try {
+    const mapHit = view.toMap(screenPoint);
+    mapHitWgs84 = pointToWgs84(mapHit ?? null);
+  } catch {
+    mapHitWgs84 = null;
+  }
+
+  let hits: HitTestCaptureHit[];
+  try {
+    const result = await view.hitTest(screenPoint);
+    hits = result.results.map(readHit);
+  } catch {
+    hits = [];
+  }
+
+  const capture: HitTestCapture = {
+    screenPoint,
+    cameraPose: pose,
+    mapHitWgs84,
+    hits,
+  };
+  return capture;
+}
+
+function readHit(
+  hit:
+    | __esri.GraphicHit
+    | __esri.MediaHit
+    | __esri.RouteHit,
+): HitTestCaptureHit {
+  const layerId =
+    hit.type === 'graphic' || hit.type === 'media' || hit.type === 'route'
+      ? hit.layer?.id ?? null
+      : null;
+  const mapPoint = 'mapPoint' in hit ? pointToWgs84(hit.mapPoint ?? null) : null;
+  const distanceM =
+    'distance' in hit && typeof hit.distance === 'number' && Number.isFinite(hit.distance)
+      ? hit.distance
+      : null;
+  if (hit.type === 'graphic' && layerId === 'water-surface-elevation-polygons') {
+    const attributes = (hit.graphic?.attributes ?? null) as
+      | {
+          segmentId?: unknown;
+          bucketMinElevationM?: unknown;
+          bucketMaxElevationM?: unknown;
+        }
+      | null;
+    return {
+      layerId,
+      graphicType: 'water-surface',
+      segmentId: typeof attributes?.segmentId === 'string' ? attributes.segmentId : null,
+      bucketMinElevationM: readFiniteOrNull(attributes?.bucketMinElevationM),
+      bucketMaxElevationM: readFiniteOrNull(attributes?.bucketMaxElevationM),
+      mapPointWgs84: mapPoint,
+      distanceM,
+    };
+  }
+  return {
+    layerId,
+    graphicType: 'other',
+    segmentId: null,
+    bucketMinElevationM: null,
+    bucketMaxElevationM: null,
+    mapPointWgs84: mapPoint,
+    distanceM,
+  };
+}
+
+/**
+ * Projects a WGS84 longitude/latitude (optionally with a z) to a screen pixel.
+ * Returns null when the SceneView is not ready, when `toScreen` returns null,
+ * or when the resulting pixel lies outside the view's viewport.
+ */
+function projectMapPointToScreen(
+  view: SceneView | null,
+  mapPoint: { longitude: number; latitude: number; z?: number | null },
+): { x: number; y: number } | null {
+  if (!view) return null;
+  const { longitude, latitude } = mapPoint;
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
+  const z = typeof mapPoint.z === 'number' && Number.isFinite(mapPoint.z) ? mapPoint.z : undefined;
+  const point = new Point({
+    longitude,
+    latitude,
+    ...(z !== undefined ? { z, hasZ: true } : {}),
+    spatialReference: { wkid: 4326 },
+  });
+  let screen: __esri.ScreenPoint | null;
+  try {
+    screen = view.toScreen(point);
+  } catch {
+    return null;
+  }
+  if (!screen) return null;
+  const { x, y } = screen;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const { width, height } = view;
+  if (typeof width === 'number' && typeof height === 'number') {
+    if (x < 0 || y < 0 || x > width || y > height) return null;
+  }
+  return { x, y };
+}
+
+function pointToWgs84(point: Point | null): HitTestCapture['mapHitWgs84'] {
+  if (!point) return null;
+  const geographic = geographicPoint(point);
+  if (!geographic) return null;
+  const { longitude, latitude } = geographic;
+  if (typeof longitude !== 'number' || typeof latitude !== 'number') return null;
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
+  const z = typeof geographic.z === 'number' && Number.isFinite(geographic.z) ? geographic.z : null;
+  return { longitude, latitude, z };
+}
+
+function readFiniteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 /**

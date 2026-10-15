@@ -42,6 +42,13 @@ export const FEET_TO_METERS = 0.3048;
 
 export const BUCKET_STEP_M = 0.05;
 export const CORRIDOR_HALF_WIDTH_M = 100;
+/**
+ * Outward horizontal distance (meters) by which the wet mask is dilated before
+ * the prepared water-surface polygon is traced. The margin lets the surrounding
+ * bank terrain depth-occlude the jagged 1 m rim. The dilation is bounded by the
+ * Creek Segment corridor, so it cannot bleed into a neighbouring creek.
+ */
+export const BANK_OVERLAP_MARGIN_M = 2;
 export const ELEVATION_WINDOW_SIZE_M = 400;
 export const ELEVATION_WINDOW_PIXELS = 400;
 export const CENTERLINE_SAMPLE_SPACING_M = 0.5;

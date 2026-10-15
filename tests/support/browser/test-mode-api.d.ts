@@ -33,8 +33,77 @@ declare global {
         readonly longitude: number | null;
         readonly latitude: number | null;
       }[];
+      /**
+       * Runs `SceneView.hitTest` at a screen point and returns a camera pose,
+       * ground hit, and every reported graphic. Shared with the dev HUD so
+       * HUD-captured fixtures and future replay tests use one capture shape.
+       */
+      hitTestAtScreen(screen: {
+        readonly x: number;
+        readonly y: number;
+      }): Promise<TestHitTestCapture>;
+      /**
+       * Projects a WGS84 ground point to a screen pixel. Returns null when the
+       * SceneView is not ready, when the ArcGIS `toScreen` call returns null,
+       * or when the projected pixel lies outside the view's viewport. Available
+       * in all environments so viewport-independent hit-testing fixtures do not
+       * require test mode.
+       */
+      projectMapPointToScreen(mapPoint: {
+        readonly longitude: number;
+        readonly latitude: number;
+        readonly z?: number | null;
+      }): { readonly x: number; readonly y: number } | null;
+      /**
+       * Test-only pin that forces a specific water-surface elevation on one
+       * Creek Segment, replacing the resolved placement's bucket with the
+       * matching prepared bucket. Passing `null` clears the pin. Awaits a
+       * renderer flush so the frame reflects the pin before resolving.
+       * Present only when the page is served in test mode.
+       */
+      pinSegmentWaterSurfaceElevationM?(
+        segmentId: string,
+        elevationM: number | null,
+      ): Promise<void>;
+      /**
+       * Frozen view of the renderer's current segment identity list. Mirrors
+       * `waterGraphicGeometryIdentity`.
+       */
+      readonly segmentPlacements: readonly {
+        readonly segmentId: string;
+        readonly bucketMinElevationM: number | null;
+      }[];
     };
   }
+}
+
+export interface TestHitTestCaptureHit {
+  readonly layerId: string | null;
+  readonly graphicType: 'water-surface' | 'other';
+  readonly segmentId: string | null;
+  readonly bucketMinElevationM: number | null;
+  readonly bucketMaxElevationM: number | null;
+  readonly mapPointWgs84: {
+    readonly longitude: number;
+    readonly latitude: number;
+    readonly z: number | null;
+  } | null;
+  readonly distanceM: number | null;
+}
+
+export interface TestHitTestCapture {
+  readonly screenPoint: { readonly x: number; readonly y: number };
+  readonly cameraPose: {
+    readonly positionWgs84: readonly [number, number, number];
+    readonly headingDegrees: number;
+    readonly tiltDegrees: number;
+  };
+  readonly mapHitWgs84: {
+    readonly longitude: number;
+    readonly latitude: number;
+    readonly z: number | null;
+  } | null;
+  readonly hits: readonly TestHitTestCaptureHit[];
 }
 
 export interface TestCameraPose {

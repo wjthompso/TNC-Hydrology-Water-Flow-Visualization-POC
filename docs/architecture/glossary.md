@@ -2,6 +2,10 @@
 
 This file is the canonical glossary. The [Linear Glossary](https://linear.app/ucsb-spatial-center/document/glossary-a3c56f69f036) is a synced copy. A term is added, renamed, or redefined only after explicit developer approval.
 
+## Bank-overlap margin
+
+The small outward horizontal distance by which a prepared water-surface polygon is extended past the modeled waterline, so that the surrounding bank terrain depth-occludes the polygon's jagged 1 m rim. The margin is bounded by the Creek Segment corridor, so it cannot bleed into a neighbouring creek. Current value: 2 m. Implemented in the publishing pipeline as an isotropic dilation of the wet mask before the water-surface polygon is traced, in `pipelines/creek-visualization-data-production/water-surface-polygon-generation.ts`.
+
 ## Bug Check
 
 A Feature Behavior Test that checks for the absence of one known or likely bug. Passing means the bug's user-visible behavior was not observed under the documented test methodology. Every Bug Check records its bug reference and Root Cause Analysis separately from its test methodology and is proven through a Bug Reproduction Run when safe and practical.

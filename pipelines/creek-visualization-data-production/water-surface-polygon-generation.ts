@@ -1,7 +1,12 @@
 import { contours } from 'd3-contour';
 import { fromArrayBuffer } from 'geotiff';
 import { readFile } from 'node:fs/promises';
-import { BUCKET_STEP_M, CENTERLINE_SAMPLE_SPACING_M, CORRIDOR_HALF_WIDTH_M } from './constants.ts';
+import {
+  BANK_OVERLAP_MARGIN_M,
+  BUCKET_STEP_M,
+  CENTERLINE_SAMPLE_SPACING_M,
+  CORRIDOR_HALF_WIDTH_M,
+} from './constants.ts';
 import type { CreekSegment } from './tnc-flowline-segmentation.ts';
 import { roundToDecimals, utm10nToWgs84, type UtmPoint } from './utm-geometry.ts';
 
@@ -393,6 +398,53 @@ function assertInsideCorridor(ring: readonly PlanarPoint[], frame: SegmentFrame,
   }
 }
 
+/**
+ * Grows a wet mask outward by `cells` 8-connected steps, intersected with the
+ * in-corridor mask so the dilation stays inside the Creek Segment corridor.
+ * The input mask is not mutated. Returns a new Uint8Array.
+ */
+export function dilateMask8Connected(
+  mask: Uint8Array,
+  inCorridor: Uint8Array,
+  width: number,
+  height: number,
+  cells: number,
+): Uint8Array {
+  if (cells <= 0) return new Uint8Array(mask);
+  let current = new Uint8Array(mask);
+  for (let pass = 0; pass < cells; pass += 1) {
+    const next = new Uint8Array(current.length);
+    for (let row = 0; row < height; row += 1) {
+      for (let column = 0; column < width; column += 1) {
+        const index = row * width + column;
+        if (inCorridor[index] !== 1) continue;
+        if (current[index] === 1) {
+          next[index] = 1;
+          continue;
+        }
+        for (const [columnStep, rowStep] of EIGHT_NEIGHBORS) {
+          const neighborColumn = column + columnStep;
+          const neighborRow = row + rowStep;
+          if (
+            neighborColumn < 0 ||
+            neighborRow < 0 ||
+            neighborColumn >= width ||
+            neighborRow >= height
+          ) {
+            continue;
+          }
+          if (current[neighborRow * width + neighborColumn] === 1) {
+            next[index] = 1;
+            break;
+          }
+        }
+      }
+    }
+    current = next;
+  }
+  return current;
+}
+
 function vectorizeMask(
   mask: Uint8Array,
   values: number[],
@@ -509,7 +561,9 @@ export async function generateWaterSurfacePolygons(input: {
       if (elevation < bucket.minWaterSurfaceElevationM) wet[index] = 1;
     }
     const mask = floodFill(wet, seedIndexes, grid.width, grid.height);
-    const ringsWgs84 = vectorizeMask(mask, values, grid, frame, bucket.minWaterSurfaceElevationM);
+    const marginCells = Math.max(0, Math.round(BANK_OVERLAP_MARGIN_M / grid.resolutionX));
+    const dilatedMask = dilateMask8Connected(mask, inCorridor, grid.width, grid.height, marginCells);
+    const ringsWgs84 = vectorizeMask(dilatedMask, values, grid, frame, bucket.minWaterSurfaceElevationM);
     elevationBuckets.push({ ...bucket, ringsWgs84 });
     if (ringsWgs84.length === 0) emptyBuckets.push(bucket);
   }

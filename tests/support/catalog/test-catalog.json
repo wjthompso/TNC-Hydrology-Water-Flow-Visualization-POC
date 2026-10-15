@@ -164,8 +164,15 @@
       "regression": false,
       "bugReference": null,
       "rootCauseAnalysis": null,
-      "enforcement": "required",
-      "enforcementChange": null,
+      "enforcement": "disabled",
+      "enforcementChange": {
+        "reason": "Product direction reversed: the Experience now shows water-surface elevation, stage, and discharge values rather than hiding them. The test's forbidden-numbers rule contradicts the current intended behavior.",
+        "affectedBehaviors": [
+          "Hide every numeric water-surface elevation, stage, and discharge value on the page."
+        ],
+        "consequences": "FBT-005 no longer counts as required and will not block the release gate. The forbidden-numbers invariant is retired; the Experience is free to render water-surface elevation, stage, and discharge. The source spec file was deleted on 2026-10-15.",
+        "approvalEvidence": "Developer approved retirement on 2026-10-15 in the governance housekeeping task that accompanied this catalog change."
+      },
       "durationBudgetMs": 20000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-005.live.spec.ts"
@@ -245,6 +252,25 @@
       "durationBudgetMs": 5000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-120-creek-scene-imagery-and-terrain-navigation/behavior/FBT-009.deterministic.spec.ts"
+    },
+    {
+      "id": "FBT-010",
+      "name": "Looking up from below the water surface, the water-surface polygon fills the view and does not leave a hole exposing the bank terrain beyond.",
+      "methodology": "Opens the locally served page in test mode and waits until the test seam reports ready and SceneView has finished loading with a still camera. Pins Creek Segment 27714637-026's water-surface elevation to 26.50 m through the test seam, confirming via segmentPlacements that the active bucket's minimum reads 26.5 m. Moves the camera instantly to a fixed below-water, upward-looking pose at (-120.48482532, 34.51368790, 26.037 m), heading 342.70°, tilt 95.47°, and settles the scene. For each of a captured hole ground point and a captured known-good ground point on segment 27714637-026 at water-surface elevation 26.50 m, projects the WGS84 point to a screen pixel through the test seam and calls hitTestAtScreen on that pixel. The test fails when hit-testing either point returns no water-surface hit on segment 27714637-026, or when the returned bucket minimum is not 26.5 m. The browser page, ArcGIS SceneView, and committed published creek data are real. Esri World Imagery and Esri World Elevation responses are real and are reused from a local disk cache; a response missing from the cache is fetched live, and if that fetch is unavailable the result is inconclusive rather than passed. Nothing else is mocked. It does not check pixel color, polygon area, exact rim position, or the behavior of any other segment.",
+      "category": "feature-behavior",
+      "owner": "F-110",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": true,
+      "bugReference": "water-surface polygon rim leaves a hole exposing the bank terrain beyond",
+      "rootCauseAnalysis": "Symptom: at a below-water, upward-tilt camera over Jalama Creek, visible holes appear along the water-surface polygon rim; a view.hitTest through one of those holes returns zero water-surface hits and resolves on the bank terrain beyond. Root cause: 1 m USGS 3DEP cell quantization produces a stair-stepped waterline where the water surface meets the bank; without an outward dilation of the wet mask before the contour is traced, the polygon rim sits exactly on those raster cells, leaving sub-cell gaps between the polygon edge and the real bank. Low- and upward-tilt camera rays find those gaps. Red evidence (2026-10-15, segment 27714637-026 at WSE 26.50 m, camera -120.48482532, 34.51368790, 26.037 m, tilt 95.47°): hitTest at the hole ground point (-120.48485151, 34.51378253) returned hits=[]; at the adjacent known-good ground point (-120.48483593, 34.51372363, z 26.5) it returned one water-surface hit for segment 27714637-026 at bucket 26.5–26.55 m. Fix: BANK_OVERLAP_MARGIN_M = 2 in pipelines/creek-visualization-data-production/constants.ts dilates the wet mask by 2 cells before the contour is traced, bounded by the Creek Segment corridor so it cannot bleed into a neighbouring creek. Future triage: at a low- or upward-tilt camera over the creek, a hitTest returning zero water-surface hits on a pixel where a known-active segment should cover points first at the bank-overlap margin or the WSE publishing pipeline before anything else.",
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-010.live.spec.ts"
     },
     {
       "id": "FBT-131",
