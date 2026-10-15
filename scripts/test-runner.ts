@@ -37,6 +37,31 @@ const testCatalog = JSON.parse(
   await readFile(path.join(root, 'tests/support/catalog/test-catalog.json'), 'utf8'),
 ) as TestCatalog;
 
+interface CommandLine {
+  /** Same typing as the former `process.argv[2]`; `selectTests` rejects a missing mode. */
+  mode: string;
+  selector: string | undefined;
+  /** Playwright opens visible browser windows, one per worker. Selection and recording are unchanged. */
+  headed: boolean;
+  /** Playwright UI mode opens the selected browser tests interactively. Nothing is recorded. */
+  ui: boolean;
+}
+
+const browserViewingFlags = new Set(['--headed', '--ui']);
+
+// `--headed` and `--ui` may appear before or after the selector. Other arguments keep their positions.
+function parseCommandLine(argv: string[]): CommandLine {
+  const positional = argv.filter((argument) => !browserViewingFlags.has(argument));
+  return {
+    mode: positional[0],
+    selector: positional[1],
+    headed: argv.includes('--headed'),
+    ui: argv.includes('--ui'),
+  };
+}
+
+const commandLine = parseCommandLine(process.argv.slice(2));
+
 type ExecutionStateName = 'passed' | 'failed' | 'inconclusive';
 
 type NormalizedResult = NormalizedTestResult;
@@ -264,6 +289,35 @@ async function runNonBrowser(
   };
 }
 
+function playwrightSelectionArguments(
+  selected: CatalogTest[],
+  mode: 'deterministic' | 'live',
+  titlePattern?: string,
+): string[] {
+  return [
+    '--no-install',
+    'playwright',
+    'test',
+    ...sourceFiles(selected),
+    `--project=${mode}`,
+    ...(titlePattern ? ['--grep', titlePattern] : []),
+    ...(commandLine.headed ? ['--headed'] : []),
+  ];
+}
+
+function playwrightEnvironment(
+  mode: 'deterministic' | 'live',
+  runKey: string,
+): Record<string, string> {
+  return {
+    TNC_TEST_CACHE_DIR: cacheDirectory,
+    VITE_TEST_MODE: 'true',
+    VITE_TEST_RENDERER: mode === 'deterministic' ? 'three' : 'arcgis',
+    TNC_TEST_PORT: process.env.TNC_TEST_PORT ?? String(42000 + (process.pid % 10000)),
+    TNC_PLAYWRIGHT_OUTPUT_DIR: path.join(resultsDirectory, `playwright-artifacts-${runKey}-${mode}`),
+  };
+}
+
 async function runBrowser(
   selected: CatalogTest[],
   mode: 'deterministic' | 'live',
@@ -276,24 +330,12 @@ async function runBrowser(
   const processResult = await runProcess(
     'npx',
     [
-      '--no-install',
-      'playwright',
-      'test',
-      ...sourceFiles(selected),
-      `--project=${mode}`,
-      ...(titlePattern ? ['--grep', titlePattern] : []),
+      ...playwrightSelectionArguments(selected, mode, titlePattern),
       '--reporter=json,tests/support/reporting/quiet-stdio-reporter.ts',
     ],
     {
+      ...playwrightEnvironment(mode, runKey),
       TNC_TEST_RUN_PLAN: announceRun(selected, workers),
-      TNC_TEST_CACHE_DIR: cacheDirectory,
-      VITE_TEST_MODE: 'true',
-      VITE_TEST_RENDERER: mode === 'deterministic' ? 'three' : 'arcgis',
-      TNC_TEST_PORT: process.env.TNC_TEST_PORT ?? String(42000 + (process.pid % 10000)),
-      TNC_PLAYWRIGHT_OUTPUT_DIR: path.join(
-        resultsDirectory,
-        `playwright-artifacts-${runKey}-${mode}`,
-      ),
       PLAYWRIGHT_JSON_OUTPUT_FILE: report,
     },
   );
@@ -303,6 +345,39 @@ async function runBrowser(
     durationMs: processResult.durationMs,
     results,
   };
+}
+
+/**
+ * Opens Playwright UI mode for the browser tests this command selected, one browser mode at a time.
+ * UI mode is interactive and has no machine-readable report, so nothing is recorded.
+ */
+async function openUiMode(
+  selected: CatalogTest[],
+  runKey: string,
+  titlePattern?: string,
+): Promise<number> {
+  const nonBrowserCount = selected.filter(({ environment }) => environment === 'non-browser').length;
+  if (nonBrowserCount) {
+    console.log(`UI mode opens browser tests only. ${nonBrowserCount} non-browser tests do not run.`);
+  }
+  let exitCode = 0;
+  for (const mode of ['deterministic', 'live'] as const) {
+    const browserTests = selected.filter(({ browserMode }) => browserMode === mode);
+    if (!browserTests.length) continue;
+    console.log(
+      `Opening Playwright UI mode for ${browserTests.length} ${mode} browser tests. Close the window to continue.`,
+    );
+    const processResult = await runProcess(
+      'npx',
+      [...playwrightSelectionArguments(browserTests, mode, titlePattern), '--ui'],
+      playwrightEnvironment(mode, runKey),
+    );
+    exitCode ||= processResult.exitCode;
+  }
+  console.log(
+    'The UI-mode session was interactive. Its results are not recorded and never count toward release.',
+  );
+  return exitCode;
 }
 
 async function execute(
@@ -500,12 +575,24 @@ try {
   const foundationErrors = await validateTestingFoundations(root, testCatalog);
   if (foundationErrors.length) throw new Error(foundationErrors.join('\n'));
 
-  const mode = process.argv[2];
-  const selector = process.argv[3];
+  const { mode, selector } = commandLine;
   if (mode === 'gate') {
+    if (commandLine.ui) {
+      throw new Error('test:gate does not accept --ui. Release verification cannot be interactive.');
+    }
+    if (commandLine.headed) {
+      console.log('Headed release gate: browser windows are visible, so browser tests run slower.');
+    }
     process.exitCode = await runGate();
   } else {
     const selected = selectTests(mode, selector);
+    const selectsBrowserTests = selected.some(({ environment }) => environment === 'browser');
+    if (commandLine.ui && !selectsBrowserTests) {
+      throw new Error('--ui opens browser tests only, and this command selected none.');
+    }
+    if (commandLine.headed && !commandLine.ui && !selectsBrowserTests) {
+      console.log('--headed has no effect: this command selected no browser tests.');
+    }
     if (mode === 'refresh-map-cache') {
       const savedEsriResponses = path.join(cacheDirectory, ESRI_RESPONSE_CACHE_FOLDER);
       await rm(savedEsriResponses, { recursive: true, force: true });
@@ -530,36 +617,37 @@ try {
         `${directTest.id} is disabled. This direct check runs it and leaves feature commands and the release gate unchanged.`,
       );
     }
-    const execution = await execute(
-      selected,
-      `${mode}-${Date.now()}`,
-      directTest ? escapeRegExp(directTest.name) : undefined,
-    );
-    let lintExitCode = 0;
-    if (mode === 'all') {
-      lintExitCode = (await runProcess('npm', ['run', 'lint'])).exitCode;
-      const requiredReleaseTests = [
-        ...requiredTests('critical-core'),
-        ...requiredTests('feature-behavior'),
-      ];
-      const releaseEligibility =
-        requiredReleaseTests.length === 0
-          ? 'inconclusive; not verified'
-          : requiredReleaseTests.every((test) =>
-                execution.results.some(
-                  (result) => result.id === test.id && result.state === 'passed',
-                ),
-              )
-            ? 'passed'
-            : 'not passed';
-      console.log(
-        `Release eligibility: ${releaseEligibility}. Diagnostic health: ${
-          execution.exitCode === 0 && lintExitCode === 0 ? 'passed' : 'unsuccessful'
-        }.`,
-      );
+    const titlePattern = directTest ? escapeRegExp(directTest.name) : undefined;
+    if (commandLine.ui) {
+      process.exitCode = await openUiMode(selected, `${mode}-ui-${Date.now()}`, titlePattern);
+    } else {
+      const execution = await execute(selected, `${mode}-${Date.now()}`, titlePattern);
+      let lintExitCode = 0;
+      if (mode === 'all') {
+        lintExitCode = (await runProcess('npm', ['run', 'lint'])).exitCode;
+        const requiredReleaseTests = [
+          ...requiredTests('critical-core'),
+          ...requiredTests('feature-behavior'),
+        ];
+        const releaseEligibility =
+          requiredReleaseTests.length === 0
+            ? 'inconclusive; not verified'
+            : requiredReleaseTests.every((test) =>
+                  execution.results.some(
+                    (result) => result.id === test.id && result.state === 'passed',
+                  ),
+                )
+              ? 'passed'
+              : 'not passed';
+        console.log(
+          `Release eligibility: ${releaseEligibility}. Diagnostic health: ${
+            execution.exitCode === 0 && lintExitCode === 0 ? 'passed' : 'unsuccessful'
+          }.`,
+        );
+      }
+      await recordRun(mode, selector ?? null, selected, execution);
+      process.exitCode = lintExitCode ? 1 : execution.exitCode;
     }
-    await recordRun(mode, selector ?? null, selected, execution);
-    process.exitCode = lintExitCode ? 1 : execution.exitCode;
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
