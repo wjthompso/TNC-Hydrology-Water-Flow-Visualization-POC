@@ -1,0 +1,19 @@
+/*
+ * Dev tools HUD overlay scrollbar theme. OverlayScrollbars styles the scrollbar
+ * elements it injects only through a theme class of CSS variables, so this
+ * cannot be written as Tailwind classes. The doubled class outranks the
+ * library's `.os-scrollbar` defaults. The handle follows the HUD ink color,
+ * so it reads on both the Classic and Flight styles.
+ */
+.os-scrollbar.os-theme-hud {
+  box-sizing: border-box;
+  --os-size: 8px;
+  --os-padding-perpendicular: 2px;
+  --os-padding-axis: 4px;
+  --os-track-border-radius: 8px;
+  --os-handle-border-radius: 8px;
+  --os-handle-interactive-area-offset: 4px;
+  --os-handle-bg: rgb(var(--hud-ink) / 0.35);
+  --os-handle-bg-hover: rgb(var(--hud-ink) / 0.5);
+  --os-handle-bg-active: rgb(var(--hud-ink) / 0.65);
+}

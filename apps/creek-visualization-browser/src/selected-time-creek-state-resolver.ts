@@ -10,6 +10,8 @@ export interface SelectedTimeCreekState {
   timeUtcMs: number;
   /** True only when the gauge segment has a non-null reading at this exact timestamp. */
   hasObservation: boolean;
+  /** The gauge segment's observed water-surface elevation at this exact timestamp, in meters NAVD88. */
+  observedWaterSurfaceElevationM: number | null;
   placements: readonly SegmentWaterPlacement[];
 }
 
@@ -31,9 +33,12 @@ export function resolveSelectedTimeCreekState(
     bucket: bucketAtTime(data, segmentId, timeIndex),
   }));
 
+  const observedWaterSurfaceElevationM = typeof stationReading === 'number' ? stationReading : null;
+
   return {
     timeUtcMs,
-    hasObservation: typeof stationReading === 'number',
+    hasObservation: observedWaterSurfaceElevationM !== null,
+    observedWaterSurfaceElevationM,
     placements,
   };
 }
