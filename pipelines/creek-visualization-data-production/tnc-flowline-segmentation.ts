@@ -92,3 +92,58 @@ export function segmentTncFlowline(flowlineResponse: unknown): CreekSegment[] {
   if (segments.length === 0) throw new Error('TNC flowline produced no Creek Segments.');
   return segments;
 }
+
+/**
+ * Cut every TNC flowline in a query response into Creek Segments at original vertices,
+ * using the same rule as `segmentTncFlowline`. A flowline with several paths keeps one
+ * vertex numbering across its paths; the last vertex of one path and the first of the next
+ * are not adjacent, so no Creek Segment spans the gap. Flowlines are ordered by COMID.
+ */
+export function segmentTncFlowlines(flowlineResponse: unknown): CreekSegment[] {
+  const response = expectRecord(flowlineResponse, 'TNC flowlines');
+  expectWkid32610(response, 'TNC flowlines');
+  if (!Array.isArray(response.features) || response.features.length === 0) {
+    throw new Error('TNC flowlines response has no features.');
+  }
+  const features = response.features.map((value, index) => {
+    const feature = expectRecord(value, `TNC flowline feature ${index}`);
+    const attributes = expectRecord(feature.attributes, `TNC flowline feature ${index} attributes`);
+    return { feature, comid: expectNumber(attributes, 'COMID', `TNC flowline feature ${index}`) };
+  });
+  features.sort((a, b) => a.comid - b.comid);
+  const segments: CreekSegment[] = [];
+  const seenComids = new Set<number>();
+  for (const { feature, comid } of features) {
+    const label = `TNC flowline ${comid}`;
+    if (seenComids.has(comid)) throw new Error(`${label} appears more than once.`);
+    seenComids.add(comid);
+    const geometry = expectRecord(feature.geometry, `${label} geometry`);
+    if (!Array.isArray(geometry.paths) || geometry.paths.length === 0) throw new Error(`${label} has no paths.`);
+    let vertexIndex = 0;
+    for (const path of geometry.paths) {
+      if (!Array.isArray(path) || path.length < 2) throw new Error(`${label} has a path with fewer than two vertices.`);
+      const vertices = path.map((vertex, index) => readVertex(vertex, label, vertexIndex + index));
+      for (let index = 0; index < vertices.length - 1; index += 1) {
+        const startUtm = vertices[index];
+        const endUtm = vertices[index + 1];
+        if (!startUtm || !endUtm) continue;
+        const preciseLengthM = Math.hypot(endUtm.x - startUtm.x, endUtm.y - startUtm.y);
+        if (preciseLengthM === 0) continue;
+        segments.push({
+          segmentId: creekSegmentId(comid, vertexIndex + index),
+          comid,
+          vertexIndexStart: vertexIndex + index,
+          vertexIndexEnd: vertexIndex + index + 1,
+          lengthM: roundToDecimals(preciseLengthM, 2),
+          preciseLengthM,
+          startUtm,
+          endUtm,
+          pathWgs84: [publishedPath(startUtm), publishedPath(endUtm)],
+        });
+      }
+      vertexIndex += vertices.length;
+    }
+  }
+  if (segments.length === 0) throw new Error('TNC flowlines produced no Creek Segments.');
+  return segments;
+}

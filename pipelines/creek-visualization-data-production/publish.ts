@@ -1,5 +1,6 @@
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import {
   ASSIGNMENT_FILE,
   ELEVATION_SNAPSHOT_FILE,
@@ -32,7 +33,21 @@ function publishedCreekSegment(segment: CreekSegment) {
   };
 }
 
-async function publishCreekVisualizationData(): Promise<void> {
+export interface PublishCreekVisualizationDataOptions {
+  /** Where the published browser files go. Default: the app's public published-creek-visualization-data folder. */
+  outputDirectory?: string;
+  /** Where the reviewed monitoring-station assignment is written. Default: the retained source snapshot folder. */
+  assignmentOutputPath?: string;
+}
+
+/**
+ * Rebuild the published Creek Visualization Data from the retained source snapshots (no network).
+ * Importing this module does not run it; `npm run pipeline:publish` does. Tests pass temp
+ * directories so the committed files are never overwritten.
+ */
+export async function publishCreekVisualizationData(options: PublishCreekVisualizationDataOptions = {}): Promise<void> {
+  const outputDirectory = options.outputDirectory ?? publishedDirectory;
+  const assignmentOutputPath = options.assignmentOutputPath ?? path.join(retainedSourceDirectory, ASSIGNMENT_FILE);
   const flowline = await readJson(path.join(retainedSourceDirectory, FLOWLINE_SNAPSHOT_FILE));
   const stationResponse = await readJson(path.join(retainedSourceDirectory, STATION_SNAPSHOT_FILE));
   const observations = await readJson(path.join(retainedSourceDirectory, OBSERVATIONS_SNAPSHOT_FILE));
@@ -95,15 +110,15 @@ async function publishCreekVisualizationData(): Promise<void> {
     corridorBboxBySegmentId: new Map([[assignment.segment.segmentId, polygons.corridorBboxWgs84]]),
   });
 
-  await writePrettyJson(path.join(publishedDirectory, 'creek-segments.json'), creekSegments);
-  await writePrettyJson(path.join(publishedDirectory, 'water-surface-polygon-sets.json'), waterSurfacePolygonSets);
-  await writePrettyJson(path.join(publishedDirectory, 'monitoring-stations.json'), monitoringStations);
-  await writePrettyJson(path.join(publishedDirectory, 'data-source-metadata.json'), dataSourceMetadata);
+  await writePrettyJson(path.join(outputDirectory, 'creek-segments.json'), creekSegments);
+  await writePrettyJson(path.join(outputDirectory, 'water-surface-polygon-sets.json'), waterSurfacePolygonSets);
+  await writePrettyJson(path.join(outputDirectory, 'monitoring-stations.json'), monitoringStations);
+  await writePrettyJson(path.join(outputDirectory, 'data-source-metadata.json'), dataSourceMetadata);
   await writeCompactJson(
-    path.join(publishedDirectory, 'creek-segment-time-series', `${OBSERVED_SOURCE_ID}.json`),
+    path.join(outputDirectory, 'creek-segment-time-series', `${OBSERVED_SOURCE_ID}.json`),
     observed.document,
   );
-  await writePrettyJson(path.join(retainedSourceDirectory, ASSIGNMENT_FILE), assignment.reviewed);
+  await writePrettyJson(assignmentOutputPath, assignment.reviewed);
 
   const firstBucket = buckets[0];
   const lastBucket = buckets[buckets.length - 1];
@@ -130,12 +145,17 @@ async function publishCreekVisualizationData(): Promise<void> {
   console.log(
     `Centerline ground elevation: ${polygons.centerlineElevationM.min.toFixed(2)}–${polygons.centerlineElevationM.max.toFixed(2)} m (${polygons.centerlineNoDataSamples} no-data samples).`,
   );
-  console.log(`Published Creek Visualization Data in ${publishedDirectory}.`);
+  console.log(`Published Creek Visualization Data in ${outputDirectory}.`);
 }
 
-try {
-  await publishCreekVisualizationData();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
+const isCommandLineEntryPoint =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+
+if (isCommandLineEntryPoint) {
+  try {
+    await publishCreekVisualizationData();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
 }

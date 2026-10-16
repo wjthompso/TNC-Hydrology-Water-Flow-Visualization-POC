@@ -21,6 +21,8 @@ export interface AttachCreekVisualizationOptions {
 
 export interface CreekVisualizationAttachment {
   readonly selectedTimeUtcMs: number;
+  /** Gauge reading at the selected time, in meters NAVD88. Null when there is no reading. */
+  readonly observedWaterSurfaceElevationM: number | null;
   readonly waterSegmentIds: readonly string[];
   readonly waterGraphicGeometryIdentity: readonly WaterGraphicGeometryIdentity[];
   flush(): Promise<void>;
@@ -45,10 +47,12 @@ export function attachCreekVisualization(
 ): CreekVisualizationAttachment {
   const state: {
     selectedTimeUtcMs: number;
+    observedWaterSurfaceElevationM: number | null;
     waterSegmentIds: readonly string[];
     waterGraphicGeometryIdentity: readonly WaterGraphicGeometryIdentity[];
   } = {
     selectedTimeUtcMs: options.data.clock.firstUtcMs,
+    observedWaterSurfaceElevationM: null,
     waterSegmentIds: [],
     waterGraphicGeometryIdentity: [],
   };
@@ -88,6 +92,7 @@ export function attachCreekVisualization(
   const applySelectedTime = (timeUtcMs: number): void => {
     state.selectedTimeUtcMs = timeUtcMs;
     const resolved = resolveSelectedTimeCreekState(options.data, timeUtcMs);
+    state.observedWaterSurfaceElevationM = resolved.observedWaterSurfaceElevationM;
     options.status.textContent = resolved.hasObservation ? '' : NO_OBSERVATION_STATUS;
     renderer.schedule(applyPins(resolved.placements));
   };
@@ -107,6 +112,9 @@ export function attachCreekVisualization(
   return {
     get selectedTimeUtcMs() {
       return state.selectedTimeUtcMs;
+    },
+    get observedWaterSurfaceElevationM() {
+      return state.observedWaterSurfaceElevationM;
     },
     get waterSegmentIds() {
       return state.waterSegmentIds;

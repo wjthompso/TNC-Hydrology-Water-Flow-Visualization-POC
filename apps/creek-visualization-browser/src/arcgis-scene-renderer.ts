@@ -1,10 +1,12 @@
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import Graphic from '@arcgis/core/Graphic';
 import Polygon from '@arcgis/core/geometry/Polygon';
+import FillSymbol3DLayer from '@arcgis/core/symbols/FillSymbol3DLayer';
 import PolygonSymbol3D from '@arcgis/core/symbols/PolygonSymbol3D';
 import WaterSymbol3DLayer from '@arcgis/core/symbols/WaterSymbol3DLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { ElevationBucket } from './creek-data-contract';
+import type { JunctionWaterSurface } from './sloped-water-surface';
 
 export interface WaterGraphicGeometryIdentity {
   segmentId: string;
@@ -15,20 +17,58 @@ export interface WaterGraphicGeometryIdentity {
 export interface SegmentPolygonPlacement {
   segmentId: string;
   bucket: ElevationBucket | null;
+  /**
+   * True when the segment's discharge is a Drainage-Area Ratio Transfer from a
+   * neighbouring creek's Reach. Modeled water only; the observed renderer ignores it.
+   */
+  drainageAreaRatioTransfer?: boolean;
+  /**
+   * Water-surface elevation at the segment's two junctions, when the modeled
+   * Time Series carries them. The modeled renderer slopes the polygon between
+   * them; null or absent draws it flat at the bucket minimum. The observed
+   * renderer ignores it.
+   */
+  junctionWaterSurface?: JunctionWaterSurface | null;
 }
+
+/** Lighter blue for Drainage-Area Ratio Transfer water; matches the legend swatch. */
+export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_COLOR = '#7dd3fc';
+export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_OUTLINE_COLOR = '#0369a1';
 
 export interface ArcGISSceneRenderer {
   schedule(placements: readonly SegmentPolygonPlacement[]): void;
   flush(): Promise<void>;
 }
 
-const waterSymbol = new PolygonSymbol3D({
+/** Shared by the observed renderer and the modeled renderer so both waters look the same. */
+export const waterSymbol = new PolygonSymbol3D({
   symbolLayers: [
     new WaterSymbol3DLayer({
       color: '#1d9bf0',
       waterbodySize: 'medium',
       waveStrength: 'moderate',
       waveDirection: 260,
+    }),
+  ],
+});
+
+/**
+ * Drainage-Area Ratio Transfer water: a clearly lighter blue (sky-300) with a
+ * thin outline, so borrowed-discharge segments read apart from modeled water
+ * on the creek's own Reach. A transparent fill layer carries the outline, which
+ * the water layer cannot draw itself.
+ */
+export const drainageAreaRatioTransferWaterSymbol = new PolygonSymbol3D({
+  symbolLayers: [
+    new WaterSymbol3DLayer({
+      color: DRAINAGE_AREA_RATIO_TRANSFER_WATER_COLOR,
+      waterbodySize: 'small',
+      waveStrength: 'slight',
+      waveDirection: 260,
+    }),
+    new FillSymbol3DLayer({
+      material: { color: [125, 211, 252, 0] },
+      outline: { color: DRAINAGE_AREA_RATIO_TRANSFER_WATER_OUTLINE_COLOR, size: 1 },
     }),
   ],
 });
@@ -151,7 +191,7 @@ function elevationOnGraphic(graphic: Graphic, writtenElevationM: number | undefi
 }
 
 /** Rings stay the prepared polygon. Z is the bucket minimum on every vertex. */
-function polygonForBucket(bucket: ElevationBucket): Polygon {
+export function polygonForBucket(bucket: ElevationBucket): Polygon {
   const elevationM = bucket.minWaterSurfaceElevationM;
   return new Polygon({
     hasZ: true,

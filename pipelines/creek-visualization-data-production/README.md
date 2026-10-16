@@ -41,3 +41,7 @@ Buckets are half-open 0.05 m steps `[minimum, maximum)`, from the 0.05 m multipl
 ## Corridor
 
 The polygon stays in the slab between the lines perpendicular to the Creek Segment through its original endpoints, and within 100 m of either side of that segment. USGS 3DEP cells below the bucket elevation are kept only when they are 8-connected to a wet cell under the segment centerline. The centerline is sampled at 0.5 m. The browser does not build this geometry.
+
+## Modeled water-surface elevation
+
+`npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach` runs a separate staged pipeline. It turns California Natural Flows and NOAA National Water Model discharge into a modeled WSE Time Series, prepared water-surface polygons, and a validated catalog for every Creek Segment in one extent. `jalama-gauge-reach` is the 61-segment dev extent. `dangermond-preserve` covers all 105 preserve flowlines and is the default. It writes only to `data/modeled-water-surface-elevation-pipeline-output/<extentId>/`, which git ignores, plus one tracked crosswalk per extent in `data/retained-backend-source-data/reviewed-assignments/`. It does not touch the published files above. See [modeled-water-surface-elevation/METHODOLOGY.md](modeled-water-surface-elevation/METHODOLOGY.md) for the stages, equation, parameters, and limitations.

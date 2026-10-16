@@ -1,6 +1,7 @@
 import proj4 from 'proj4';
 
 proj4.defs('EPSG:32610', '+proj=utm +zone=10 +datum=WGS84 +units=m +no_defs');
+proj4.defs('EPSG:32611', '+proj=utm +zone=11 +datum=WGS84 +units=m +no_defs');
 
 export interface UtmPoint {
   x: number;
@@ -24,6 +25,15 @@ export function utm10nToWgs84(x: number, y: number): [number, number] {
     throw new Error(`Could not project UTM coordinate ${x}, ${y} to WGS84.`);
   }
   return [longitude, latitude];
+}
+
+/** UTM zone 10N (EPSG 32610) to UTM zone 11N (EPSG 32611), both in meters. */
+export function utm10nToUtm11n(point: UtmPoint): UtmPoint {
+  const [x, y] = proj4('EPSG:32610', 'EPSG:32611', [point.x, point.y]);
+  if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new Error(`Could not project UTM zone 10N coordinate ${point.x}, ${point.y} to zone 11N.`);
+  }
+  return { x, y };
 }
 
 /** Distance from a point to the finite segment, in the same units as the coordinates. */

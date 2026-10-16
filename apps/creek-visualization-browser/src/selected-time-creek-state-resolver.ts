@@ -57,8 +57,8 @@ function bucketAtTime(
   return bucketForWaterSurfaceElevation(buckets, reading);
 }
 
-/** Half-open match: minimum <= reading < maximum. Empty rings show no water. */
-function bucketForWaterSurfaceElevation(
+/** Half-open match: minimum <= reading < maximum. Empty rings show no water. Shared with the modeled path. */
+export function bucketForWaterSurfaceElevation(
   buckets: readonly ElevationBucket[],
   waterSurfaceElevationM: number,
 ): ElevationBucket | null {

@@ -9,7 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@arcgis/core": "^4.31.6"
+    "@arcgis/core": "^4.31.6",
+    "overlayscrollbars": "^2.16.0"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.20",

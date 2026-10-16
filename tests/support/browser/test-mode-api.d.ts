@@ -74,6 +74,27 @@ declare global {
         readonly bucketMinElevationM: number | null;
       }[];
     };
+    /**
+     * Modeled-water experience seam, present only on a page opened with a
+     * modeled Dataset (`?dataset=...`). Installed by modeled-creek-experience.ts.
+     */
+    __TNC_MODELED__?: {
+      readonly datasetId: string;
+      readonly extentId: string;
+      readonly selectedTimeUtcMs: number;
+      /** True while a per-flowline polygon or Time Series file is still loading. */
+      readonly isLoading: boolean;
+      /** Resolves once every pending fetch landed and the renderer drew the result. */
+      whenIdle(): Promise<void>;
+      /** The modeled water on one Creek Segment at the selected time; null when not in the extent. */
+      readSegment(segmentId: string): {
+        readonly segmentId: string;
+        readonly tncComid: string;
+        readonly elevationM: number | null;
+        readonly isLoaded: boolean;
+        readonly drainageAreaRatioTransfer: boolean;
+      } | null;
+    };
   }
 }
 

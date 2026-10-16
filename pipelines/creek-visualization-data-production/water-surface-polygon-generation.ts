@@ -15,8 +15,31 @@ export interface ElevationBucket {
   maxWaterSurfaceElevationM: number;
 }
 
+/**
+ * A bucket to trace, optionally with a sloped wet threshold. Without `fillThreshold` the
+ * threshold is flat at the bucket minimum. With it, the threshold runs linearly along the
+ * segment axis from `atStartM` at the start vertex to `atEndM` at the end vertex, so one
+ * polygon can meet each neighbour at the junction water-surface elevation (WSE) they share.
+ * The sloped threshold is never taken below the bucket minimum, so the polygon always
+ * contains the flat one.
+ */
+export interface ElevationBucketToTrace extends ElevationBucket {
+  fillThreshold?: { atStartM: number; atEndM: number };
+}
+
 export interface WaterSurfacePolygonBucket extends ElevationBucket {
   ringsWgs84: number[][][];
+}
+
+/**
+ * The Creek Segments that share this segment's start and end vertices on the same TNC flowline.
+ * Given, the corridor ends are clipped at the angle bisector of the two segments' directions,
+ * so the two neighbouring corridors meet on one line. Absent, an end is clipped at the segment's
+ * own perpendicular, as publish does.
+ */
+export interface AdjacentCreekSegments {
+  atStart?: CreekSegment;
+  atEnd?: CreekSegment;
 }
 
 export interface CorridorBoundingBox {
@@ -34,7 +57,7 @@ export interface WaterSurfacePolygonGenerationResult {
   corridorBboxWgs84: CorridorBoundingBox;
 }
 
-interface ElevationGrid {
+export interface ElevationGrid {
   width: number;
   height: number;
   originX: number;
@@ -45,6 +68,20 @@ interface ElevationGrid {
   elevations: Float64Array;
 }
 
+type PlanarPoint = [number, number];
+
+/**
+ * A straight boundary line through `point` with a unit normal. The corridor lies on the side
+ * where the signed distance (point minus `point`, dotted with the normal) is at most 0.
+ */
+interface BoundaryLine {
+  point: UtmPoint;
+  normalX: number;
+  normalY: number;
+  /** True when a neighbouring Creek Segment's corridor meets this line from the other side. */
+  shared: boolean;
+}
+
 interface SegmentFrame {
   start: UtmPoint;
   lengthM: number;
@@ -52,10 +89,22 @@ interface SegmentFrame {
   unitY: number;
   normalX: number;
   normalY: number;
-  corridor: Array<[number, number]>;
+  /** The boundary at the start vertex, facing outward (upstream of the segment's own axis). */
+  startBoundary: BoundaryLine;
+  /** The boundary at the end vertex, facing outward. */
+  endBoundary: BoundaryLine;
+  /** Along-axis extent of the rectangle the boundaries cut: 0..lengthM, extended past a slanted boundary. */
+  alongMinM: number;
+  alongMaxM: number;
+  /** Counter-clockwise convex ring of the corridor: ±CORRIDOR_HALF_WIDTH_M, cut by both boundaries. */
+  corridor: PlanarPoint[];
 }
 
-type PlanarPoint = [number, number];
+/**
+ * How far past a vertex, along the segment axis, a slanted boundary may reach. A bisector at a
+ * sharp bend would otherwise run far down the outer bank; past this the corridor is cut square.
+ */
+const BOUNDARY_REACH_ALONG_M = CORRIDOR_HALF_WIDTH_M;
 
 const EIGHT_NEIGHBORS: ReadonlyArray<readonly [number, number]> = [
   [1, 0],
@@ -96,21 +145,80 @@ export function buildWaterSurfaceElevationBuckets(
   return buckets;
 }
 
-function segmentFrame(segment: CreekSegment): SegmentFrame {
+/** Unit vector from the segment's start vertex to its end vertex, with the segment length. */
+function unitDirection(segment: CreekSegment): { x: number; y: number; lengthM: number } {
   const dx = segment.endUtm.x - segment.startUtm.x;
   const dy = segment.endUtm.y - segment.startUtm.y;
   const lengthM = Math.hypot(dx, dy);
   if (lengthM === 0) {
     throw new Error(`Creek Segment ${segment.segmentId} has zero length, so it has no corridor.`);
   }
-  const unitX = dx / lengthM;
-  const unitY = dy / lengthM;
+  return { x: dx / lengthM, y: dy / lengthM, lengthM };
+}
+
+/**
+ * Direction the boundary at a shared vertex faces: the mean of the two segments' directions,
+ * so the boundary is the angle bisector of their two perpendiculars. Without a neighbour it is
+ * the segment's own direction (the perpendicular). Two nearly opposite directions (a hairpin)
+ * have no usable mean and keep the perpendicular.
+ */
+function boundaryDirection(own: { x: number; y: number }, neighbour: CreekSegment | undefined): { x: number; y: number } {
+  if (!neighbour) return own;
+  const other = unitDirection(neighbour);
+  const meanX = own.x + other.x;
+  const meanY = own.y + other.y;
+  const meanLength = Math.hypot(meanX, meanY);
+  if (meanLength < 1e-6) return own;
+  return { x: meanX / meanLength, y: meanY / meanLength };
+}
+
+/** Signed distance from the boundary line, positive outside the corridor. */
+function distanceOutsideBoundary(x: number, y: number, boundary: BoundaryLine): number {
+  return (x - boundary.point.x) * boundary.normalX + (y - boundary.point.y) * boundary.normalY;
+}
+
+function segmentFrame(segment: CreekSegment, adjacent: AdjacentCreekSegments = {}): SegmentFrame {
+  const direction = unitDirection(segment);
+  const { lengthM } = direction;
+  const unitX = direction.x;
+  const unitY = direction.y;
   const normalX = -unitY;
   const normalY = unitX;
   const corner = (along: number, lateral: number): PlanarPoint => [
     segment.startUtm.x + unitX * along + normalX * lateral,
     segment.startUtm.y + unitY * along + normalY * lateral,
   ];
+  // The start boundary faces back along the flowline, the end boundary faces forward.
+  const startDirection = boundaryDirection(direction, adjacent.atStart);
+  const endDirection = boundaryDirection(direction, adjacent.atEnd);
+  const startBoundary: BoundaryLine = {
+    point: segment.startUtm,
+    normalX: -startDirection.x,
+    normalY: -startDirection.y,
+    shared: adjacent.atStart !== undefined,
+  };
+  const endBoundary: BoundaryLine = {
+    point: segment.endUtm,
+    normalX: endDirection.x,
+    normalY: endDirection.y,
+    shared: adjacent.atEnd !== undefined,
+  };
+
+  // Without neighbours the ring is the plain rectangle, exactly as before. A slanted boundary
+  // needs room past the vertex, so the rectangle is extended there and then cut by that boundary.
+  const alongMinM = adjacent.atStart ? -BOUNDARY_REACH_ALONG_M : 0;
+  const alongMaxM = adjacent.atEnd ? lengthM + BOUNDARY_REACH_ALONG_M : lengthM;
+  let corridor: PlanarPoint[] = [
+    corner(alongMinM, -CORRIDOR_HALF_WIDTH_M),
+    corner(alongMaxM, -CORRIDOR_HALF_WIDTH_M),
+    corner(alongMaxM, CORRIDOR_HALF_WIDTH_M),
+    corner(alongMinM, CORRIDOR_HALF_WIDTH_M),
+  ];
+  if (adjacent.atStart) corridor = clipRingToBoundary(corridor, startBoundary);
+  if (adjacent.atEnd) corridor = clipRingToBoundary(corridor, endBoundary);
+  if (corridor.length < 3) {
+    throw new Error(`Creek Segment ${segment.segmentId} corridor collapsed when cut at its junction bisectors.`);
+  }
   return {
     start: segment.startUtm,
     lengthM,
@@ -118,26 +226,12 @@ function segmentFrame(segment: CreekSegment): SegmentFrame {
     unitY,
     normalX,
     normalY,
-    corridor: [
-      corner(0, -CORRIDOR_HALF_WIDTH_M),
-      corner(lengthM, -CORRIDOR_HALF_WIDTH_M),
-      corner(lengthM, CORRIDOR_HALF_WIDTH_M),
-      corner(0, CORRIDOR_HALF_WIDTH_M),
-    ],
+    startBoundary,
+    endBoundary,
+    alongMinM,
+    alongMaxM,
+    corridor,
   };
-}
-
-function pointInCorridor(x: number, y: number, frame: SegmentFrame): boolean {
-  const dx = x - frame.start.x;
-  const dy = y - frame.start.y;
-  const along = dx * frame.unitX + dy * frame.unitY;
-  const lateral = dx * frame.normalX + dy * frame.normalY;
-  const epsilon = 1e-6;
-  return (
-    along >= -epsilon &&
-    along <= frame.lengthM + epsilon &&
-    Math.abs(lateral) <= CORRIDOR_HALF_WIDTH_M + epsilon
-  );
 }
 
 function lateralAndAlong(x: number, y: number, frame: SegmentFrame): { along: number; lateral: number } {
@@ -147,6 +241,39 @@ function lateralAndAlong(x: number, y: number, frame: SegmentFrame): { along: nu
     along: dx * frame.unitX + dy * frame.unitY,
     lateral: dx * frame.normalX + dy * frame.normalY,
   };
+}
+
+/**
+ * How far a point lies outside the corridor, by part: past the start boundary, past the end
+ * boundary, past the extended rectangle's ends, and beyond the half-width. All 0 inside.
+ */
+function corridorExcess(x: number, y: number, frame: SegmentFrame): { start: number; end: number; along: number; lateral: number } {
+  const { along, lateral } = lateralAndAlong(x, y, frame);
+  return {
+    start: Math.max(0, distanceOutsideBoundary(x, y, frame.startBoundary)),
+    end: Math.max(0, distanceOutsideBoundary(x, y, frame.endBoundary)),
+    along: Math.max(0, frame.alongMinM - along, along - frame.alongMaxM),
+    lateral: Math.max(0, Math.abs(lateral) - CORRIDOR_HALF_WIDTH_M),
+  };
+}
+
+/**
+ * Whether a raster cell centered here belongs to the corridor mask. A cell may sit up to
+ * `sharedBoundaryReachM` past a shared boundary, so the two neighbours' masks both reach the
+ * line and no half-cell strip along it is left out of both; the vector clip then cuts each
+ * polygon exactly at the line. An unshared boundary (publish, a flowline end) is exact.
+ */
+function cellInCorridor(x: number, y: number, frame: SegmentFrame, sharedBoundaryReachM: number): boolean {
+  const epsilon = 1e-6;
+  const excess = corridorExcess(x, y, frame);
+  const startReach = frame.startBoundary.shared ? sharedBoundaryReachM : 0;
+  const endReach = frame.endBoundary.shared ? sharedBoundaryReachM : 0;
+  return (
+    excess.start <= startReach + epsilon &&
+    excess.end <= endReach + epsilon &&
+    excess.along <= epsilon &&
+    excess.lateral <= epsilon
+  );
 }
 
 function isNoData(value: number, noData: number | null): boolean {
@@ -171,7 +298,7 @@ function cellCenter(index: number, grid: ElevationGrid): PlanarPoint {
   ];
 }
 
-async function readElevationGrid(rasterPath: string): Promise<ElevationGrid> {
+export async function readElevationGrid(rasterPath: string): Promise<ElevationGrid> {
   let bytes: Buffer;
   try {
     bytes = await readFile(rasterPath);
@@ -286,29 +413,43 @@ function segmentIntersection(start: PlanarPoint, end: PlanarPoint, edgeStart: Pl
   return [start[0] + t * (end[0] - start[0]), start[1] + t * (end[1] - start[1])];
 }
 
+/** Sutherland–Hodgman step: keeps the part of the ring to the left of the directed line edgeStart→edgeEnd. */
+function clipRingToLeftOfLine(subject: PlanarPoint[], edgeStart: PlanarPoint, edgeEnd: PlanarPoint): PlanarPoint[] {
+  const output: PlanarPoint[] = [];
+  const previousStart = subject[subject.length - 1];
+  if (!previousStart) return output;
+  let previous = previousStart;
+  for (const current of subject) {
+    const currentInside = cross(edgeStart, edgeEnd, current) >= -1e-7;
+    const previousInside = cross(edgeStart, edgeEnd, previous) >= -1e-7;
+    if (currentInside) {
+      if (!previousInside) output.push(segmentIntersection(previous, current, edgeStart, edgeEnd));
+      output.push(current);
+    } else if (previousInside) {
+      output.push(segmentIntersection(previous, current, edgeStart, edgeEnd));
+    }
+    previous = current;
+  }
+  return output;
+}
+
+/** Keeps the part of the ring on the corridor side of the boundary (signed distance at most 0). */
+function clipRingToBoundary(subject: PlanarPoint[], boundary: BoundaryLine): PlanarPoint[] {
+  // The inside is to the left of a line running along the boundary with the normal on its right.
+  const lineStart: PlanarPoint = [boundary.point.x, boundary.point.y];
+  const lineEnd: PlanarPoint = [boundary.point.x - boundary.normalY, boundary.point.y + boundary.normalX];
+  return clipRingToLeftOfLine(subject, lineStart, lineEnd);
+}
+
 /** Clip polygon must be counter-clockwise so the inside is to the left of each edge. */
 function clipRingToConvex(subject: PlanarPoint[], clip: readonly PlanarPoint[]): PlanarPoint[] {
   let output = subject;
   for (let edge = 0; edge < clip.length; edge += 1) {
-    const input = output;
-    output = [];
-    if (input.length === 0) break;
+    if (output.length === 0) break;
     const edgeStart = clip[edge];
     const edgeEnd = clip[(edge + 1) % clip.length];
-    const previousStart = input[input.length - 1];
-    if (!edgeStart || !edgeEnd || !previousStart) break;
-    let previous = previousStart;
-    for (const current of input) {
-      const currentInside = cross(edgeStart, edgeEnd, current) >= -1e-7;
-      const previousInside = cross(edgeStart, edgeEnd, previous) >= -1e-7;
-      if (currentInside) {
-        if (!previousInside) output.push(segmentIntersection(previous, current, edgeStart, edgeEnd));
-        output.push(current);
-      } else if (previousInside) {
-        output.push(segmentIntersection(previous, current, edgeStart, edgeEnd));
-      }
-      previous = current;
-    }
+    if (!edgeStart || !edgeEnd) break;
+    output = clipRingToLeftOfLine(output, edgeStart, edgeEnd);
   }
   return output;
 }
@@ -387,13 +528,10 @@ function pixelToUtm(position: number[], grid: ElevationGrid): PlanarPoint {
 
 function assertInsideCorridor(ring: readonly PlanarPoint[], frame: SegmentFrame, elevationM: number): void {
   for (const [x, y] of ring) {
-    const { along, lateral } = lateralAndAlong(x, y, frame);
-    const alongExcess = along < 0 ? -along : Math.max(0, along - frame.lengthM);
-    const lateralExcess = Math.max(0, Math.abs(lateral) - CORRIDOR_HALF_WIDTH_M);
-    if (alongExcess > 0.05 || lateralExcess > 0.05) {
-      throw new Error(
-        `Prepared water-surface polygon at ${elevationM} m leaves the corridor by ${Math.max(alongExcess, lateralExcess).toFixed(3)} m.`,
-      );
+    const excess = corridorExcess(x, y, frame);
+    const worst = Math.max(excess.start, excess.end, excess.along, excess.lateral);
+    if (worst > 0.05) {
+      throw new Error(`Prepared water-surface polygon at ${elevationM} m leaves the corridor by ${worst.toFixed(3)} m.`);
     }
   }
 }
@@ -489,6 +627,52 @@ function corridorBboxWgs84(frame: SegmentFrame): CorridorBoundingBox {
   return { west, south, east, north };
 }
 
+/**
+ * The window of a larger elevation grid that holds one Creek Segment corridor plus a few
+ * cells of padding. Cells keep their exact elevations and positions; a smaller grid only
+ * makes each elevation bucket faster when one terrain tile covers many Creek Segments.
+ */
+export function cropElevationGridToCorridor(
+  grid: ElevationGrid,
+  segment: CreekSegment,
+  adjacent: AdjacentCreekSegments = {},
+): ElevationGrid {
+  const paddingCells = 3;
+  const frame = segmentFrame(segment, adjacent);
+  const columns = frame.corridor.map(([x]) => (x - grid.originX) / grid.resolutionX);
+  const rows = frame.corridor.map(([, y]) => (y - grid.originY) / grid.resolutionY);
+  const firstColumn = Math.max(0, Math.floor(Math.min(...columns)) - paddingCells);
+  const lastColumn = Math.min(grid.width - 1, Math.ceil(Math.max(...columns)) + paddingCells);
+  const firstRow = Math.max(0, Math.floor(Math.min(...rows)) - paddingCells);
+  const lastRow = Math.min(grid.height - 1, Math.ceil(Math.max(...rows)) + paddingCells);
+  const width = lastColumn - firstColumn + 1;
+  const height = lastRow - firstRow + 1;
+  const elevations = new Float64Array(width * height);
+  for (let row = 0; row < height; row += 1) {
+    const sourceStart = (firstRow + row) * grid.width + firstColumn;
+    elevations.set(grid.elevations.subarray(sourceStart, sourceStart + width), row * width);
+  }
+  return {
+    width,
+    height,
+    originX: grid.originX + firstColumn * grid.resolutionX,
+    originY: grid.originY + firstRow * grid.resolutionY,
+    resolutionX: grid.resolutionX,
+    resolutionY: grid.resolutionY,
+    noData: grid.noData,
+    elevations,
+  };
+}
+
+/** True when every corner of the Creek Segment corridor lies inside the grid. */
+export function corridorInsideElevationGrid(
+  grid: ElevationGrid,
+  segment: CreekSegment,
+  adjacent: AdjacentCreekSegments = {},
+): boolean {
+  return segmentFrame(segment, adjacent).corridor.every(([x, y]) => cellIndex(x, y, grid) !== null);
+}
+
 function corridorFits(grid: ElevationGrid, frame: SegmentFrame): void {
   for (const [x, y] of frame.corridor) {
     if (cellIndex(x, y, grid) === null) {
@@ -498,22 +682,47 @@ function corridorFits(grid: ElevationGrid, frame: SegmentFrame): void {
 }
 
 /**
- * Wet cells are 8-connected to wet seed cells under the segment centerline.
- * The polygon is built at the bucket minimum, so it never shows a higher water surface than observed.
+ * Wet cells are 8-connected to wet seed cells under the segment centerline, plus any
+ * additional seed points the caller supplies (for example, thalweg points found off the centerline).
+ * A cell is wet when its ground is below the bucket's threshold: flat at the bucket minimum, so the
+ * polygon never shows a higher water surface than observed, or sloped between the two junction
+ * thresholds a bucket carries (see `ElevationBucketToTrace`).
  */
 export async function generateWaterSurfacePolygons(input: {
-  elevationRasterPath: string;
+  /** USGS 3DEP GeoTIFF to read; ignored when `elevationGrid` is already loaded. */
+  elevationRasterPath?: string;
+  elevationGrid?: ElevationGrid;
   segment: CreekSegment;
-  buckets: ElevationBucket[];
+  buckets: ElevationBucketToTrace[];
+  /** Print a line every 10 buckets. Defaults to true. */
+  logProgress?: boolean;
+  /**
+   * Extra flood-fill seed points in UTM zone 10N meters. A point outside the grid or the
+   * Creek Segment corridor is ignored. Omitted means centerline seeds only.
+   */
+  additionalSeedPointsUtm?: readonly UtmPoint[];
+  /** Neighbours sharing the segment's vertices; omitted means perpendicular corridor ends. */
+  adjacentSegments?: AdjacentCreekSegments;
 }): Promise<WaterSurfacePolygonGenerationResult> {
-  const grid = await readElevationGrid(input.elevationRasterPath);
-  const frame = segmentFrame(input.segment);
+  let grid = input.elevationGrid;
+  if (!grid) {
+    if (!input.elevationRasterPath) throw new Error('Water-surface polygons need an elevation raster path or grid.');
+    grid = await readElevationGrid(input.elevationRasterPath);
+  }
+  const frame = segmentFrame(input.segment, input.adjacentSegments ?? {});
   corridorFits(grid, frame);
 
+  // Per cell: 1 inside the corridor, and how far along the segment axis the cell sits, 0 at
+  // the start vertex to 1 at the end vertex (clamped), for the sloped threshold.
+  const halfCellDiagonalM = Math.hypot(grid.resolutionX, grid.resolutionY) / 2;
   const inCorridor = new Uint8Array(grid.width * grid.height);
+  const alongFraction = new Float64Array(grid.width * grid.height);
   for (let index = 0; index < inCorridor.length; index += 1) {
     const [x, y] = cellCenter(index, grid);
-    if (pointInCorridor(x, y, frame)) inCorridor[index] = 1;
+    if (!cellInCorridor(x, y, frame, halfCellDiagonalM)) continue;
+    inCorridor[index] = 1;
+    const { along } = lateralAndAlong(x, y, frame);
+    alongFraction[index] = Math.min(1, Math.max(0, along / frame.lengthM));
   }
 
   const seedIndexes: number[] = [];
@@ -543,29 +752,44 @@ export async function generateWaterSurfacePolygons(input: {
   if (centerlineElevations.length === 0) {
     throw new Error(`Creek Segment ${input.segment.segmentId} has no USGS 3DEP elevation under the centerline.`);
   }
+  for (const point of input.additionalSeedPointsUtm ?? []) {
+    const index = cellIndex(point.x, point.y, grid);
+    if (index === null || inCorridor[index] !== 1 || seedSeen[index] === 1) continue;
+    seedSeen[index] = 1;
+    seedIndexes.push(index);
+  }
 
   const values = new Array<number>(grid.width * grid.height);
   const elevationBuckets: WaterSurfacePolygonBucket[] = [];
   const emptyBuckets: ElevationBucket[] = [];
   for (const [bucketIndex, bucket] of input.buckets.entries()) {
-    if (bucketIndex % 10 === 0) {
+    if (input.logProgress !== false && bucketIndex % 10 === 0) {
       console.log(
         `Water-surface polygon ${bucketIndex + 1} of ${input.buckets.length} at ${bucket.minWaterSurfaceElevationM} m`,
       );
     }
+    const { fillThreshold } = bucket;
     const wet = new Uint8Array(grid.width * grid.height);
     for (let index = 0; index < wet.length; index += 1) {
       if (inCorridor[index] !== 1) continue;
       const elevation = grid.elevations[index];
       if (elevation === undefined || isNoData(elevation, grid.noData)) continue;
-      if (elevation < bucket.minWaterSurfaceElevationM) wet[index] = 1;
+      const flatThreshold = bucket.minWaterSurfaceElevationM;
+      const slopedThreshold = fillThreshold
+        ? fillThreshold.atStartM + (fillThreshold.atEndM - fillThreshold.atStartM) * (alongFraction[index] ?? 0)
+        : flatThreshold;
+      if (elevation < Math.max(flatThreshold, slopedThreshold)) wet[index] = 1;
     }
     const mask = floodFill(wet, seedIndexes, grid.width, grid.height);
     const marginCells = Math.max(0, Math.round(BANK_OVERLAP_MARGIN_M / grid.resolutionX));
     const dilatedMask = dilateMask8Connected(mask, inCorridor, grid.width, grid.height, marginCells);
     const ringsWgs84 = vectorizeMask(dilatedMask, values, grid, frame, bucket.minWaterSurfaceElevationM);
-    elevationBuckets.push({ ...bucket, ringsWgs84 });
-    if (ringsWgs84.length === 0) emptyBuckets.push(bucket);
+    const traced: ElevationBucket = {
+      minWaterSurfaceElevationM: bucket.minWaterSurfaceElevationM,
+      maxWaterSurfaceElevationM: bucket.maxWaterSurfaceElevationM,
+    };
+    elevationBuckets.push({ ...traced, ringsWgs84 });
+    if (ringsWgs84.length === 0) emptyBuckets.push(traced);
   }
 
   return {

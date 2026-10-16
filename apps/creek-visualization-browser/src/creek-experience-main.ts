@@ -11,6 +11,12 @@ import {
 import type { WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { HitTestCapture, HitTestCaptureHit } from './dev-tools-capture-schema';
 import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
+import {
+  DATASET_PICKER_OPTIONS,
+  OBSERVED_DATASET_OPTION_ID,
+  datasetPageUrl,
+  readDatasetSelection,
+} from './modeled-water-catalog';
 import { readPlaybackSpeedButtons } from './observation-timeline-controls';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 
@@ -113,6 +119,30 @@ async function startExperience(): Promise<boolean> {
       throw new Error('The time readout is missing.');
     }
 
+    const selection = readDatasetSelection(location.search);
+    bindDatasetPicker(selection.kind === 'modeled' ? selection.datasetId : OBSERVED_DATASET_OPTION_ID);
+
+    if (selection.kind === 'modeled') {
+      // Modeled water (UCS-271). The observed path below stays unchanged.
+      setLoadingOverlayText('Loading modeled water…');
+      const { startModeledCreekExperience } = await import('./modeled-creek-experience');
+      const started = await startModeledCreekExperience(selection, {
+        container,
+        playButton,
+        slider,
+        timeReadout,
+        status,
+        speedButtons: readPlaybackSpeedButtons(),
+        ...readModeledPanelElements(),
+      });
+      sceneView = started.view;
+      attachment = started.attachment;
+      setSceneNote();
+      hideLoadingOverlay();
+      await installDevToolsIfRequested();
+      return true;
+    }
+
     const data = await loadPublishedCreekVisualizationData();
     const segment = data.segmentsById.get(data.station.segmentId);
     if (!segment) throw new Error('The gauge segment is missing from the creek network.');
@@ -129,16 +159,90 @@ async function startExperience(): Promise<boolean> {
     });
     await attachment.flush();
     hideLoadingOverlay();
-    if (new URLSearchParams(location.search).has('devtools')) {
-      const { installDevToolsHud } = await import('./dev-tools-hud');
-      installDevToolsHud({ view: sceneView!, attachment: attachment!, container: document.body });
-    }
+    await installDevToolsIfRequested();
     return true;
   } catch (error: unknown) {
     console.error(error);
     showExperienceError(error instanceof Error ? error.message : 'The scene could not be started.');
     return false;
   }
+}
+
+/**
+ * `?devtools` mounts the HUD open in every build. A development server also
+ * gets a corner toggle button so the HUD is always one click away; Vite drops
+ * that branch, and the toggle module, from production builds.
+ */
+async function installDevToolsIfRequested(): Promise<void> {
+  if (!sceneView || !attachment) return;
+  const requested = new URLSearchParams(location.search).has('devtools');
+  if (import.meta.env.DEV) {
+    const { installDevToolsToggle } = await import('./dev-tools-toggle');
+    installDevToolsToggle({ view: sceneView, attachment, container: document.body, openOnLoad: requested });
+    return;
+  }
+  if (!requested) return;
+  const { installDevToolsHud } = await import('./dev-tools-hud');
+  installDevToolsHud({ view: sceneView, attachment, container: document.body });
+}
+
+/** Fills the Dataset picker and reloads the page on a change. */
+function bindDatasetPicker(selectedOptionId: string): void {
+  const picker = document.getElementById('dataset-picker');
+  if (!(picker instanceof HTMLSelectElement)) return;
+  picker.replaceChildren(
+    ...DATASET_PICKER_OPTIONS.map((option) => {
+      const node = document.createElement('option');
+      node.value = option.id;
+      node.textContent = option.label;
+      node.selected = option.id === selectedOptionId;
+      return node;
+    }),
+  );
+  picker.addEventListener('change', () => {
+    location.assign(datasetPageUrl(picker.value, location));
+  });
+}
+
+function readModeledPanelElements(): {
+  modeledPanel: HTMLElement;
+  transferToggle: HTMLInputElement;
+  transferToggleLabel: HTMLElement;
+  datasetInfo: HTMLElement;
+  title: HTMLElement | null;
+  subtitle: HTMLElement | null;
+  legendLabel: HTMLElement | null;
+  legendTransferRow: HTMLElement | null;
+  legendTransferLabel: HTMLElement | null;
+} {
+  const modeledPanel = document.getElementById('modeled-panel');
+  const transferToggle = document.getElementById('transfer-water-toggle');
+  const transferToggleLabel = document.getElementById('transfer-water-toggle-label');
+  const datasetInfo = document.getElementById('modeled-dataset-info');
+  if (
+    !(modeledPanel instanceof HTMLElement) ||
+    !(transferToggle instanceof HTMLInputElement) ||
+    !(transferToggleLabel instanceof HTMLElement) ||
+    !(datasetInfo instanceof HTMLElement)
+  ) {
+    throw new Error('The modeled water panel is missing.');
+  }
+  return {
+    modeledPanel,
+    transferToggle,
+    transferToggleLabel,
+    datasetInfo,
+    title: document.getElementById('experience-title'),
+    subtitle: document.getElementById('experience-subtitle'),
+    legendLabel: document.getElementById('legend-water-label'),
+    legendTransferRow: document.getElementById('legend-transfer-row'),
+    legendTransferLabel: document.getElementById('legend-transfer-label'),
+  };
+}
+
+function setLoadingOverlayText(text: string): void {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.textContent = text;
 }
 
 function installTestSeam(readyPromise: Promise<boolean>): void {

@@ -1,8 +1,12 @@
 import { defineConfig } from 'vite';
+import { modeledWaterDataPlugin } from './vite-plugins/modeled-water-data-plugin';
 
 export default defineConfig({
   root: '.',
   publicDir: 'public',
+  // Dev-only: serves the git-ignored modeled water pipeline output under
+  // /modeled-water-surface-elevation-data/<extent>/ without copying it to public/.
+  plugins: [modeledWaterDataPlugin()],
   build: {
     chunkSizeWarningLimit: 2000,
   },
