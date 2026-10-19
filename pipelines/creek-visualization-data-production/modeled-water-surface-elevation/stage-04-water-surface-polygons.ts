@@ -44,7 +44,9 @@ import { TERRAIN_TILE_INDEX_FILE, readTerrainTileIndex } from './terrain-tiles.t
  * - A bucket's wet threshold slopes from the segment's downstream junction WSE to its upstream
  *   junction WSE (the Stage 3 junction values, averaged over the timestamps whose value falls in
  *   that bucket), so the water covers the bed from junction to junction. It is never below the
- *   bucket minimum, and a bucket no modeled value falls in keeps the flat threshold.
+ *   bucket minimum, and a bucket no modeled value falls in keeps the flat threshold. The slope is
+ *   measured between the corridor's two boundary lines, not along the segment axis, so both
+ *   neighbours hold the junction WSE on the whole shared bisector line.
  *
  * The flood fill seeds from the centerline and from each Stage 1 thalweg point, because the
  * TNC flowline often sits several meters off the channel's lowest ground. Polygon sets are
@@ -294,7 +296,7 @@ await runStageEntryPoint(async () => {
       polygonGeneration: 'publish water-surface-polygon-generation.ts: corridor width, 8-connectivity, Bank-overlap margin',
       corridorEnds: 'cut at the angle bisector of the two Creek Segments sharing each vertex, so neighbouring corridors meet on one line',
       wetThreshold:
-        'sloped from the mean downstream junction WSE to the mean upstream junction WSE of the Stage 3 values in the bucket, never below the bucket minimum; flat at the bucket minimum when no value fell in it',
+        'sloped from the mean downstream junction WSE to the mean upstream junction WSE of the Stage 3 values in the bucket, measured between the corridor boundary lines (0 on the start boundary, 1 on the end boundary), never below the bucket minimum; flat at the bucket minimum when no value fell in it',
       fileLayout: 'one compact JSON file per TNC flowline: water-surface-polygon-sets/<tncComid>.json',
       floodFillSeeds: 'centerline cells plus every Stage 1 thalweg point inside the Creek Segment corridor',
     },

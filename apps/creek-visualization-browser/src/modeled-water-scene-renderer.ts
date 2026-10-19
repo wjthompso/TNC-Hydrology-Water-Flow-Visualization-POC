@@ -6,7 +6,9 @@
 //
 // Each polygon is drawn sloped between the segment's upstream and downstream
 // junction water-surface elevations when the placement carries them and the
-// segment's flowline path is known; otherwise flat at the bucket minimum.
+// segment's flowline path is known; otherwise flat at the bucket minimum. The
+// slope runs between the segment's two junction boundaries, the lines Stage 4
+// cut the polygons at, so neighbours meet along the whole boundary.
 
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import Graphic from '@arcgis/core/Graphic';
@@ -20,7 +22,8 @@ import {
   type WaterGraphicGeometryIdentity,
 } from './arcgis-scene-renderer';
 import type { ElevationBucket } from './creek-data-contract';
-import { slopedRingsWgs84, type JunctionWaterSurface, type SegmentFlowlinePath } from './sloped-water-surface';
+import { segmentSurfaceGeometry, type CreekSegmentPathRecord } from './modeled-water-data-store';
+import { slopedRingsWgs84, type JunctionWaterSurface, type SegmentSurfaceGeometry } from './sloped-water-surface';
 
 export interface ModeledWaterSceneRenderer {
   schedule(placements: readonly SegmentPolygonPlacement[]): void;
@@ -29,8 +32,8 @@ export interface ModeledWaterSceneRenderer {
 
 export function createModeledWaterSceneRenderer(
   view: SceneView,
-  /** Flowline vertices per Creek Segment, upstream to downstream; segments missing here draw flat. */
-  segmentPathsById: ReadonlyMap<string, SegmentFlowlinePath>,
+  /** Flowline path and neighbour ids per Creek Segment; segments missing here draw flat. */
+  segmentPathsById: ReadonlyMap<string, CreekSegmentPathRecord>,
   onApplied: (identity: readonly WaterGraphicGeometryIdentity[]) => void,
 ): ModeledWaterSceneRenderer {
   if (!view.map) throw new Error('SceneView has no map.');
@@ -66,8 +69,8 @@ export function createModeledWaterSceneRenderer(
       }
       const symbol = drainageAreaRatioTransfer ? drainageAreaRatioTransferWaterSymbol : waterSymbol;
       const elevationM = bucket.minWaterSurfaceElevationM;
-      const path = segmentPathsById.get(segmentId) ?? null;
-      const surface = path && junctionWaterSurface ? junctionWaterSurface : null;
+      const geometry = segmentSurfaceGeometry(segmentPathsById, segmentId);
+      const surface = geometry && junctionWaterSurface ? junctionWaterSurface : null;
       const surfaceKey = `${elevationM}|${surface?.upstreamM ?? ''}|${surface?.downstreamM ?? ''}`;
       if (
         graphic &&
@@ -82,7 +85,7 @@ export function createModeledWaterSceneRenderer(
         graphicsBySegmentId.set(segmentId, graphic);
       }
       if (graphic.symbol !== symbol) graphic.symbol = symbol;
-      graphic.geometry = surface && path ? slopedPolygonForBucket(bucket, path, surface) : polygonForBucket(bucket);
+      graphic.geometry = surface && geometry ? slopedPolygonForBucket(bucket, geometry, surface) : polygonForBucket(bucket);
       graphic.attributes = {
         segmentId,
         bucketMinElevationM: elevationM,
@@ -143,12 +146,12 @@ export function createModeledWaterSceneRenderer(
 /** The bucket's rings lifted to a surface sloping from the upstream to the downstream junction height. */
 function slopedPolygonForBucket(
   bucket: ElevationBucket,
-  path: SegmentFlowlinePath,
+  geometry: SegmentSurfaceGeometry,
   surface: JunctionWaterSurface,
 ): Polygon {
   return new Polygon({
     hasZ: true,
-    rings: slopedRingsWgs84(bucket.ringsWgs84, path, surface),
+    rings: slopedRingsWgs84(bucket.ringsWgs84, geometry, surface),
     spatialReference: { wkid: 4326 },
   });
 }

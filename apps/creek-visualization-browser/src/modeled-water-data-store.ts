@@ -11,7 +11,7 @@ import {
   type LonLatRing,
 } from './creek-data-contract';
 import { modeledDataUrl, waterYearOf, type CatalogTimeSeries } from './modeled-water-catalog';
-import type { JunctionWaterSurface, SegmentFlowlinePath } from './sloped-water-surface';
+import type { JunctionWaterSurface, SegmentFlowlinePath, SegmentSurfaceGeometry } from './sloped-water-surface';
 
 /** Flowlines kept in memory before least-recently-needed ones are dropped. */
 const MAX_CACHED_FLOWLINES = 24;
@@ -347,14 +347,26 @@ function readTimeSeriesFile(value: unknown): LoadedTimeSeries {
   };
 }
 
+/** One Creek Segment's entry in the dev middleware's `creek-segment-paths.json`. */
+export interface CreekSegmentPathRecord {
+  /** Flowline vertices ordered upstream to downstream. */
+  path: SegmentFlowlinePath;
+  /** Neighbour sharing the upstream vertex; null at a flowline end or in an older file. */
+  upstreamSegmentId: string | null;
+  /** Neighbour sharing the downstream vertex; null at a flowline end or in an older file. */
+  downstreamSegmentId: string | null;
+}
+
 /**
  * Creek Segment flowline paths computed by the dev middleware
  * (`creek-segment-paths.json`): each segment's vertices ordered upstream to
- * downstream. Segments without a usable path are left out.
+ * downstream and the ids of its two neighbours. Segments without a usable
+ * path are left out. A file without neighbour ids (older middleware) gives
+ * null neighbours, so each slope is cut at the segment's own perpendicular.
  */
-export function readCreekSegmentPaths(value: unknown): Map<string, SegmentFlowlinePath> {
+export function readCreekSegmentPaths(value: unknown): Map<string, CreekSegmentPathRecord> {
   const record = asRecord(value, 'creek segment paths');
-  const byId = new Map<string, SegmentFlowlinePath>();
+  const byId = new Map<string, CreekSegmentPathRecord>();
   for (const item of asArray(record.segments, 'creek segment paths')) {
     const segment = asRecord(item, 'creek segment path');
     const raw = Array.isArray(segment.pathWgs84) ? segment.pathWgs84 : [];
@@ -364,9 +376,34 @@ export function readCreekSegmentPaths(value: unknown): Map<string, SegmentFlowli
         path.push([point[0], point[1]]);
       }
     }
-    if (path.length >= 2) byId.set(String(segment.segmentId), path);
+    if (path.length < 2) continue;
+    byId.set(String(segment.segmentId), {
+      path,
+      upstreamSegmentId: typeof segment.upstreamSegmentId === 'string' ? segment.upstreamSegmentId : null,
+      downstreamSegmentId: typeof segment.downstreamSegmentId === 'string' ? segment.downstreamSegmentId : null,
+    });
   }
   return byId;
+}
+
+/**
+ * The geometry the renderer slopes one segment's polygon on: its own path and
+ * its neighbours' paths, looked up by the ids the middleware wrote. Null when
+ * the segment has no path, so the polygon draws flat.
+ */
+export function segmentSurfaceGeometry(
+  pathsById: ReadonlyMap<string, CreekSegmentPathRecord>,
+  segmentId: string,
+): SegmentSurfaceGeometry | null {
+  const own = pathsById.get(segmentId);
+  if (!own) return null;
+  const neighbourPath = (id: string | null): SegmentFlowlinePath | null =>
+    id === null ? null : (pathsById.get(id)?.path ?? null);
+  return {
+    path: own.path,
+    upstreamNeighbourPath: neighbourPath(own.upstreamSegmentId),
+    downstreamNeighbourPath: neighbourPath(own.downstreamSegmentId),
+  };
 }
 
 /**

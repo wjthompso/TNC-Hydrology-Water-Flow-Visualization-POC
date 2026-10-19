@@ -1,8 +1,10 @@
 import { readJson } from '../json-files.ts';
 import { segmentTncFlowline, segmentTncFlowlines, type CreekSegment } from '../tnc-flowline-segmentation.ts';
-import type { AdjacentCreekSegments } from '../water-surface-polygon-generation.ts';
+import { adjacentSegmentsById } from '../creek-segment-adjacency.ts';
 import { MODELED_EXTENT } from './pipeline-configuration.ts';
 import { tncComidOfSegmentId, type DownstreamVertexDirection } from './stage-file-formats.ts';
+
+export { adjacentSegmentsById };
 
 export interface NetworkCreekSegment extends CreekSegment {
   /** Distance from the first original vertex of this segment's TNC flowline to the segment start, meters. */
@@ -24,25 +26,6 @@ export async function loadCreekSegmentNetwork(): Promise<NetworkCreekSegment[]> 
     distanceByComid.set(segment.comid, networkDistanceStartM + segment.preciseLengthM);
     return { ...segment, networkDistanceStartM };
   });
-}
-
-/**
- * For every Creek Segment, the neighbours that share its start and end vertices: the previous
- * and next segment of the same TNC flowline whose vertex coincides exactly. Segments across a
- * path gap of a multi-path flowline share no vertex and are not neighbours.
- */
-export function adjacentSegmentsById(segments: readonly CreekSegment[]): Map<string, AdjacentCreekSegments> {
-  const sameVertex = (a: { x: number; y: number }, b: { x: number; y: number }): boolean => a.x === b.x && a.y === b.y;
-  const byId = new Map<string, AdjacentCreekSegments>();
-  segments.forEach((segment, index) => {
-    const previous = segments[index - 1];
-    const next = segments[index + 1];
-    const adjacent: AdjacentCreekSegments = {};
-    if (previous && previous.comid === segment.comid && sameVertex(previous.endUtm, segment.startUtm)) adjacent.atStart = previous;
-    if (next && next.comid === segment.comid && sameVertex(segment.endUtm, next.startUtm)) adjacent.atEnd = next;
-    byId.set(segment.segmentId, adjacent);
-  });
-  return byId;
 }
 
 /** The Creek Segments on either side of one segment along the flow, by id; null at a flowline end. */

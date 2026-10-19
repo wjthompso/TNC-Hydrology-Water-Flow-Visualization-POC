@@ -8,14 +8,17 @@
 // each Creek Segment's drainage-area ratio and Drainage-Area Ratio Transfer flag
 // before the Time Series files carry them. A third computed file,
 // `creek-segment-paths.json`, gives every Creek Segment's flowline vertices
-// ordered upstream to downstream so the browser can slope each water polygon
-// between the junction water-surface elevations the Time Series carry.
+// ordered upstream to downstream, plus the ids of the neighbours sharing its
+// two vertices, so the browser can slope each water polygon between the
+// junction water-surface elevations the Time Series carry and cut the slope at
+// the same junction bisectors Stage 4 cut the polygons at.
 
 import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
+import { adjacentSegmentsById } from '../../../pipelines/creek-visualization-data-production/creek-segment-adjacency.ts';
 import { segmentTncFlowlines } from '../../../pipelines/creek-visualization-data-production/tnc-flowline-segmentation.ts';
 
 export const MODELED_WATER_DATA_URL_PREFIX = '/modeled-water-surface-elevation-data/';
@@ -69,6 +72,10 @@ interface SegmentPathEntry {
   segmentId: string;
   /** Flowline vertices of the segment, ordered upstream to downstream. */
   pathWgs84: LonLat[];
+  /** Neighbour sharing the upstream vertex (the pipeline's adjacency rule); null at a flowline end. */
+  upstreamSegmentId: string | null;
+  /** Neighbour sharing the downstream vertex; null at a flowline end. */
+  downstreamSegmentId: string | null;
 }
 
 interface SegmentPathsFile {
@@ -297,10 +304,20 @@ async function buildSegmentPaths(snapshotPath: string, crossSectionsPath: string
     segments?: unknown;
   };
   const directionByTncComid = downstreamVertexDirectionByTncComid(crossSections.segments);
-  const segments = segmentTncFlowlines(snapshot).map((segment) => {
+  const creekSegments = segmentTncFlowlines(snapshot);
+  const adjacentById = adjacentSegmentsById(creekSegments);
+  const segments = creekSegments.map((segment) => {
     const runsDownstream = (directionByTncComid.get(String(segment.comid)) ?? 1) === 1;
     const pathWgs84 = segment.pathWgs84.map(([lon, lat]) => [lon, lat] as LonLat);
-    return { segmentId: segment.segmentId, pathWgs84: runsDownstream ? pathWgs84 : pathWgs84.reverse() };
+    const adjacent = adjacentById.get(segment.segmentId) ?? {};
+    const atStart = adjacent.atStart?.segmentId ?? null;
+    const atEnd = adjacent.atEnd?.segmentId ?? null;
+    return {
+      segmentId: segment.segmentId,
+      pathWgs84: runsDownstream ? pathWgs84 : pathWgs84.reverse(),
+      upstreamSegmentId: runsDownstream ? atStart : atEnd,
+      downstreamSegmentId: runsDownstream ? atEnd : atStart,
+    };
   });
   return {
     segmentNetworkVersion:

@@ -7,8 +7,11 @@ import {
   CENTERLINE_SAMPLE_SPACING_M,
   CORRIDOR_HALF_WIDTH_M,
 } from './constants.ts';
+import type { AdjacentCreekSegments } from './creek-segment-adjacency.ts';
 import type { CreekSegment } from './tnc-flowline-segmentation.ts';
 import { roundToDecimals, utm10nToWgs84, type UtmPoint } from './utm-geometry.ts';
+
+export type { AdjacentCreekSegments };
 
 export interface ElevationBucket {
   minWaterSurfaceElevationM: number;
@@ -17,11 +20,11 @@ export interface ElevationBucket {
 
 /**
  * A bucket to trace, optionally with a sloped wet threshold. Without `fillThreshold` the
- * threshold is flat at the bucket minimum. With it, the threshold runs linearly along the
- * segment axis from `atStartM` at the start vertex to `atEndM` at the end vertex, so one
- * polygon can meet each neighbour at the junction water-surface elevation (WSE) they share.
- * The sloped threshold is never taken below the bucket minimum, so the polygon always
- * contains the flat one.
+ * threshold is flat at the bucket minimum. With it, the threshold runs linearly from
+ * `atStartM` on the corridor's start boundary to `atEndM` on its end boundary (see
+ * `fractionBetweenBoundaries`), so one polygon can meet each neighbour at the junction
+ * water-surface elevation (WSE) they share, along the whole shared boundary line. The sloped
+ * threshold is never taken below the bucket minimum, so the polygon always contains the flat one.
  */
 export interface ElevationBucketToTrace extends ElevationBucket {
   fillThreshold?: { atStartM: number; atEndM: number };
@@ -29,17 +32,6 @@ export interface ElevationBucketToTrace extends ElevationBucket {
 
 export interface WaterSurfacePolygonBucket extends ElevationBucket {
   ringsWgs84: number[][][];
-}
-
-/**
- * The Creek Segments that share this segment's start and end vertices on the same TNC flowline.
- * Given, the corridor ends are clipped at the angle bisector of the two segments' directions,
- * so the two neighbouring corridors meet on one line. Absent, an end is clipped at the segment's
- * own perpendicular, as publish does.
- */
-export interface AdjacentCreekSegments {
-  atStart?: CreekSegment;
-  atEnd?: CreekSegment;
 }
 
 export interface CorridorBoundingBox {
@@ -232,6 +224,23 @@ function segmentFrame(segment: CreekSegment, adjacent: AdjacentCreekSegments = {
     alongMaxM,
     corridor,
   };
+}
+
+/**
+ * Where a point sits between the corridor's two boundary lines: 0 on the start boundary, 1 on
+ * the end boundary, linear in between, clamped outside. On a straight corridor with
+ * perpendicular ends this is the along-axis fraction. At a shared vertex the boundary is the
+ * junction bisector, so every point on that line gets the same fraction from both neighbours
+ * and the two segments' sloped thresholds (and the browser's sloped surfaces, which use the
+ * same rule) agree on the whole line instead of only at the vertex.
+ */
+export function fractionBetweenBoundaries(
+  distanceInsideStartM: number,
+  distanceInsideEndM: number,
+): number {
+  if (distanceInsideStartM <= 0) return 0;
+  if (distanceInsideEndM <= 0) return 1;
+  return distanceInsideStartM / (distanceInsideStartM + distanceInsideEndM);
 }
 
 function lateralAndAlong(x: number, y: number, frame: SegmentFrame): { along: number; lateral: number } {
@@ -686,7 +695,8 @@ function corridorFits(grid: ElevationGrid, frame: SegmentFrame): void {
  * additional seed points the caller supplies (for example, thalweg points found off the centerline).
  * A cell is wet when its ground is below the bucket's threshold: flat at the bucket minimum, so the
  * polygon never shows a higher water surface than observed, or sloped between the two junction
- * thresholds a bucket carries (see `ElevationBucketToTrace`).
+ * thresholds a bucket carries, measured between the corridor's boundary lines (see
+ * `ElevationBucketToTrace` and `fractionBetweenBoundaries`).
  */
 export async function generateWaterSurfacePolygons(input: {
   /** USGS 3DEP GeoTIFF to read; ignored when `elevationGrid` is already loaded. */
@@ -712,8 +722,8 @@ export async function generateWaterSurfacePolygons(input: {
   const frame = segmentFrame(input.segment, input.adjacentSegments ?? {});
   corridorFits(grid, frame);
 
-  // Per cell: 1 inside the corridor, and how far along the segment axis the cell sits, 0 at
-  // the start vertex to 1 at the end vertex (clamped), for the sloped threshold.
+  // Per cell: 1 inside the corridor, and where the cell sits between the corridor's start and
+  // end boundaries, 0 on the start boundary to 1 on the end boundary, for the sloped threshold.
   const halfCellDiagonalM = Math.hypot(grid.resolutionX, grid.resolutionY) / 2;
   const inCorridor = new Uint8Array(grid.width * grid.height);
   const alongFraction = new Float64Array(grid.width * grid.height);
@@ -721,8 +731,10 @@ export async function generateWaterSurfacePolygons(input: {
     const [x, y] = cellCenter(index, grid);
     if (!cellInCorridor(x, y, frame, halfCellDiagonalM)) continue;
     inCorridor[index] = 1;
-    const { along } = lateralAndAlong(x, y, frame);
-    alongFraction[index] = Math.min(1, Math.max(0, along / frame.lengthM));
+    alongFraction[index] = fractionBetweenBoundaries(
+      -distanceOutsideBoundary(x, y, frame.startBoundary),
+      -distanceOutsideBoundary(x, y, frame.endBoundary),
+    );
   }
 
   const seedIndexes: number[] = [];

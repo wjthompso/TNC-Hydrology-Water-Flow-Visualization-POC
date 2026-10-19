@@ -38,12 +38,13 @@ import {
   heldValueAt,
   readCreekSegmentPaths,
   readFlowlineIndex,
+  type CreekSegmentPathRecord,
   type FlowlineIndex,
 } from './modeled-water-data-store';
 import { createModeledWaterSceneRenderer } from './modeled-water-scene-renderer';
 import { loadReachCrosswalk } from './reach-crosswalk';
 import { bucketForWaterSurfaceElevation } from './selected-time-creek-state-resolver';
-import type { JunctionWaterSurface, SegmentFlowlinePath } from './sloped-water-surface';
+import type { JunctionWaterSurface } from './sloped-water-surface';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 import {
   MAX_FLOWLINES_IN_VIEW,
@@ -55,14 +56,15 @@ import {
 const OPENING_SEGMENT_ID = '27714637-026';
 const CATALOG_PATH = '05-catalog/catalog.json';
 const FLOWLINE_INDEX_PATH = 'flowline-index.json';
-/** Dev-middleware file: each Creek Segment's flowline vertices, upstream to downstream. */
+/** Dev-middleware file: each Creek Segment's flowline vertices, upstream to downstream, and its neighbours. */
 const SEGMENT_PATHS_PATH = 'creek-segment-paths.json';
 /**
- * Off: every Creek Segment's water is a flat terrace at its bucket minimum, so
- * the UCS-271 stair-stepping and seam Bug Checks (FBT-011, FBT-012) reproduce.
- * On: water slopes between the pipeline's junction water-surface elevations.
+ * On: water slopes between the pipeline's junction water-surface elevations,
+ * which is the UCS-271 fix for the stair-stepping and seam Bug Checks
+ * (FBT-011, FBT-012). Off reproduces those bugs: every Creek Segment's water
+ * is a flat terrace at its bucket minimum.
  */
-const DRAW_SLOPED_WATER_SURFACES = false;
+const DRAW_SLOPED_WATER_SURFACES = true;
 
 export interface ModeledExperienceElements {
   container: HTMLDivElement;
@@ -447,11 +449,11 @@ export async function startModeledCreekExperience(
 }
 
 /**
- * Creek Segment flowline paths from the dev middleware. The file is computed
- * from the extent's flowline snapshot and Stage 1 output; when either is not
- * there yet the request fails and every polygon draws flat instead.
+ * Creek Segment flowline paths and neighbours from the dev middleware. The
+ * file is computed from the extent's flowline snapshot and Stage 1 output;
+ * when either is not there yet the request fails and every polygon draws flat.
  */
-async function loadSegmentPaths(extentId: string): Promise<ReadonlyMap<string, SegmentFlowlinePath>> {
+async function loadSegmentPaths(extentId: string): Promise<ReadonlyMap<string, CreekSegmentPathRecord>> {
   try {
     return readCreekSegmentPaths(await fetchJson(modeledDataUrl(extentId, SEGMENT_PATHS_PATH)));
   } catch (error) {
