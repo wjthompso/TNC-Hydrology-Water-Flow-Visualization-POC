@@ -117,3 +117,7 @@ One quantity with one unit, such as water-surface elevation (m), discharge (m³/
 ## Water-surface elevation (WSE)
 
 The absolute height of the water surface, expressed in NAVD88 (North American Vertical Datum of 1988). For the Jalama Near Lompoc gauge, it is gauge height plus the gauge datum, converted from feet to meters.
+
+## WSE Polygon Generation Method
+
+A named, versioned way to turn modeled water-surface elevations into the water polygons drawn for each Creek Segment. Each version keeps its own saved output, so methods can be compared on the map.

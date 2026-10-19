@@ -65,14 +65,28 @@ export function toRepoRelative(filePath: string, repoRoot: string): string {
   return relative.split(path.sep).join('/');
 }
 
-/** Error text with stack frames removed, trimmed and bounded. */
+/**
+ * Error text with stack frames removed, trimmed and bounded. Playwright repeats
+ * the same message in `message`, `stack`, and a `[cause]:` line, so a nonblank
+ * line already shown is dropped; the code frame and first occurrence stay.
+ */
 export function failureMessageText(texts: string[]): string {
   const unique = [...new Set(texts.map((text) => stripAnsi(text).trimEnd()).filter(Boolean))];
+  const seenLines = new Set<string>();
   const withoutFrames = unique
     .join('\n\n')
     .split(/\r?\n/)
     .filter((line) => !stackFramePattern.test(line))
+    .map((line) => line.replace(/^\[cause\]: /, ''))
+    .filter((line) => {
+      const key = line.trim();
+      if (!key) return true;
+      if (seenLines.has(key)) return false;
+      seenLines.add(key);
+      return true;
+    })
     .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
   return capCharacters(limitedLines(withoutFrames, messageLineLimit, false), false);
 }

@@ -430,6 +430,14 @@ function errorLogDetails(test, latest) {
   return `<details class="methodology error-logs">
       <summary>Error logs</summary>
       <div class="log-body">
+        <!-- Actions first, so replaying a failure needs no scrolling past the log. -->
+        <div class="log-actions">
+          <button type="button" class="log-button" data-copy-llm>Copy for LLM</button>
+          ${launchButton('open-trace', test, Boolean(log.tracePath), 'No trace was saved for this attempt.', 'Open trace')}
+          ${launchButton('replay-ui', test, isBrowserTest, 'Playwright UI mode opens browser tests only.', 'Replay in Playwright UI')}
+          <span class="log-status" role="status" aria-live="polite"></span>
+        </div>
+        <pre class="llm-markdown log-block" hidden>${escapeHtml(failureMarkdown(test, latest, log))}</pre>
         <p class="log-title"><span class="identifier">${escapeHtml(test.id)}</span>&nbsp;${escapeHtml(test.name)}</p>
         ${header.map((line) => `<p class="log-meta">${line}</p>`).join('')}
         ${log.reconstructed ? '<p class="log-meta">Rebuilt from an older stored result; some fields were not recorded.</p>' : ''}
@@ -439,13 +447,6 @@ function errorLogDetails(test, latest) {
         ${monospaceBlock('stdout (tail)', log.stdoutTail)}
         ${monospaceBlock('stderr (tail)', log.stderrTail)}
         ${artifactLinks.length ? `<p class="log-label">Artifacts</p>${artifactLinks.map((link) => `<p class="log-artifact">${link}</p>`).join('')}` : ''}
-        <div class="log-actions">
-          <button type="button" class="log-button" data-copy-llm>Copy for LLM</button>
-          ${launchButton('open-trace', test, Boolean(log.tracePath), 'No trace was saved for this attempt.', 'Open trace')}
-          ${launchButton('replay-ui', test, isBrowserTest, 'Playwright UI mode opens browser tests only.', 'Replay in Playwright UI')}
-          <span class="log-status" role="status" aria-live="polite"></span>
-        </div>
-        <pre class="llm-markdown log-block" hidden>${escapeHtml(failureMarkdown(test, latest, log))}</pre>
       </div>
     </details>`;
 }
@@ -834,7 +835,7 @@ const html = `<!doctype html>
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-top: 12px;
+      margin: 4px 0 12px;
     }
     .log-button {
       background: #000000;
@@ -854,7 +855,7 @@ const html = `<!doctype html>
       outline: 3px solid #ffdd00;
     }
     .log-status { color: #b1b4b6; font-size: 16px; line-height: 20px; }
-    .error-logs .llm-markdown { margin-top: 10px; }
+    .error-logs .llm-markdown { margin: 0 0 12px; }
   </style>
 </head>
 <body>
