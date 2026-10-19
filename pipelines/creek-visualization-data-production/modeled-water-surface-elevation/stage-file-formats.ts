@@ -251,9 +251,12 @@ export async function listTimeSeriesFiles(timeSeriesStageDirectory: string): Pro
   return byDatasetId;
 }
 
-/** Every water-surface polygon set file Stage 4 wrote, as sorted paths relative to the Stage 4 directory. */
-export async function listWaterSurfacePolygonSetFiles(polygonsStageDirectory: string): Promise<string[]> {
-  const entries = await readdir(path.join(polygonsStageDirectory, WATER_SURFACE_POLYGON_SETS_DIRECTORY_NAME));
+/**
+ * Every water-surface polygon set file one WSE Polygon Generation Method version wrote, as sorted
+ * paths relative to that version's folder (`04-water-surface-polygons/<method-id>/v<version>/`).
+ */
+export async function listWaterSurfacePolygonSetFiles(methodVersionDirectory: string): Promise<string[]> {
+  const entries = await readdir(path.join(methodVersionDirectory, WATER_SURFACE_POLYGON_SETS_DIRECTORY_NAME));
   return entries
     .filter((name) => name.endsWith('.json'))
     .sort()

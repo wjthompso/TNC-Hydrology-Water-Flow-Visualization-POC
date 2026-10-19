@@ -51,20 +51,33 @@ import {
   selectVisibleFlowlines,
   type VisibleFlowlineSelection,
 } from './visible-flowlines';
+import {
+  WSE_POLYGON_METHOD_QUERY_PARAM,
+  WSE_POLYGON_METHODS_PATH,
+  readWsePolygonMethodList,
+  resolveWsePolygonMethod,
+  wsePolygonMethodKey,
+  type WsePolygonMethodList,
+  type WsePolygonMethodVersion,
+} from './wse-polygon-generation-methods';
 
 /** Jalama Near Lompoc gauge Creek Segment; both extents include its flowline. */
 const OPENING_SEGMENT_ID = '27714637-026';
 const CATALOG_PATH = '05-catalog/catalog.json';
-const FLOWLINE_INDEX_PATH = 'flowline-index.json';
+const FLOWLINE_INDEX_FILE = 'flowline-index.json';
 /** Dev-middleware file: each Creek Segment's flowline vertices, upstream to downstream, and its neighbours. */
 const SEGMENT_PATHS_PATH = 'creek-segment-paths.json';
 /**
- * On: water slopes between the pipeline's junction water-surface elevations,
- * which is the UCS-271 fix for the stair-stepping and seam Bug Checks
- * (FBT-011, FBT-012). Off reproduces those bugs: every Creek Segment's water
- * is a flat terrace at its bucket minimum.
+ * The selected WSE Polygon Generation Method's `browserDrawing` decides the
+ * drawing: `sloped-between-junctions` slopes water between the pipeline's
+ * junction water-surface elevations, which is the UCS-271 fix for the
+ * stair-stepping and seam Bug Checks (FBT-011, FBT-012).
+ * `flat-at-bucket-minimum` draws every Creek Segment's water as a flat terrace
+ * at its bucket minimum, which reproduces those bugs for the default method.
  */
-const DRAW_SLOPED_WATER_SURFACES = true;
+function drawsSlopedWaterSurfaces(method: WsePolygonMethodVersion): boolean {
+  return method.browserDrawing === 'sloped-between-junctions';
+}
 
 export interface ModeledExperienceElements {
   container: HTMLDivElement;
@@ -149,6 +162,17 @@ export interface ModeledExperienceSeam {
   readSegment(segmentId: string): ModeledSegmentReading | null;
   /** Dev tools: the Creek Segment whose prepared polygons center nearest the point, within the distance. */
   nearestSegment(lonLat: LonLat, maxDistanceM: number): { segmentId: string; distanceM: number } | null;
+  /** Every saved WSE Polygon Generation Method version of this extent, sorted by method id, then version. */
+  readonly wsePolygonMethods: readonly WsePolygonMethodVersion[];
+  /** The method version whose polygons are drawn now. */
+  readonly wsePolygonMethod: WsePolygonMethodVersion;
+  /**
+   * Dev tools: draws another saved method version (`<method-id>@v<version>`)
+   * without a page reload, keeping the camera and the selected time, and
+   * writes it to the `wsePolygonMethod` URL parameter. Resolves once its
+   * polygons are drawn.
+   */
+  setWsePolygonMethod(key: string): Promise<void>;
 }
 
 type ModeledSeamWindow = Window & { __TNC_MODELED__?: ModeledExperienceSeam };
@@ -158,17 +182,28 @@ export async function startModeledCreekExperience(
   elements: ModeledExperienceElements,
 ): Promise<{ view: SceneView; attachment: CreekVisualizationAttachment }> {
   const { datasetId, extentId } = selection;
-  const [catalogFile, indexFile, crosswalk, segmentPaths] = await Promise.all([
+  const [catalogFile, methodListFile, crosswalk, segmentPaths] = await Promise.all([
     fetchJson(modeledDataUrl(extentId, CATALOG_PATH)),
-    fetchJson(modeledDataUrl(extentId, FLOWLINE_INDEX_PATH)),
+    fetchJson(modeledDataUrl(extentId, WSE_POLYGON_METHODS_PATH)),
     loadReachCrosswalk(extentId),
     loadSegmentPaths(extentId),
   ]);
   const catalog = readModeledCatalog(catalogFile);
-  const index = readFlowlineIndex(indexFile);
+  const methodList = readWsePolygonMethodList(methodListFile);
+  const requestedMethod = new URLSearchParams(window.location.search).get(WSE_POLYGON_METHOD_QUERY_PARAM);
+  const resolvedMethod = resolveWsePolygonMethod(methodList, requestedMethod);
+  if (resolvedMethod.unmatchedRequest) {
+    console.warn(
+      `No saved WSE Polygon Generation Method ${resolvedMethod.unmatchedRequest} for ${extentId}; ` +
+        `drawing ${wsePolygonMethodKey(resolvedMethod.selected)}.`,
+    );
+  }
+  let wsePolygonMethod = resolvedMethod.selected;
+  // Each method version has its own flowline index: segment centers and boxes follow its polygons.
+  let index = await loadFlowlineIndex(extentId, wsePolygonMethod);
   const selected = selectModeledDataset(catalog, datasetId);
   const holdMs = datasetHoldMs(selected.dataset.timeStep);
-  const segmentCenters = segmentCentersById(index);
+  let segmentCenters = segmentCentersById(index);
 
   const datasetLabel = datasetLabelFor(selection);
   labelPage(elements, selection, datasetLabel);
@@ -195,7 +230,7 @@ export async function startModeledCreekExperience(
     transferSegmentIds: new Set<string>(),
     priorityComids: [] as readonly string[],
   };
-  const knownComids = new Set(index.flowlines.map((flowline) => flowline.tncComid));
+  let knownComids = new Set(index.flowlines.map((flowline) => flowline.tncComid));
   const pinnedBySegmentId = new Map<string, number>();
   /** Crosswalk flags are the fallback until every Time Series file carries its own. */
   const crosswalkTransferIds: ReadonlySet<string> = crosswalk?.transferSegmentIds ?? new Set();
@@ -210,6 +245,7 @@ export async function startModeledCreekExperience(
 
   const store = createModeledWaterDataStore({
     extentId,
+    wsePolygonMethodPath: wsePolygonMethod.path,
     timeSeries: selected.timeSeries,
     timeStep: selected.dataset.timeStep,
     onChange: () => applySelectedTime(state.selectedTimeUtcMs),
@@ -235,7 +271,7 @@ export async function startModeledCreekExperience(
         } else if (series && (state.showTransferWater || !isTransfer)) {
           const elevationM = heldValueAt(series, segmentId, timeUtcMs, holdMs);
           bucket = elevationM === null ? null : bucketForWaterSurfaceElevation(buckets, elevationM);
-          if (bucket && DRAW_SLOPED_WATER_SURFACES) {
+          if (bucket && drawsSlopedWaterSurfaces(wsePolygonMethod)) {
             junctionWaterSurface = heldJunctionWaterSurfaceAt(series, segmentId, timeUtcMs, holdMs);
           }
         }
@@ -379,6 +415,24 @@ export async function startModeledCreekExperience(
     }
   };
 
+  /** Swaps the drawn polygons to another saved method version; the camera and selected time stay. */
+  const setWsePolygonMethod = async (key: string): Promise<void> => {
+    const next = methodList.versions.find((entry) => wsePolygonMethodKey(entry) === key);
+    if (!next) throw new Error(`No saved WSE Polygon Generation Method ${key} for ${extentId}.`);
+    if (next !== wsePolygonMethod) {
+      const nextIndex = await loadFlowlineIndex(extentId, next);
+      wsePolygonMethod = next;
+      index = nextIndex;
+      segmentCenters = segmentCentersById(index);
+      knownComids = new Set(index.flowlines.map((flowline) => flowline.tncComid));
+      store.setWsePolygonMethodPath(next.path);
+      renderer.clear();
+      writeWsePolygonMethodToUrl(methodList, next);
+      refreshVisibleFlowlines();
+    }
+    await whenIdle();
+  };
+
   const attachment: CreekVisualizationAttachment = {
     get selectedTimeUtcMs() {
       return state.selectedTimeUtcMs;
@@ -438,6 +492,11 @@ export async function startModeledCreekExperience(
     },
     readSegment,
     nearestSegment,
+    wsePolygonMethods: methodList.versions,
+    get wsePolygonMethod() {
+      return wsePolygonMethod;
+    },
+    setWsePolygonMethod,
   };
   Object.defineProperty(window as ModeledSeamWindow, '__TNC_MODELED__', {
     configurable: true,
@@ -460,6 +519,23 @@ async function loadSegmentPaths(extentId: string): Promise<ReadonlyMap<string, C
     console.warn(`Creek Segment paths unavailable; modeled water draws flat. ${String(error)}`);
     return new Map();
   }
+}
+
+/** The flowline index of one WSE Polygon Generation Method version, computed by the dev middleware. */
+async function loadFlowlineIndex(extentId: string, method: WsePolygonMethodVersion): Promise<FlowlineIndex> {
+  return readFlowlineIndex(await fetchJson(modeledDataUrl(extentId, `${method.path}/${FLOWLINE_INDEX_FILE}`)));
+}
+
+/**
+ * Keeps the address bar reloadable after a live switch: the parameter names
+ * the version, and is dropped when it is the default method's newest version.
+ */
+function writeWsePolygonMethodToUrl(list: WsePolygonMethodList, method: WsePolygonMethodVersion): void {
+  const url = new URL(window.location.href);
+  const isDefault = resolveWsePolygonMethod(list, null).selected === method;
+  if (isDefault) url.searchParams.delete(WSE_POLYGON_METHOD_QUERY_PARAM);
+  else url.searchParams.set(WSE_POLYGON_METHOD_QUERY_PARAM, wsePolygonMethodKey(method));
+  window.history.replaceState(window.history.state, '', url);
 }
 
 function datasetLabelFor(selection: Extract<DatasetSelection, { kind: 'modeled' }>): string {

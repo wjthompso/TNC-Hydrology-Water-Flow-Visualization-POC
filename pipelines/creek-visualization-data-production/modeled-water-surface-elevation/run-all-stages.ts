@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Runs Stages 0–5 in order and forwards every command-line argument (for example
- * `--extent=jalama-gauge-reach`, `--force`, `--water-years=2018-2023`) to each stage.
+ * `--extent=jalama-gauge-reach`, `--force`, `--water-years=2018-2023`,
+ * `--wse-polygon-method=<method-id>`) to each stage. Only Stage 4 reads `--wse-polygon-method=`;
+ * Stage 5 catalogs every saved WSE Polygon Generation Method version either way.
  * An `&&`-chained npm script would pass those arguments only to its last command.
  * Stops at the first stage that fails and prints per-stage wall-clock time.
  */

@@ -28,6 +28,12 @@ import { slopedRingsWgs84, type JunctionWaterSurface, type SegmentSurfaceGeometr
 export interface ModeledWaterSceneRenderer {
   schedule(placements: readonly SegmentPolygonPlacement[]): void;
   flush(): Promise<void>;
+  /**
+   * Removes every drawn polygon, so the next placements redraw from scratch.
+   * Used when the WSE Polygon Generation Method changes: the new method's
+   * rings can differ even where the bucket and junction heights match.
+   */
+  clear(): void;
 }
 
 export function createModeledWaterSceneRenderer(
@@ -139,6 +145,13 @@ export function createModeledWaterSceneRenderer(
       return new Promise((resolve) => {
         requestAnimationFrame(() => resolve());
       });
+    },
+    clear() {
+      layer.removeAll();
+      graphicsBySegmentId.clear();
+      writtenElevationM.clear();
+      writtenSurfaceKey.clear();
+      onApplied([]);
     },
   };
 }

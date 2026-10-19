@@ -328,19 +328,8 @@ export const MANNING_ROUGHNESS_BASIS = {
 export const WATER_SURFACE_ELEVATION_VARIABLE_ID = 'water-surface-elevation';
 
 // ---- Stage 4: water-surface polygons ----------------------------------------
-
-/**
- * Elevation-bucket ladder per Creek Segment. Buckets are half-open [min, max) and the
- * prepared water-surface polygon is built at the bucket minimum, as in publish.
- * Floor: the 0.05 m multiple at or below the segment bed elevation (Stage 1).
- * Fine steps run through the bucket holding the highest WSE in any modeled Time Series;
- * coarse steps then continue until the ladder reaches that WSE + the headroom.
- */
-export const POLYGON_LADDER = {
-  fineStepM: 0.05,
-  coarseStepM: 0.25,
-  headroomAboveMaxModeledWseM: 2,
-} as const;
+// Each WSE Polygon Generation Method keeps its own parameters in
+// `wse-polygon-generation-methods/<method-id>/method-config.ts`, so changing one bumps only that method's version.
 
 // ---- Stage 5: catalog and validation ---------------------------------------
 
