@@ -48,7 +48,7 @@ export default tseslint.config(
             {
               name: '@playwright/test',
               message:
-                'Import test and expect from tests/support/browser/esri-response-cache.ts so live tests reuse saved Esri responses.',
+                'Import test and expect from tests/support/browser/response-cache/index.ts so live tests reuse saved Esri and USGS 3DEP responses.',
             },
           ],
         },

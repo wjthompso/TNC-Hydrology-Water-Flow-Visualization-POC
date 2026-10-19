@@ -1,4 +1,4 @@
-import { test } from '../../../../support/browser/esri-response-cache.ts';
+import { test } from '../../../../support/browser/response-cache/index.ts';
 import { openObservedWaterPage, watchLiveServices } from '../../F-110-observed-jalama-gauge-water/behavior/observed-jalama-gauge-water.ts';
 import { COAST_CAMERA, moveCameraAndSettle, settleScene } from './scene-camera.ts';
 import {

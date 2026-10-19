@@ -1,4 +1,4 @@
-import { expect, test } from '../../../../support/browser/esri-response-cache.ts';
+import { expect, test } from '../../../../support/browser/response-cache/index.ts';
 import {
   gapSlotOn9June2026,
   nullReadingSlot,

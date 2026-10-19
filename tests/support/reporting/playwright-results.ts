@@ -1,4 +1,11 @@
-import path from 'node:path';
+import {
+  failureMessageText,
+  limitedLines,
+  outputTail,
+  relevantStackLines,
+  toRepoRelative,
+  type FailureLog,
+} from './failure-log.ts';
 
 export type FailedAttemptStatus = 'failed' | 'timedOut' | 'interrupted' | 'inconclusive';
 
@@ -20,6 +27,8 @@ export interface NormalizedTestResult {
   totalDurationMs: number;
   passedAfterRetry?: true;
   failedAttempts?: FailedAttemptRecord[];
+  /** Why the final attempt did not pass, or why the last failed attempt failed before a passing retry. */
+  failureLog?: FailureLog;
 }
 
 export interface PlaywrightCatalogTarget {
@@ -30,29 +39,9 @@ export interface PlaywrightCatalogTarget {
 
 const errorLineLimit = 20;
 const stdioLineLimit = 40;
-const ansiPattern = new RegExp(`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`, 'g');
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null;
-}
-
-function stripAnsi(value: string): string {
-  return value.replace(ansiPattern, '');
-}
-
-function limitedLines(value: string, limit: number, fromEnd: boolean): string {
-  const lines = stripAnsi(value).split(/\r?\n/);
-  const selected = fromEnd ? lines.slice(-limit) : lines.slice(0, limit);
-  return selected.join('\n');
-}
-
-function toRepoRelative(filePath: string, repoRoot: string): string {
-  const absolute = path.isAbsolute(filePath) ? filePath : path.resolve(repoRoot, filePath);
-  const relative = path.relative(repoRoot, absolute);
-  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
-    return filePath.split(path.sep).join('/');
-  }
-  return relative.split(path.sep).join('/');
 }
 
 function flattenPlaywrightSuites(
@@ -164,6 +153,59 @@ function attemptArtifacts(attempt: Record<string, unknown>, repoRoot: string): s
   });
 }
 
+function namedAttachmentPath(
+  attempt: Record<string, unknown>,
+  name: string,
+  repoRoot: string,
+): string | undefined {
+  if (!Array.isArray(attempt.attachments)) return undefined;
+  for (const attachment of attempt.attachments) {
+    const record = asRecord(attachment);
+    if (record?.name === name && typeof record.path === 'string') {
+      return toRepoRelative(record.path, repoRoot);
+    }
+  }
+  return undefined;
+}
+
+/** Message, stack, and stack-bearing text from every error entry on one attempt. */
+function attemptErrorTexts(attempt: Record<string, unknown>): string[] {
+  return errorEntries(attempt).flatMap((entry) => {
+    if (typeof entry === 'string') return [entry];
+    return [entry.message, entry.stack].filter((text): text is string => typeof text === 'string');
+  });
+}
+
+function attemptFailureLog(
+  attempt: Record<string, unknown>,
+  index: number,
+  status: string,
+  repoRoot: string,
+): FailureLog {
+  const texts = attemptErrorTexts(attempt);
+  const log: FailureLog = {
+    attempt: attemptNumber(attempt, index),
+    status,
+    durationMs: durationOf(attempt),
+    errorMessage: failureMessageText(texts),
+  };
+  const errorLocation = attemptErrorLocation(attempt, repoRoot);
+  const stackLines = relevantStackLines(texts, repoRoot);
+  const stdoutTail = outputTail(stdioText(attempt.stdout));
+  const stderrTail = outputTail(stdioText(attempt.stderr));
+  const screenshotPath = namedAttachmentPath(attempt, 'screenshot', repoRoot);
+  const tracePath = namedAttachmentPath(attempt, 'trace', repoRoot);
+  const errorContextPath = namedAttachmentPath(attempt, 'error-context', repoRoot);
+  if (errorLocation) log.errorLocation = errorLocation;
+  if (stackLines.length) log.stackLines = stackLines;
+  if (stdoutTail) log.stdoutTail = stdoutTail;
+  if (stderrTail) log.stderrTail = stderrTail;
+  if (screenshotPath) log.screenshotPath = screenshotPath;
+  if (tracePath) log.tracePath = tracePath;
+  if (errorContextPath) log.errorContextPath = errorContextPath;
+  return log;
+}
+
 type AttemptClass = 'passed' | 'skipped' | FailedAttemptStatus | 'unknown';
 
 function classifyAttempt(attempt: Record<string, unknown>): AttemptClass {
@@ -268,19 +310,35 @@ export function normalizePlaywrightResults(
         return [failedAttemptRecord(attempt, index, repoRoot)];
       });
       if (failedAttempts.length) {
+        // The error log shows the last failed attempt; earlier ones stay in failedAttempts.
+        const lastFailed = failedAttempts[failedAttempts.length - 1];
+        const lastFailedIndex = attempts.findIndex(
+          (attempt, index) => attemptNumber(attempt, index) === lastFailed.attempt,
+        );
         return {
           ...base,
           state: 'passed',
           passedAfterRetry: true,
           failedAttempts,
+          failureLog: attemptFailureLog(
+            attempts[lastFailedIndex],
+            lastFailedIndex,
+            lastFailed.status,
+            repoRoot,
+          ),
         };
       }
       return { ...base, state: 'passed' };
     }
-    if (finalClass === 'inconclusive') return { ...base, state: 'inconclusive' };
     if (finalClass === 'skipped') return { ...base, state: 'skipped' };
+    // A final attempt that did not pass stores its own error log.
+    const finalLog = (status: string) =>
+      attemptFailureLog(finalAttempt, attempts.length - 1, status, repoRoot);
+    if (finalClass === 'inconclusive') {
+      return { ...base, state: 'inconclusive', failureLog: finalLog('inconclusive') };
+    }
     if (finalClass === 'failed' || finalClass === 'timedOut' || finalClass === 'interrupted') {
-      return { ...base, state: 'failed' };
+      return { ...base, state: 'failed', failureLog: finalLog(finalClass) };
     }
     return { ...base, state: processFailed ? 'failed' : 'unexecuted' };
   });

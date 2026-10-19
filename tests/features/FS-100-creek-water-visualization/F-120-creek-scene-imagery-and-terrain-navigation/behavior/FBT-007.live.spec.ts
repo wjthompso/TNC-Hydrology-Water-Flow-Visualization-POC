@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { test, type Page, type TestInfo } from '../../../../support/browser/esri-response-cache.ts';
+import { test, type Page, type TestInfo } from '../../../../support/browser/response-cache/index.ts';
 import {
   distanceMeters,
   openObservedWaterPage,

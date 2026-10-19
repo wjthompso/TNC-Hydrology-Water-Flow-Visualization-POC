@@ -4,7 +4,7 @@
  * hit-testing creek-bed points for water-surface graphics.
  */
 
-import type { Page } from '../../../../support/browser/esri-response-cache.ts';
+import type { Page } from '../../../../support/browser/response-cache/index.ts';
 import type { TestCameraPose } from '../../../../support/browser/test-mode-api';
 import { approvedExternalDisruptionEvidence } from '../../../../support/network/live-release-evidence.ts';
 import type { LiveServiceWatch } from '../../F-110-observed-jalama-gauge-water/behavior/observed-jalama-gauge-water.ts';

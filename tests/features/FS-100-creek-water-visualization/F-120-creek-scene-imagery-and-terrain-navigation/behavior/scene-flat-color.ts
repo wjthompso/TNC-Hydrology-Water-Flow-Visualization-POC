@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { PNG } from 'pngjs';
-import type { CDPSession, Page, TestInfo } from '../../../../support/browser/esri-response-cache.ts';
+import type { CDPSession, Page, TestInfo } from '../../../../support/browser/response-cache/index.ts';
 import { formatAltitude, readCameraAltitudeM } from './scene-camera.ts';
 import type { SidebarMask } from './scene-check-outcome.ts';
 

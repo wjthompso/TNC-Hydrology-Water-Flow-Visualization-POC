@@ -1,4 +1,4 @@
-import type { Page } from '../../../../support/browser/esri-response-cache.ts';
+import type { Page } from '../../../../support/browser/response-cache/index.ts';
 import { approvedExternalDisruptionEvidence } from '../../../../support/network/live-release-evidence.ts';
 import {
   rethrowIfExternalOutage,

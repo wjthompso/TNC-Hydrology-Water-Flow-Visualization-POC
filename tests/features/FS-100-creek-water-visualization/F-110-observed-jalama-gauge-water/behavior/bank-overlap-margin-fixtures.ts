@@ -4,7 +4,7 @@
  * in `FBT-010-bug-reproduction.json`.
  */
 
-import type { Page } from '../../../../support/browser/esri-response-cache.ts';
+import type { Page } from '../../../../support/browser/response-cache/index.ts';
 import type { TestCameraPose } from '../../../../support/browser/test-mode-api';
 
 /** Below-water, upward-tilt camera that first produced the rim-hole evidence. */

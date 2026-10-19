@@ -18,6 +18,13 @@ import {
   type NormalizedTestResult,
 } from '../tests/support/reporting/playwright-results.ts';
 import {
+  failureMessageText,
+  locationFromStack,
+  relevantStackLines,
+  runnerCommandText,
+  type FailureLog,
+} from '../tests/support/reporting/failure-log.ts';
+import {
   requiredGateDefinitionFingerprint,
   testDefinitionFingerprint,
 } from '../tests/support/reporting/test-definition-fingerprint.ts';
@@ -25,7 +32,7 @@ import {
   introductionLines,
   type PlannedTest,
 } from '../tests/support/reporting/run-progress.ts';
-import { ESRI_RESPONSE_CACHE_FOLDER } from '../tests/support/browser/esri-response-cache-location.ts';
+import { RESPONSE_CACHE_FOLDERS } from '../tests/support/browser/response-cache/cache-location.ts';
 import { validateTestingFoundations } from '../tests/support/validation/foundations.ts';
 
 const root = process.cwd();
@@ -210,20 +217,55 @@ function vitestResults(
     const runtime = typeof perfStats?.runtime === 'number' ? perfStats.runtime : 0;
     const duration = typeof assertion?.duration === 'number' ? assertion.duration : runtime;
     const durationMs = Math.round(duration);
-    return {
-      id: test.id,
-      state:
-        status === 'passed'
-          ? 'passed'
-          : status === 'pending' || status === 'skipped'
-            ? 'skipped'
-            : processFailed
-              ? 'failed'
-              : 'unexecuted',
-      durationMs,
-      totalDurationMs: durationMs,
-    };
+    const state =
+      status === 'passed'
+        ? 'passed'
+        : status === 'pending' || status === 'skipped'
+          ? 'skipped'
+          : processFailed
+            ? 'failed'
+            : 'unexecuted';
+    const result: NormalizedResult = { id: test.id, state, durationMs, totalDurationMs: durationMs };
+    if (state === 'failed') {
+      result.failureLog = vitestFailureLog(assertion, file, durationMs);
+    }
+    return result;
   });
+}
+
+/** Vitest has no attempts or artifacts; its failure messages carry the error and stack. */
+function vitestFailureLog(
+  assertion: Record<string, unknown> | null | undefined,
+  file: Record<string, unknown> | null | undefined,
+  durationMs: number,
+): FailureLog {
+  const failureMessages = Array.isArray(assertion?.failureMessages)
+    ? assertion.failureMessages.filter((text): text is string => typeof text === 'string')
+    : [];
+  // A file-level error (such as an import failure) has no assertion entry.
+  const texts = failureMessages.length
+    ? failureMessages
+    : typeof file?.message === 'string'
+      ? [file.message]
+      : [];
+  const stackLines = relevantStackLines(texts, root);
+  const log: FailureLog = {
+    attempt: 1,
+    status: 'failed',
+    durationMs,
+    errorMessage: failureMessageText(texts) || 'Vitest reported a failure without a message.',
+  };
+  const errorLocation = locationFromStack(stackLines);
+  if (errorLocation) log.errorLocation = errorLocation;
+  if (stackLines.length) log.stackLines = stackLines;
+  return log;
+}
+
+/** Records which run produced each error log, so the catalog can find its raw report and artifacts. */
+function stampRunId(results: NormalizedResult[], runId: string): NormalizedResult[] {
+  return results.map((result) =>
+    result.failureLog ? { ...result, failureLog: { ...result.failureLog, runId } } : result,
+  );
 }
 
 function playwrightResults(
@@ -281,7 +323,10 @@ async function runNonBrowser(
     ],
     { TNC_TEST_RUN_PLAN: announceRun(selected, workers) },
   );
-  const results = vitestResults(await readJson(output), selected, processResult.exitCode !== 0);
+  const results = stampRunId(
+    vitestResults(await readJson(output), selected, processResult.exitCode !== 0),
+    runKey,
+  );
   return {
     ...executionStatus(selected, results),
     durationMs: processResult.durationMs,
@@ -339,7 +384,10 @@ async function runBrowser(
       PLAYWRIGHT_JSON_OUTPUT_FILE: report,
     },
   );
-  const results = playwrightResults(await readJson(report), selected, processResult.exitCode !== 0);
+  const results = stampRunId(
+    playwrightResults(await readJson(report), selected, processResult.exitCode !== 0),
+    `${runKey}-${mode}`,
+  );
   return {
     ...executionStatus(selected, results),
     durationMs: processResult.durationMs,
@@ -415,10 +463,22 @@ function lifecycleFor(test: CatalogTest | undefined): string {
   return testCatalog.features.find(({ id }) => id === test?.owner)?.lifecycle ?? 'not-applicable';
 }
 
+/** The npm command this process was started as, recorded on each error log. */
+const invokedCommand = runnerCommandText(
+  commandLine.mode,
+  commandLine.selector,
+  commandLine.headed,
+);
+
 function recordedTestResult(result: NormalizedResult, timestamp: string) {
   const test = testCatalog.tests.find(({ id }) => id === result.id);
   return {
     ...result,
+    ...(result.failureLog
+      ? {
+          failureLog: { ...result.failureLog, command: invokedCommand, recordedAt: timestamp },
+        }
+      : {}),
     timestamp,
     lifecycle: lifecycleFor(test),
     enforcement: test?.enforcement,
@@ -594,11 +654,13 @@ try {
       console.log('--headed has no effect: this command selected no browser tests.');
     }
     if (mode === 'refresh-map-cache') {
-      const savedEsriResponses = path.join(cacheDirectory, ESRI_RESPONSE_CACHE_FOLDER);
-      await rm(savedEsriResponses, { recursive: true, force: true });
-      console.log(
-        `Deleted saved Esri responses in ${savedEsriResponses}. Every live browser test will download them again.`,
-      );
+      // Clear every source in the live response cache (Esri and USGS 3DEP terrain).
+      for (const folder of RESPONSE_CACHE_FOLDERS) {
+        const savedResponses = path.join(cacheDirectory, folder);
+        await rm(savedResponses, { recursive: true, force: true });
+        console.log(`Deleted saved responses in ${savedResponses}.`);
+      }
+      console.log('Every live browser test will download them again.');
     }
     if (mode === 'fast-only') {
       const excluded = testCatalog.tests.filter(
