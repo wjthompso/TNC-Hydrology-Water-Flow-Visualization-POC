@@ -538,8 +538,6 @@ function geographicPoint(point: Point): Point | null {
 function setSceneNote(): void {
   const note = document.getElementById('scene-note');
   if (!note) return;
-  // Avoid a number-plus-unit like "1 m" here: FBT-005 forbids any water-quantity
-  // string on the page, and "1 m" would trip that guard.
   note.textContent =
     'Imagery: Esri, Maxar, Earthstar Geographics, and the GIS User Community. Terrain: USGS 3DEP, with Esri World Elevation beyond the creek.';
 }

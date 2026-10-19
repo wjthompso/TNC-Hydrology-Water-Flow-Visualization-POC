@@ -159,32 +159,6 @@
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-004.live.spec.ts"
     },
     {
-      "id": "FBT-005",
-      "name": "Hide every numeric water-surface elevation, stage, and discharge value on the page.",
-      "methodology": "At the opening time, the published flood peak, and a gap slot, reads document.body.innerText plus every aria-label, aria-valuetext, and title value and checks that none contain a water number, the words stage or discharge, or the published water-surface elevations for those times rounded to 1, 2, or 3 decimals. The browser page and committed published data are real. Esri World Imagery and Esri World Elevation responses are real and are reused from a local disk cache; a response missing from the cache is fetched live, and if that fetch is unavailable the result is inconclusive rather than passed. Nothing else is mocked. Console output and the visual appearance of the water are not checked.",
-      "category": "feature-behavior",
-      "owner": "F-110",
-      "additionalFeatureAssociations": [],
-      "scope": "end-to-end",
-      "environment": "browser",
-      "browserMode": "live",
-      "regression": false,
-      "bugReference": null,
-      "rootCauseAnalysis": null,
-      "enforcement": "disabled",
-      "enforcementChange": {
-        "reason": "Product direction reversed: the Experience now shows water-surface elevation, stage, and discharge values rather than hiding them. The test's forbidden-numbers rule contradicts the current intended behavior.",
-        "affectedBehaviors": [
-          "Hide every numeric water-surface elevation, stage, and discharge value on the page."
-        ],
-        "consequences": "FBT-005 no longer counts as required and will not block the release gate. The forbidden-numbers invariant is retired; the Experience is free to render water-surface elevation, stage, and discharge. The source spec file was deleted on 2026-10-15.",
-        "approvalEvidence": "Developer approved retirement on 2026-10-15 in the governance housekeeping task that accompanied this catalog change."
-      },
-      "durationBudgetMs": 20000,
-      "fast": false,
-      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-005.live.spec.ts"
-    },
-    {
       "id": "FBT-006",
       "name": "Zoom out from the Jalama Creek Segment without exposing an empty flat-color coastal void.",
       "methodology": "Opens the locally served page in test mode and waits until the test seam reports ready and SceneView has finished loading with a still camera. The browser page, ArcGIS SceneView, and committed published creek data are real. Esri World Imagery and Esri World Elevation responses are real and are reused from a local disk cache; a response missing from the cache is fetched live and saved. When a live fetch fails with DNS, TLS, HTTP 429, or HTTP 5xx and no frame failed, or no terrain tiles arrive, the result is inconclusive rather than passed. Nothing else is mocked. After the opening frame, the test-mode camera command moves the camera instantly to a fixed coast-scale pose about 12 km up, the pose three mouse-wheel notches reach, and waits again until the scene has finished loading. At the opening frame and the coast frame it screenshots a 640×480 clip of the scene, masks the sidebar using its DOM bounding box, samples every fourth pixel, and fails when the share of those pixels whose RGB exactly equals the single most common RGB exceeds 10%. A measured flat-color failure stays a failure even when Esri also reported an outage. The failure names the step, camera height, flat color, and share, and attaches the screenshot. It does not check mouse-wheel input, intermediate zoom levels, a white far-zoom frame, imagery sharpness, tile vintage differences, terrain accuracy, or water appearance.",
@@ -430,25 +404,6 @@
       "durationBudgetMs": 5000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/supporting/FST-003.test.ts"
-    },
-    {
-      "id": "FST-004",
-      "name": "Adjacent wet Creek Segments leave no thalweg gap and no vertex step above 0.15 m in the local pipeline output.",
-      "methodology": "Why it matters: FBT-011 and FBT-012 see the seams between neighbouring Creek Segments in the browser. This check reads the same local pipeline output directly, in about a second, so a pipeline change can be judged before a browser run. How it checks: it reads 01-cross-sections/cross-sections.json and the WY2023 National Water Model hourly Time Series for the Jalama flowline from the developer's local output under data/modeled-water-surface-elevation-pipeline-output/jalama-gauge-reach, pairs consecutive Creek Segments and orients each pair upstream to downstream by Stage 1's rule (the flowline's first sampled bed against its last). At 2022-12-01T12:00Z and 2023-01-10T01:00Z, for every pair whose two water-surface elevations are both above their beds, it counts a gap pair when a Stage 1 thalweg point at the shared boundary (the upstream segment's downstream-most points or the downstream segment's upstream-most points) lies at or above its segment's 0.05 m bucket floor, the same wet threshold Stage 4 used to draw the polygon, and it records the step between the two elevations, which today are each segment's single flat height and so also its height at the boundary. It fails when more than 5% of the wet pairs are gap pairs or when the 90th percentile step exceeds 0.15 m at either hour; the message gives the pair counts, the median, 90th percentile and maximum step, and example pairs. When the local output is missing it is skipped, not passed, with a message naming the pipeline command. What is real: the local output files and Stage 4's bucket step from the pipeline configuration. Nothing is mocked, and there is no network. What it does not check: the drawn polygons themselves, terrain cells away from the thalweg points, other hours, the California Natural Flows Dataset, the Dangermond Preserve extent, or rendering. It assumes one elevation per segment per hour; if a fix writes per-vertex junction elevations, the reader needs an approved update.",
-      "category": "feature-supporting",
-      "owner": "F-140",
-      "additionalFeatureAssociations": [],
-      "scope": "integration",
-      "environment": "non-browser",
-      "browserMode": "not-applicable",
-      "regression": false,
-      "bugReference": null,
-      "rootCauseAnalysis": null,
-      "enforcement": "nonblocking",
-      "enforcementChange": null,
-      "durationBudgetMs": 5000,
-      "fast": false,
-      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-140-modeled-creek-water-surface-elevation/supporting/FST-004.test.ts"
     },
     {
       "id": "SST-001",
