@@ -1,7 +1,6 @@
 node_modules/
 apps/creek-visualization-browser/dist/
 
-.test-cache/
 .test-results/
 playwright-report/
 test-results/
