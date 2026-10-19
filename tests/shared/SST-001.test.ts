@@ -520,5 +520,96 @@ describe('SST-001', () => {
       name: 'inconclusive',
       exitCode: 2,
     });
+
+    // Stored error logs: a pass after retry keeps the last failed attempt's log.
+    expect(failedThenPassed.failureLog).toMatchObject({
+      attempt: 1,
+      status: 'timedOut',
+      errorLocation: 'tests/sample/FBT-003.live.spec.ts:12',
+      tracePath: '.test-results/playwright-artifacts/trace.zip',
+      screenshotPath: '.test-results/playwright-artifacts/shot.png',
+    });
+    expect(inconclusiveThenPassed.failureLog).toMatchObject({
+      attempt: 1,
+      status: 'inconclusive',
+      errorMessage: 'INCONCLUSIVE: USGS tiles unavailable',
+    });
+
+    // A final failure stores the final attempt's log, bounded and ANSI-free.
+    const escape = String.fromCharCode(27);
+    const failedWithArtifacts = normalize([
+      { retry: 0, status: 'failed', duration: 5, error: { message: 'first' } },
+      {
+        retry: 1,
+        status: 'failed',
+        duration: 9,
+        error: {
+          message: `${escape}[31m${'water '.repeat(2000)}${escape}[0m\n${'line\n'.repeat(60)}`,
+          stack: Array.from(
+            { length: 20 },
+            (_, index) => `    at step${index} (/repo/tests/sample/FBT-003.live.spec.ts:${index + 1}:3)`,
+          ).join('\n'),
+          location: { file: '/repo/tests/sample/FBT-003.live.spec.ts', line: 30 },
+        },
+        stdout: [
+          {
+            text: Array.from(
+              { length: 100 },
+              (_, index) => `${escape}[32mout ${index} ${'x'.repeat(200)}${escape}[0m`,
+            ).join('\n'),
+          },
+        ],
+        stderr: [{ text: `${escape}[33merr detail${escape}[0m\n` }],
+        attachments: [
+          {
+            name: 'trace',
+            contentType: 'application/zip',
+            path: '/repo/.test-results/playwright-artifacts/final-trace.zip',
+          },
+          {
+            name: 'screenshot',
+            contentType: 'image/png',
+            path: '/repo/.test-results/playwright-artifacts/final-shot.png',
+          },
+        ],
+      },
+    ]);
+    expect(failedWithArtifacts.state).toBe('failed');
+    expect(failedWithArtifacts.failureLog).toMatchObject({
+      attempt: 2,
+      status: 'failed',
+      durationMs: 9,
+      errorLocation: 'tests/sample/FBT-003.live.spec.ts:30',
+      tracePath: '.test-results/playwright-artifacts/final-trace.zip',
+      screenshotPath: '.test-results/playwright-artifacts/final-shot.png',
+    });
+
+    // Documented caps in failure-log.ts: 40 message lines, 12 stack lines,
+    // 40 stdout or stderr lines, 4000 characters per text field (plus one ellipsis).
+    const storedLogs = [
+      failedThenPassed.failureLog,
+      inconclusiveThenPassed.failureLog,
+      failedWithArtifacts.failureLog,
+    ];
+    for (const log of storedLogs) {
+      expect(log).toBeDefined();
+      const textFields = [
+        log?.errorMessage,
+        log?.stdoutTail,
+        log?.stderrTail,
+        ...(log?.stackLines ?? []),
+      ].filter((text): text is string => typeof text === 'string');
+      for (const text of textFields) {
+        expect(text.includes(escape)).toBe(false);
+        expect(text.length).toBeLessThanOrEqual(4001);
+      }
+      expect(log?.errorMessage.split('\n').length).toBeLessThanOrEqual(40);
+      expect(log?.stdoutTail?.split('\n').length ?? 0).toBeLessThanOrEqual(40);
+      expect(log?.stderrTail?.split('\n').length ?? 0).toBeLessThanOrEqual(40);
+      expect(log?.stackLines?.length ?? 0).toBeLessThanOrEqual(12);
+    }
+    expect(failedWithArtifacts.failureLog?.errorMessage.length).toBe(4001);
+    expect(failedWithArtifacts.failureLog?.stdoutTail?.length).toBe(4001);
+    expect(failedWithArtifacts.failureLog?.stackLines).toHaveLength(12);
   });
 });
