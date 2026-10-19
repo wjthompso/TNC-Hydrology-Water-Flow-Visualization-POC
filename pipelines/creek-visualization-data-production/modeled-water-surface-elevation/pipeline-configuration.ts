@@ -53,7 +53,8 @@ export const MODELED_EXTENTS = {
     extentId: 'dangermond-preserve',
     description: 'Every TNC flowline intersecting the Dangermond Preserve boundary (jldp_boundary layer 2): 105 flowlines, 3,338 Creek Segments.',
     segmentNetworkVersion: 'dangermond-preserve-v1',
-    flowlineSnapshotPath: path.join(pipelineOutputDirectory, 'dangermond-preserve/00-acquire/tnc-flowlines-dangermond-preserve.json'),
+    // Tracked source input (see retain-dangermond-preserve-flowlines.ts), not pipeline output.
+    flowlineSnapshotPath: path.join(retainedSourceDirectory, 'tnc-flowlines-dangermond-preserve.json'),
     terrainBufferM: 150,
     nhdplusV2CrosswalkPath: crosswalkPathFor('dangermond-preserve'),
     // Unblocked: browser-facing files are now split per TNC flowline (see METHODOLOGY.md "File layout").

@@ -52,9 +52,9 @@ const REACH_CROSSWALK_ROOT = path.join(RETAINED_SOURCE_ROOT, 'reviewed-assignmen
  * in the pipeline's pipeline-configuration.ts, which cannot be imported here
  * because it reads `--extent=` from the process arguments on import.
  */
-function flowlineSnapshotPathFor(extent: string, extentRoot: string): string {
+function flowlineSnapshotPathFor(extent: string): string {
   if (extent === 'jalama-gauge-reach') return path.join(RETAINED_SOURCE_ROOT, 'tnc-flowline-27714637.json');
-  return path.join(extentRoot, '00-acquire', `tnc-flowlines-${extent}.json`);
+  return path.join(RETAINED_SOURCE_ROOT, `tnc-flowlines-${extent}.json`);
 }
 
 type LonLat = [number, number];
@@ -337,7 +337,7 @@ function growBbox(bbox: Bbox, lon: number, lat: number): void {
  * draws flat water).
  */
 async function loadSegmentPaths(extent: string, extentRoot: string): Promise<CachedIndex | null> {
-  const snapshotPath = flowlineSnapshotPathFor(extent, extentRoot);
+  const snapshotPath = flowlineSnapshotPathFor(extent);
   const crossSectionsPath = path.join(extentRoot, CROSS_SECTIONS_FILE);
   let fingerprint: string;
   try {
