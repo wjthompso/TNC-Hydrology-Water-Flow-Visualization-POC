@@ -12,6 +12,12 @@
 // two vertices, so the browser can slope each water polygon between the
 // junction water-surface elevations the Time Series carry and cut the slope at
 // the same junction bisectors Stage 4 cut the polygons at.
+//
+// WSE Polygon Generation Methods: `wse-polygon-methods.json` lists every saved
+// method version of the extent (read from each version's Stage 4 manifest),
+// and each version folder gets its own computed flowline index at
+// `04-water-surface-polygons/<method-id>/v<version>/flowline-index.json`. The
+// extent-level `flowline-index.json` is the default method's newest version.
 
 import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -20,13 +26,17 @@ import { fileURLToPath } from 'node:url';
 import type { Plugin } from 'vite';
 import { adjacentSegmentsById } from '../../../pipelines/creek-visualization-data-production/creek-segment-adjacency.ts';
 import { segmentTncFlowlines } from '../../../pipelines/creek-visualization-data-production/tnc-flowline-segmentation.ts';
+import { listSavedWsePolygonMethodVersions } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/wse-polygon-generation-method-outputs.ts';
+import { DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/wse-polygon-generation-method-registry.ts';
 
 export const MODELED_WATER_DATA_URL_PREFIX = '/modeled-water-surface-elevation-data/';
 const FLOWLINE_INDEX_FILE = 'flowline-index.json';
 const SEGMENT_PATHS_FILE = 'creek-segment-paths.json';
+const WSE_POLYGON_METHODS_FILE = 'wse-polygon-methods.json';
 /** Served from the tracked reviewed-assignments folder, not from the pipeline output. */
 const REACH_CROSSWALK_FILE = 'reach-crosswalk.json';
-const POLYGON_SETS_FOLDER = '04-water-surface-polygons/water-surface-polygon-sets';
+const WATER_SURFACE_POLYGONS_STAGE_FOLDER = '04-water-surface-polygons';
+const POLYGON_SETS_FOLDER_NAME = 'water-surface-polygon-sets';
 const CROSS_SECTIONS_FILE = '01-cross-sections/cross-sections.json';
 
 const pluginDirectory = fileURLToPath(new URL('.', import.meta.url));
@@ -112,8 +122,17 @@ export function modeledWaterDataPlugin(): Plugin {
             return;
           }
           const extentRoot = path.join(DATA_ROOT, extent);
-          if (rest.length === 1 && rest[0] === FLOWLINE_INDEX_FILE) {
-            const index = await loadFlowlineIndex(extent, extentRoot);
+          if (rest.length === 1 && rest[0] === WSE_POLYGON_METHODS_FILE) {
+            respondJson(response, JSON.stringify(await listWsePolygonMethods(extentRoot)));
+            return;
+          }
+          if (rest[rest.length - 1] === FLOWLINE_INDEX_FILE) {
+            const methodFolder = await flowlineIndexMethodFolder(extentRoot, rest.slice(0, -1));
+            if (!methodFolder) {
+              respondText(response, 404, `No saved WSE Polygon Generation Method output at ${relative}.`);
+              return;
+            }
+            const index = await loadFlowlineIndex(methodFolder);
             respondJson(response, index.body);
             return;
           }
@@ -186,16 +205,59 @@ function respondText(
   response.end(message);
 }
 
+interface WsePolygonMethodListEntry {
+  methodId: string;
+  version: number;
+  label: string;
+  description: string;
+  browserDrawing: string;
+  /** Relative to the extent folder. */
+  path: string;
+}
+
+/** Every saved WSE Polygon Generation Method version of the extent, read from the Stage 4 manifests on each request. */
+async function listWsePolygonMethods(
+  extentRoot: string,
+): Promise<{ defaultMethodId: string; versions: WsePolygonMethodListEntry[] }> {
+  const saved = await listSavedWsePolygonMethodVersions(path.join(extentRoot, WATER_SURFACE_POLYGONS_STAGE_FOLDER));
+  return {
+    defaultMethodId: DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
+    versions: saved.map((entry) => ({
+      methodId: entry.methodId,
+      version: entry.version,
+      label: entry.method.label,
+      description: entry.method.description,
+      browserDrawing: entry.method.browserDrawing,
+      path: `${WATER_SURFACE_POLYGONS_STAGE_FOLDER}/${entry.relativePath}`,
+    })),
+  };
+}
+
+/**
+ * The method version folder a flowline-index request names: the extent root
+ * means the default method's newest version; otherwise the request must be
+ * `04-water-surface-polygons/<method-id>/v<version>/flowline-index.json` for a saved version.
+ */
+async function flowlineIndexMethodFolder(extentRoot: string, folderParts: string[]): Promise<string | null> {
+  const { defaultMethodId, versions } = await listWsePolygonMethods(extentRoot);
+  const requested =
+    folderParts.length === 0
+      ? versions.filter((entry) => entry.methodId === defaultMethodId).at(-1)
+      : versions.find((entry) => entry.path === folderParts.join('/'));
+  return requested ? path.join(extentRoot, requested.path) : null;
+}
+
 /**
  * The index is rebuilt whenever the polygon folder's file list or mtimes change,
  * so a pipeline rerun by another process is picked up on the next request.
+ * Cached per method version folder.
  */
-async function loadFlowlineIndex(extent: string, extentRoot: string): Promise<CachedIndex> {
-  const folder = path.join(extentRoot, POLYGON_SETS_FOLDER);
+async function loadFlowlineIndex(methodFolder: string): Promise<CachedIndex> {
+  const folder = path.join(methodFolder, POLYGON_SETS_FOLDER_NAME);
   const names = (await readdir(folder)).filter((name) => name.endsWith('.json')).sort();
   const stats = await Promise.all(names.map((name) => stat(path.join(folder, name))));
   const fingerprint = names.map((name, i) => `${name}:${stats[i].size}:${stats[i].mtimeMs}`).join('|');
-  const cached = indexCache.get(extent);
+  const cached = indexCache.get(folder);
   if (cached) {
     const resolved = await cached.catch(() => null);
     if (resolved && resolved.fingerprint === fingerprint) return resolved;
@@ -204,7 +266,7 @@ async function loadFlowlineIndex(extent: string, extentRoot: string): Promise<Ca
     fingerprint,
     body: JSON.stringify(index),
   }));
-  indexCache.set(extent, building);
+  indexCache.set(folder, building);
   return building;
 }
 

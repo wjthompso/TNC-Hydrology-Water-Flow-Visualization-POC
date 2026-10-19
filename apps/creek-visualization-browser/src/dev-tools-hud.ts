@@ -11,8 +11,10 @@
 // - View: Simple shows headline numbers and a 3D camera attitude indicator.
 //   Detailed shows the raw JSON readouts.
 // Both toggles share one data feed, so switching never loses state.
-// Dataset and time sits above both views. Copy all JSON bundles that readout,
-// the camera pose, and the last click capture.
+// Dataset and time sits above both views. In the modeled experience it also
+// holds the 'Polygon method' select, which switches the drawn WSE Polygon
+// Generation Method version live. Copy all JSON bundles that readout (with the
+// drawn method), the camera pose, and the last click capture.
 
 import 'overlayscrollbars/overlayscrollbars.css';
 import './dev-tools-hud.css';
@@ -48,6 +50,7 @@ import type {
   ModeledSegmentReading,
 } from './modeled-creek-experience';
 import { formatObservationTime } from './observation-timeline-controls';
+import { wsePolygonMethodKey, type WsePolygonMethodVersion } from './wse-polygon-generation-methods';
 
 interface DevToolsHudOptions {
   view: SceneView;
@@ -88,6 +91,9 @@ interface DatasetAndTimeCapture {
   selectedTimeUtc: string | null;
   /** Same America/Los_Angeles label the time panel shows, for example `Sep 30, 2017, 5:00 PM PDT`. */
   selectedTimeLocal: string | null;
+  /** Modeled only: the WSE Polygon Generation Method version drawn, e.g. `junction-sloped-terrain-fill@v1`. */
+  wsePolygonMethod: string | null;
+  wsePolygonMethodLabel: string | null;
 }
 
 interface SeamShape {
@@ -283,6 +289,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   const datasetSection = buildSection('Dataset and time', '01', 2);
   const datasetReadout = createElement('pre', [READOUT_BLOCK_CLASS], '{}');
   const copyDatasetButton = buildCopyButton('Copy JSON');
+  if (modeledSeam) datasetSection.body.appendChild(buildWsePolygonMethodPicker(modeledSeam));
   datasetSection.body.append(datasetReadout, copyDatasetButton);
   scrollHost.appendChild(datasetSection.root);
 
@@ -1312,10 +1319,11 @@ function readDatasetAndTime(
       modeled.datasetLabel,
       modeled.extentId,
       modeled.selectedTimeUtcMs,
+      modeled.wsePolygonMethod,
     );
   }
   const observed = DATASET_PICKER_OPTIONS.find((option) => option.id === OBSERVED_DATASET_OPTION_ID);
-  return datasetAndTimeCapture(observed?.id ?? null, observed?.label ?? null, null, observedTimeUtcMs);
+  return datasetAndTimeCapture(observed?.id ?? null, observed?.label ?? null, null, observedTimeUtcMs, null);
 }
 
 function datasetAndTimeCapture(
@@ -1323,23 +1331,93 @@ function datasetAndTimeCapture(
   datasetLabel: string | null,
   extentId: string | null,
   timeUtcMs: number | null,
+  wsePolygonMethod: WsePolygonMethodVersion | null,
 ): DatasetAndTimeCapture {
-  if (typeof timeUtcMs !== 'number' || !Number.isFinite(timeUtcMs)) {
-    return {
-      datasetId,
-      datasetLabel,
-      extentId,
-      selectedTimeUtc: null,
-      selectedTimeLocal: null,
-    };
-  }
+  const hasTime = typeof timeUtcMs === 'number' && Number.isFinite(timeUtcMs);
   return {
     datasetId,
     datasetLabel,
     extentId,
-    selectedTimeUtc: new Date(timeUtcMs).toISOString(),
-    selectedTimeLocal: formatObservationTime(timeUtcMs),
+    selectedTimeUtc: hasTime ? new Date(timeUtcMs).toISOString() : null,
+    selectedTimeLocal: hasTime ? formatObservationTime(timeUtcMs) : null,
+    wsePolygonMethod: wsePolygonMethod ? wsePolygonMethodKey(wsePolygonMethod) : null,
+    wsePolygonMethodLabel: wsePolygonMethod?.label ?? null,
   };
+}
+
+// --- Polygon method (modeled experience only) --------------------------------
+
+/**
+ * 'Polygon method' select: every saved WSE Polygon Generation Method version
+ * of the extent. Choosing one redraws the water live with that version's
+ * polygons; the label and description of the drawn version show underneath.
+ */
+function buildWsePolygonMethodPicker(seam: ModeledExperienceSeam): HTMLElement {
+  const root = createElement('div', ['flex', 'flex-col', 'gap-1']);
+  const label = createElement('label', [FIELD_LABEL_CLASS], 'Polygon method');
+  const select = createElement('select', [
+    'w-full',
+    'cursor-pointer',
+    'rounded',
+    'border',
+    'border-hud-well-edge',
+    'bg-hud-well',
+    'px-2',
+    'py-1',
+    'font-mono',
+    'text-[11px]',
+    'font-semibold',
+    'text-hud-ink',
+    'focus-visible:outline',
+    'focus-visible:outline-2',
+    'focus-visible:outline-offset-2',
+    'focus-visible:outline-hud-focus',
+    'disabled:cursor-wait',
+    'disabled:opacity-60',
+  ]);
+  // Linked so the label names the control for assistive technology.
+  select.id = 'dev-tools-wse-polygon-method';
+  label.htmlFor = select.id;
+  for (const entry of seam.wsePolygonMethods) {
+    const option = createElement('option', [], `${entry.label} · v${entry.version}`);
+    option.value = wsePolygonMethodKey(entry);
+    select.appendChild(option);
+  }
+  const description = createElement('p', ['text-[11px]', 'font-semibold', 'leading-snug', 'text-hud-label']);
+  description.setAttribute('aria-live', 'polite');
+
+  const render = (status?: string): void => {
+    const drawn = seam.wsePolygonMethod;
+    select.value = wsePolygonMethodKey(drawn);
+    const drawing = drawn.browserDrawing === 'sloped-between-junctions' ? 'drawn sloped between junctions' : 'drawn flat';
+    description.textContent = [
+      `${drawn.label} (${wsePolygonMethodKey(drawn)}, ${drawing}).`,
+      drawn.description,
+      status ?? null,
+    ]
+      .filter((line): line is string => line !== null && line.length > 0)
+      .join(' ');
+  };
+
+  select.addEventListener('change', () => {
+    const key = select.value;
+    select.disabled = true;
+    render('Loading…');
+    seam
+      .setWsePolygonMethod(key)
+      .then(() => render())
+      .catch((error: unknown) => {
+        console.error('[dev-tools-hud] polygon method switch failed', error);
+        render(`Switch failed: ${error instanceof Error ? error.message : String(error)}`);
+      })
+      .finally(() => {
+        select.disabled = false;
+      });
+  });
+
+  render();
+  root.append(label, select, description);
+  return root;
 }
 
 // --- Formatting -------------------------------------------------------------

@@ -17,7 +17,8 @@ import type { JunctionWaterSurface, SegmentFlowlinePath, SegmentSurfaceGeometry 
 const MAX_CACHED_FLOWLINES = 24;
 /** Parallel fetches. The preserve's largest polygon file is ~13 MB. */
 const MAX_PARALLEL_FETCHES = 4;
-const POLYGON_SETS_PATH = '04-water-surface-polygons/water-surface-polygon-sets';
+/** Inside a WSE Polygon Generation Method version folder. */
+const POLYGON_SETS_FOLDER_NAME = 'water-surface-polygon-sets';
 const TIME_SERIES_ROOT = '03-time-series';
 
 export interface FlowlineIndexSegment {
@@ -61,6 +62,11 @@ export interface LoadedFlowline {
 
 export interface ModeledWaterDataStoreOptions {
   extentId: string;
+  /**
+   * The WSE Polygon Generation Method version folder polygons load from,
+   * relative to the extent, e.g. `04-water-surface-polygons/junction-sloped-terrain-fill/v1`.
+   */
+  wsePolygonMethodPath: string;
   timeSeries: CatalogTimeSeries;
   /** `hourly` Datasets split each flowline into WY<year>.json files. */
   timeStep: string;
@@ -80,6 +86,12 @@ export interface ModeledWaterDataStore {
   whenIdle(): Promise<void>;
   /** Last fetch failure message, or null. Shown in the status line. */
   readonly lastError: string | null;
+  /**
+   * Switches to another WSE Polygon Generation Method version folder: drops
+   * every cached flowline so the next `setNeeded` loads that version's polygons.
+   * A fetch still in flight for the previous folder is discarded when it lands.
+   */
+  setWsePolygonMethodPath(wsePolygonMethodPath: string): void;
 }
 
 export function createModeledWaterDataStore(
@@ -94,6 +106,9 @@ export function createModeledWaterDataStore(
   let neededComids: readonly string[] = [];
   const queue: (() => Promise<void>)[] = [];
   let running = 0;
+  let wsePolygonMethodPath = options.wsePolygonMethodPath;
+  /** Bumped on every method switch; a fetch started under an older generation is discarded. */
+  let cacheGeneration = 0;
 
   const seriesKeyFor = (timeUtcMs: number): string =>
     options.timeStep === 'hourly' ? `WY${waterYearOf(timeUtcMs)}` : 'all';
@@ -174,10 +189,11 @@ export function createModeledWaterDataStore(
           ensureSeries(loaded, seriesKey);
           continue;
         }
-        enqueue(`polygons:${comid}`, async () => {
-          const file = await fetchJson(
-            modeledDataUrl(options.extentId, `${POLYGON_SETS_PATH}/${comid}.json`),
-          );
+        const generation = cacheGeneration;
+        const polygonSetsPath = `${wsePolygonMethodPath}/${POLYGON_SETS_FOLDER_NAME}`;
+        enqueue(`polygons:${generation}:${comid}`, async () => {
+          const file = await fetchJson(modeledDataUrl(options.extentId, `${polygonSetsPath}/${comid}.json`));
+          if (generation !== cacheGeneration) return; // The method changed while this file loaded.
           const flowline: LoadedFlowline = {
             tncComid: comid,
             polygonBucketsBySegmentId: readPolygonSetFile(file),
@@ -207,6 +223,13 @@ export function createModeledWaterDataStore(
     },
     get lastError() {
       return lastError;
+    },
+    setWsePolygonMethodPath(nextPath) {
+      if (nextPath === wsePolygonMethodPath) return;
+      wsePolygonMethodPath = nextPath;
+      cacheGeneration += 1;
+      cache.clear();
+      lastNeededAt.clear();
     },
   };
 }
