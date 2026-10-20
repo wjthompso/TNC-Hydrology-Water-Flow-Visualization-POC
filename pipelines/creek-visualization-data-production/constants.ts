@@ -17,6 +17,15 @@ export const OBSERVATIONS_SNAPSHOT_FILE = 'usgs-11120600-observations.json';
 export const ELEVATION_SNAPSHOT_FILE = 'usgs-3dep-1m-window-jalama-27714637.tif';
 export const RETENTION_MANIFEST_FILE = 'retention-manifest.json';
 export const ASSIGNMENT_FILE = 'reviewed-assignments/monitoring-station-assignment-usgs-11120600.json';
+/**
+ * Reviewed copy of Stage 4's prepared water-surface polygon set for the gauge's Creek Segment,
+ * WSE Polygon Generation Method junction-sloped-terrain-fill v1. Publish copies it byte for byte,
+ * so observed and modeled water draw the same polygons. Its provenance file records the Stage 4
+ * source path, method version, and source-file SHA-256.
+ */
+export const OBSERVED_POLYGON_SET_SNAPSHOT_FILE = 'stage-04-junction-sloped-terrain-fill-v1-27714637-026-polygon-set.json';
+export const OBSERVED_POLYGON_SET_PROVENANCE_FILE =
+  'stage-04-junction-sloped-terrain-fill-v1-27714637-026-polygon-set.provenance.json';
 
 export const TNC_FLOWLINE_QUERY =
   'https://services.arcgis.com/F7DSX1DSNSiWmOqh/arcgis/rest/services/jldp_nhd24kflowlines_streams/FeatureServer/7/query';

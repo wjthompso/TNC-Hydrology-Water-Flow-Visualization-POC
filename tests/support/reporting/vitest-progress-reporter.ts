@@ -1,9 +1,25 @@
 import type { Reporter, TestCase } from 'vitest/node';
-import { readableErrorLines, readRunPlan, RunProgress } from './run-progress.ts';
+import {
+  ProgressLine,
+  readableErrorLines,
+  readRunPlan,
+  runPlanUsesInPlaceProgress,
+  RunProgress,
+} from './run-progress.ts';
 
 /** Prints catalog progress for a non-browser batch. The test runner prints the introduction. */
 export default class VitestProgressReporter implements Reporter {
-  private readonly progress = new RunProgress(readRunPlan(process.env.TNC_TEST_RUN_PLAN));
+  private readonly progress: RunProgress;
+  private readonly output: ProgressLine;
+
+  constructor() {
+    const runPlan = process.env.TNC_TEST_RUN_PLAN;
+    this.progress = new RunProgress(readRunPlan(runPlan));
+    this.output = new ProgressLine(
+      this.progress.initialLine(),
+      runPlanUsesInPlaceProgress(runPlan) && this.progress.total > 0,
+    );
+  }
 
   onTestCaseResult(testCase: TestCase): void {
     if (this.progress.total === 0) return;
@@ -11,9 +27,17 @@ export default class VitestProgressReporter implements Reporter {
     if (result.state === 'pending') return;
     const outcome = result.state === 'passed' ? 'passed' : result.state === 'skipped' ? 'skipped' : 'failed';
     const line = this.progress.finish(testCase.name, outcome);
-    console.log(line ?? `A test finished outside this run: ${testCase.name}`);
+    if (line) {
+      this.output.update(line, this.progress.isComplete());
+    } else {
+      this.output.writePersistentLine(`A test finished outside this run: ${testCase.name}`);
+    }
     if (result.state !== 'failed') return;
     const message = result.errors?.[0]?.message;
-    for (const errorLine of readableErrorLines(message)) console.log(errorLine);
+    for (const errorLine of readableErrorLines(message)) this.output.writePersistentLine(errorLine);
+  }
+
+  onTestRunEnd(): void {
+    this.output.finish();
   }
 }

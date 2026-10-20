@@ -1,5 +1,11 @@
 import type { Reporter, TestCase, TestResult } from '@playwright/test/reporter';
-import { readableErrorLines, readRunPlan, RunProgress } from './run-progress.ts';
+import {
+  ProgressLine,
+  readableErrorLines,
+  readRunPlan,
+  runPlanUsesInPlaceProgress,
+  RunProgress,
+} from './run-progress.ts';
 
 /**
  * Prints run progress for a catalog batch and keeps Playwright's truncating
@@ -7,7 +13,17 @@ import { readableErrorLines, readRunPlan, RunProgress } from './run-progress.ts'
  * The closing catalog summary is printed by the test runner.
  */
 export default class QuietStdioReporter implements Reporter {
-  private readonly progress = new RunProgress(readRunPlan(process.env.TNC_TEST_RUN_PLAN));
+  private readonly progress: RunProgress;
+  private readonly output: ProgressLine;
+
+  constructor() {
+    const runPlan = process.env.TNC_TEST_RUN_PLAN;
+    this.progress = new RunProgress(readRunPlan(runPlan));
+    this.output = new ProgressLine(
+      this.progress.initialLine(),
+      runPlanUsesInPlaceProgress(runPlan) && this.progress.total > 0,
+    );
+  }
 
   printsToStdio(): boolean {
     return true;
@@ -25,14 +41,24 @@ export default class QuietStdioReporter implements Reporter {
     if (this.progress.total === 0) return;
     const id = this.progress.idFor(test.title) ?? test.title;
     if (attemptWillRetry(test, result)) {
-      console.log(`${id} did not pass. Trying again.`);
+      this.output.writePersistentLine(`${id} did not pass. Trying again.`);
       return;
     }
     const line = this.progress.finish(test.title, outcomeWord(result.status));
-    console.log(line ?? `A test finished outside this run: ${test.title}`);
-    if (result.status !== 'passed' && result.status !== 'skipped') {
-      for (const errorLine of readableErrorLines(result.error?.message)) console.log(errorLine);
+    if (line) {
+      this.output.update(line, this.progress.isComplete());
+    } else {
+      this.output.writePersistentLine(`A test finished outside this run: ${test.title}`);
     }
+    if (result.status !== 'passed' && result.status !== 'skipped') {
+      for (const errorLine of readableErrorLines(result.error?.message)) {
+        this.output.writePersistentLine(errorLine);
+      }
+    }
+  }
+
+  onEnd(): void {
+    this.output.finish();
   }
 }
 

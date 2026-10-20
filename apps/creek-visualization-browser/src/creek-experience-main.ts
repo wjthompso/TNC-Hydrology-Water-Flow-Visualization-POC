@@ -14,8 +14,12 @@ import { loadPublishedCreekVisualizationData } from './http-data-contract-loader
 import {
   DATASET_PICKER_OPTIONS,
   OBSERVED_DATASET_OPTION_ID,
+  CAMERA_QUERY_PARAM,
+  SEGMENT_QUERY_PARAM,
   datasetPageUrl,
+  readCameraQuery,
   readDatasetSelection,
+  readOpeningTimeQuery,
 } from './modeled-water-catalog';
 import { installMonitoringStationLocator } from './monitoring-station-locator';
 import { addMonitoringStationMarkers } from './monitoring-station-marker-layer';
@@ -29,6 +33,7 @@ import {
   type SceneImageryId,
 } from './scene-imagery';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
+import type { WaterSurfaceElevationChartState } from './water-surface-elevation-chart';
 
 interface CreekVisualizationTestSeam {
   ready: Promise<boolean>;
@@ -89,6 +94,12 @@ interface CreekVisualizationTestSeam {
     segmentId: string;
     bucketMinElevationM: number | null;
   }[];
+  /** The Selected Creek Segment, or null. Read-only. */
+  readonly selectedCreekSegmentId: string | null;
+  /** Creek Segments whose drawn water carries the selection highlight. Read-only. */
+  readonly highlightedSegmentIds: readonly string[];
+  /** Water-Surface Elevation Chart state; null when the page has no chart. Read-only. */
+  readonly waterSurfaceElevationChart: WaterSurfaceElevationChartState | null;
 }
 
 interface RenderedGroundHeight {
@@ -148,6 +159,7 @@ async function startExperience(): Promise<boolean> {
       sceneView = started.view;
       attachment = started.attachment;
       bindImageryPicker(sceneView);
+      await restoreCarriedCamera(sceneView);
       hideLoadingOverlay();
       await installDevToolsIfRequested();
       return true;
@@ -166,11 +178,13 @@ async function startExperience(): Promise<boolean> {
       timeReadout,
       status,
       speedButtons: readPlaybackSpeedButtons(),
+      openingTimeUtcMs: readOpeningTimeQuery(location.search),
     });
     await attachment.flush();
     // UCS-261: a stream gauge mast where the Jalama Near Lompoc gauge is installed.
     const markers = await addMonitoringStationMarkers(sceneView, [data.station], data.segmentsById);
     await installMonitoringStationLocator(sceneView, markers.stations);
+    await restoreCarriedCamera(sceneView);
     hideLoadingOverlay();
     await installDevToolsIfRequested();
     return true;
@@ -199,7 +213,26 @@ async function installDevToolsIfRequested(): Promise<void> {
   installDevToolsHud({ view: sceneView, attachment, container: document.body });
 }
 
-/** Fills the Dataset picker and reloads the page on a change. */
+/**
+ * Puts the camera back where it was before a Dataset switch (`?camera=`), then
+ * drops the parameter so a plain reload frames the gauge segment again.
+ */
+async function restoreCarriedCamera(view: SceneView): Promise<void> {
+  const pose = readCameraQuery(location.search);
+  const segmentId = new URLSearchParams(location.search).get(SEGMENT_QUERY_PARAM);
+  if (pose) await moveCamera(view, pose);
+  if (segmentId) attachment?.selectedCreekSegmentChart?.selectSegment(segmentId);
+  if (!pose && !segmentId) return;
+  const url = new URL(location.href);
+  url.searchParams.delete(CAMERA_QUERY_PARAM);
+  url.searchParams.delete(SEGMENT_QUERY_PARAM);
+  history.replaceState(history.state, '', url);
+}
+
+/**
+ * Fills the Dataset picker. A change opens the other Dataset at the same
+ * selected time and camera, so the switch keeps your place.
+ */
 function bindDatasetPicker(selectedOptionId: string): void {
   const picker = document.getElementById('dataset-picker');
   if (!(picker instanceof HTMLSelectElement)) return;
@@ -213,7 +246,13 @@ function bindDatasetPicker(selectedOptionId: string): void {
     }),
   );
   picker.addEventListener('change', () => {
-    location.assign(datasetPageUrl(picker.value, location));
+    location.assign(
+      datasetPageUrl(picker.value, location, {
+        selectedTimeUtcMs: attachment?.selectedTimeUtcMs ?? null,
+        cameraPose: readCameraPose(sceneView),
+        selectedCreekSegmentId: attachment?.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null,
+      }),
+    );
   });
 }
 
@@ -298,6 +337,15 @@ function installTestSeam(readyPromise: Promise<boolean>): void {
     },
     get segmentPlacements() {
       return attachment?.waterGraphicGeometryIdentity ?? [];
+    },
+    get selectedCreekSegmentId() {
+      return attachment?.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null;
+    },
+    get highlightedSegmentIds() {
+      return attachment?.selectedCreekSegmentChart?.selection.highlightedSegmentIds ?? [];
+    },
+    get waterSurfaceElevationChart() {
+      return attachment?.selectedCreekSegmentChart?.chart ?? null;
     },
     ...(import.meta.env.VITE_TEST_MODE === 'true'
       ? {

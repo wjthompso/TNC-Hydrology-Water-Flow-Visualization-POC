@@ -29,6 +29,7 @@ import {
   readModeledCatalog,
   selectModeledDataset,
   timelineGridStepMs,
+  waterYearOf,
   type DatasetSelection,
 } from './modeled-water-catalog';
 import {
@@ -43,6 +44,12 @@ import {
 } from './modeled-water-data-store';
 import { createModeledWaterSceneRenderer } from './modeled-water-scene-renderer';
 import { loadReachCrosswalk } from './reach-crosswalk';
+import {
+  bindSelectedCreekSegmentChart,
+  readWaterSurfaceElevationChartElements,
+  type SegmentChartContent,
+  type SelectedCreekSegmentChart,
+} from './selected-creek-segment-chart';
 import { bucketForWaterSurfaceElevation } from './selected-time-creek-state-resolver';
 import type { JunctionWaterSurface } from './sloped-water-surface';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
@@ -234,6 +241,7 @@ export async function startModeledCreekExperience(
   const pinnedBySegmentId = new Map<string, number>();
   /** Crosswalk flags are the fallback until every Time Series file carries its own. */
   const crosswalkTransferIds: ReadonlySet<string> = crosswalk?.transferSegmentIds ?? new Set();
+  let selectedCreekSegmentChart: SelectedCreekSegmentChart | null = null;
 
   const renderer = createModeledWaterSceneRenderer(view, segmentPaths, (identity) => {
     state.identity = Object.freeze(identity.map((item) => Object.freeze(item)));
@@ -241,6 +249,7 @@ export async function startModeledCreekExperience(
       identity.filter((item) => item.bucketMinElevationM != null).map((item) => item.segmentId),
     );
     updateStatus();
+    selectedCreekSegmentChart?.refresh();
   });
 
   const store = createModeledWaterDataStore({
@@ -367,6 +376,7 @@ export async function startModeledCreekExperience(
     store.setNeeded(state.visible.tncComids, timeUtcMs);
     renderer.schedule(resolvePlacements(timeUtcMs));
     updateStatus();
+    selectedCreekSegmentChart?.setSelectedTime(timeUtcMs);
   };
 
   const refreshVisibleFlowlines = (): void => {
@@ -381,7 +391,7 @@ export async function startModeledCreekExperience(
   };
 
   const clock = timelineClock(selected.dataset.timeRangeUtcMs, selected.dataset.timeStep);
-  bindObservationTimelineControls(
+  const timeline = bindObservationTimelineControls(
     {
       playButton: elements.playButton,
       slider: elements.slider,
@@ -392,6 +402,41 @@ export async function startModeledCreekExperience(
     openingGridIndex(clock, selection.openingTimeUtcMs),
     applySelectedTime,
   );
+
+  /**
+   * The chart shows the Time Series file that covers the selected time: the
+   * water year for hourly Datasets, the whole record otherwise. Only that file
+   * is in memory, so a click on the chart always lands on a loaded value.
+   */
+  const chartContentForSegment = (segmentId: string): SegmentChartContent => {
+    const tncComid = segmentId.split('-')[0];
+    const series = store.seriesAt(tncComid, state.selectedTimeUtcMs);
+    if (!series) return { emptyText: `Loading modeled water-surface elevation for Creek Segment ${segmentId}…` };
+    const valuesM = series.valuesBySegmentId.get(segmentId);
+    if (!valuesM) return { emptyText: `${datasetLabel} has no values for Creek Segment ${segmentId}.` };
+    const coverage =
+      selected.dataset.timeStep === 'hourly' ? `, water year ${waterYearOf(state.selectedTimeUtcMs)}` : '';
+    return {
+      series: {
+        segmentId,
+        sourceLabel: `Modeled, ${datasetLabel}${coverage} (m NAVD88)`,
+        timestampsUtcMs: series.timestampsUtcMs,
+        valuesM,
+      },
+    };
+  };
+
+  const chartElements = readWaterSurfaceElevationChartElements();
+  if (chartElements) {
+    selectedCreekSegmentChart = bindSelectedCreekSegmentChart({
+      view,
+      waterGraphics: renderer,
+      chartElements,
+      chartContentForSegment,
+      onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+    });
+    selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
+  }
 
   elements.transferToggle.addEventListener('change', () => {
     state.showTransferWater = elements.transferToggle.checked;
@@ -443,6 +488,9 @@ export async function startModeledCreekExperience(
     },
     get waterGraphicGeometryIdentity() {
       return state.identity;
+    },
+    get selectedCreekSegmentChart() {
+      return selectedCreekSegmentChart;
     },
     flush: () => renderer.flush(),
     async pinSegmentWaterSurfaceElevationM(segmentId, elevationM) {

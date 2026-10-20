@@ -1,0 +1,26 @@
+{
+  "file": "stage-04-junction-sloped-terrain-fill-v1-27714637-026-polygon-set.json",
+  "fileSha256": "d0ce1101e9d57e28fa325e34f1888c5857e49082440639e107c9715b59bcc45a",
+  "description": "Reviewed snapshot of the modeled pipeline's Stage 4 prepared water-surface polygon set for Creek Segment 27714637-026, the Creek Segment assigned to the Jalama Near Lompoc gauge (USGS 11120600). npm run pipeline:publish copies it unchanged into water-surface-polygon-sets.json, so observed and modeled water draw the same polygons. It holds only that Creek Segment's set, in the published file's shape.",
+  "segmentId": "27714637-026",
+  "segmentNetworkVersion": "jalama-27714637-v1",
+  "wsePolygonGenerationMethod": {
+    "id": "junction-sloped-terrain-fill",
+    "version": 1,
+    "methodSha256": "43da00ba1f3aab664c7c3f71cef4251f28524dec960ec9d7014c8443ca80c185"
+  },
+  "source": {
+    "path": "data/modeled-water-surface-elevation-pipeline-output/jalama-gauge-reach/04-water-surface-polygons/junction-sloped-terrain-fill/v1/water-surface-polygon-sets/27714637.json",
+    "sha256": "bc7e1036f544214f8ee414fd3b8e8523ce3fe8bb1e42adbef666fcd37f680d5e",
+    "stage4CompletedAt": "2026-10-19T20:12:59.225Z",
+    "command": "npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach"
+  },
+  "extraction": "Kept segmentNetworkVersion and the one waterSurfacePolygonSets entry whose segmentId is 27714637-026, unchanged, then wrote it as two-space-indented JSON with a trailing newline (the published file format).",
+  "elevationBuckets": {
+    "count": 137,
+    "minWaterSurfaceElevationM": 25.7,
+    "maxWaterSurfaceElevationM": 34.15,
+    "layout": "129 contiguous 0.05 m buckets from the 0.05 m step at or below the Stage 1 bed (25.748 m), then 8 contiguous 0.25 m buckets to at least 2 m above the highest modeled WSE (32.107 m)"
+  },
+  "reviewedAt": "2026-10-20"
+}

@@ -51,6 +51,8 @@ import type {
 } from './modeled-creek-experience';
 import { formatObservationTime } from './observation-timeline-controls';
 import type { StationMarkerGallery } from './station-marker-gallery';
+import type { DevToolsClickMarker } from './dev-tools-click-marker';
+import { createDevToolsClickMarker } from './dev-tools-click-marker';
 import { wsePolygonMethodKey, type WsePolygonMethodVersion } from './wse-polygon-generation-methods';
 
 interface DevToolsHudOptions {
@@ -62,12 +64,20 @@ interface DevToolsHudOptions {
    * leaves room above it for the development-server toggle button.
    */
   placement?: 'top' | 'below-dev-tools-toggle';
+  /**
+   * When the dev-server toggle already tracks clicks, it owns the marker and
+   * forwards clicks here. A direct `?devtools` mount leaves this unset and the
+   * HUD creates the marker itself.
+   */
+  clickMarker?: DevToolsClickMarker;
 }
 
 export interface DevToolsHudHandle {
   readonly root: HTMLElement;
   readonly isOpen: boolean;
   setOpen(open: boolean): void;
+  /** Fills the click readout for a click the toggle already marked on the map. */
+  captureScreenClick(screen: { x: number; y: number }): void;
 }
 
 type ModeledSeamWindow = Window & { __TNC_MODELED__?: ModeledExperienceSeam };
@@ -198,6 +208,10 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   }
 
   loadHudDisplayFont();
+  const clickMarker = options.clickMarker ?? createDevToolsClickMarker(options.view);
+  // The toggle owns the marker and calls setOpen. A direct mount starts open.
+  const panelStartsOpen = !options.clickMarker;
+  if (panelStartsOpen) clickMarker.setVisible(true);
   const belowToggle = options.placement === 'below-dev-tools-toggle';
   /** Present only in the modeled experience; the water readouts then follow the active Dataset. */
   const modeledSeam = (window as ModeledSeamWindow).__TNC_MODELED__ ?? null;
@@ -237,6 +251,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     'data-[hud-style=flight]:font-semibold',
   ]);
   root.id = 'dev-tools-hud';
+  root.hidden = !panelStartsOpen;
   root.setAttribute('aria-label', 'Developer tools');
 
   const scrollHost = createElement('div', [
@@ -417,11 +432,46 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   detailedView.appendChild(clickSection.root);
 
   const placementsSection = buildSection('Current segment placements', '04', 1);
-  const placementsList = createElement('div', [READOUT_BLOCK_CLASS], '(none)');
+  // Wrapper box: text rows on top, optional toggle footer inside the same well.
+  const placementsBox = createElement('div', [READOUT_BLOCK_CLASS, 'flex', 'flex-col', 'gap-0', '!p-0', 'overflow-hidden']);
+  const placementsList = createElement('div', ['px-2', 'py-2', 'font-mono', 'text-[11px]', 'font-semibold', 'leading-relaxed', 'whitespace-pre-wrap', 'break-all'], '(none)');
+  const placementsToggleButton = createElement(
+    'button',
+    [
+      'cursor-pointer',
+      'w-full',
+      'border-t',
+      'border-hud-well-edge',
+      'px-2',
+      'py-1.5',
+      'text-left',
+      'text-[10px]',
+      'font-extrabold',
+      'uppercase',
+      'tracking-[0.12em]',
+      'text-hud-label',
+      'transition-colors',
+      'hover:bg-hud-toggle-hover',
+      'hover:text-hud-ink',
+      'focus-visible:outline',
+      'focus-visible:outline-2',
+      'focus-visible:-outline-offset-2',
+      'focus-visible:outline-hud-focus',
+    ],
+    'Show all',
+  );
+  placementsToggleButton.type = 'button';
+  placementsToggleButton.hidden = true;
+  placementsBox.append(placementsList, placementsToggleButton);
   const detailedCopyPlacementsButton = buildCopyButton('Copy JSON');
-  placementsSection.body.append(placementsList, detailedCopyPlacementsButton);
+  placementsSection.body.append(placementsBox, detailedCopyPlacementsButton);
   detailedView.appendChild(placementsSection.root);
   scrollHost.appendChild(detailedView);
+
+  // --- WSE override: draw the Selected Creek Segment at a chosen elevation ---
+  // Shown in both views. Lets you compare how observed and modeled polygons
+  // look at the same water-surface elevation.
+  scrollHost.appendChild(buildWseOverrideTools(options.attachment, modeledSeam));
 
   // --- Drainage-Area Ratio Transfer tools (modeled experience only) --------
   // Shown in both views: it is a camera tool, not a readout.
@@ -514,18 +564,9 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   detailedCopyPoseButton.addEventListener('click', copyCameraPose);
 
   // --- Click capture: hit-test on each view click --------------------------
-  const markerLayer = new GraphicsLayer({
-    id: 'dev-hud-click-marker',
-    listMode: 'hide',
-  });
-  if (options.view.map) options.view.map.add(markerLayer);
-  const markerSymbol = new SimpleMarkerSymbol({
-    style: 'circle',
-    color: [0, 0, 0, 0],
-    size: 14,
-    outline: new SimpleLineSymbol({ color: '#f3ef2a', width: 2 }),
-  });
-  let markerGraphic: Graphic | null = null;
+  // The yellow ring itself lives in dev-tools-click-marker.ts. This block only
+  // fills the readout. The dev-server toggle marks the map and then calls
+  // captureScreenClick, including for a click made before this panel mounted.
 
   let lastCapture: HitTestCapture | null = null;
   const captureCopyButtons = [simpleCopyCaptureButton, detailedCopyCaptureButton];
@@ -561,8 +602,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   let selectedModeledSegment: SelectedModeledSegment | null = null;
   let renderedWaterKey: string | null = null;
 
-  options.view.on('click', (event) => {
-    const screen = { x: event.x, y: event.y };
+  const captureScreenClick = (screen: { x: number; y: number }): void => {
     seam
       .hitTestAtScreen(screen)
       .then((capture) => {
@@ -582,16 +622,20 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
         }
         lastClickValue.textContent = summarizeClickCapture(capture, selectedModeledSegment);
         for (const button of captureCopyButtons) button.disabled = false;
-        drawClickMarker(options.view, markerLayer, markerSymbol, event.mapPoint, (next) => {
-          markerGraphic = next;
-        }, markerGraphic);
       })
       .catch((error: unknown) => {
         console.error('[dev-tools-hud] hit test failed', error);
         clickSummary.textContent = 'Hit test failed. See console.';
         lastClickValue.textContent = 'Hit test failed. See console.';
       });
-  });
+  };
+
+  if (panelStartsOpen) {
+    options.view.on('click', (event) => {
+      clickMarker.noteClick(event.mapPoint);
+      captureScreenClick({ x: event.x, y: event.y });
+    });
+  }
 
   const copyClickCapture = (): void => {
     if (!lastCapture) return;
@@ -602,6 +646,32 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   // --- Water readouts: the active Dataset's reading vs drawn polygon height --
   // Observed: the gauge reading. Modeled: the clicked Creek Segment's modeled
   // water-surface elevation at the selected time.
+  const PLACEMENTS_COLLAPSE_ROWS = 5;
+  let placementsExpanded = false;
+  let allPlacementLines: readonly string[] = [];
+
+  const renderPlacementsList = (fullLines: readonly string[]): void => {
+    allPlacementLines = fullLines;
+    const hiddenCount = fullLines.length - PLACEMENTS_COLLAPSE_ROWS;
+    const shouldTruncate = hiddenCount > 0;
+    placementsList.textContent = shouldTruncate && !placementsExpanded
+      ? fullLines.slice(0, PLACEMENTS_COLLAPSE_ROWS).join('\n')
+      : fullLines.join('\n');
+    if (shouldTruncate) {
+      placementsToggleButton.hidden = false;
+      placementsToggleButton.textContent = placementsExpanded
+        ? 'Collapse'
+        : `Show all (${hiddenCount} more)`;
+    } else {
+      placementsToggleButton.hidden = true;
+    }
+  };
+
+  placementsToggleButton.addEventListener('click', () => {
+    placementsExpanded = !placementsExpanded;
+    renderPlacementsList(allPlacementLines);
+  });
+
   const renderWaterReadouts = (): void => {
     const placements = seam.segmentPlacements;
     const placementsKey = placements.map((p) => `${p.segmentId}:${p.bucketMinElevationM}`).join(',');
@@ -633,10 +703,10 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
       segmentBadge.textContent = readSegmentSuffix(
         selected?.segmentId ?? drawnPlacement?.segmentId ?? placements[0]?.segmentId ?? '—',
       );
-      placementsList.textContent = [
+      renderPlacementsList([
         `modeled WSE (${modeledSeam.datasetLabel}) → ${view.lines.join(' · ')}`,
         ...placementBlock,
-      ].join('\n');
+      ]);
       return;
     }
 
@@ -652,7 +722,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     segmentBadge.textContent = readSegmentSuffix(drawnPlacement?.segmentId ?? placements[0]?.segmentId ?? '—');
 
     const gaugeLine = `observed WSE → ${observedM == null ? 'none' : `${observedM.toFixed(3)} m NAVD88`}`;
-    placementsList.textContent = [gaugeLine, ...placementBlock].join('\n');
+    renderPlacementsList([gaugeLine, ...placementBlock]);
   };
   const refreshLiveReadouts = (): void => {
     renderDatasetAndTime();
@@ -677,9 +747,157 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
       return !root.hidden;
     },
     setOpen(open) {
+      clickMarker.setVisible(open);
       root.hidden = !open;
     },
+    captureScreenClick,
   };
+}
+
+// --- WSE override tools --------------------------------------------------------
+
+const WSE_OVERRIDE_REFRESH_MS = 500;
+const WSE_OVERRIDE_NUDGE_M = 0.05;
+
+/**
+ * Temporarily draws the Selected Creek Segment's water at a typed
+ * water-surface elevation (m NAVD88), using the same prepared polygon the map
+ * would pick for that value. Open the same segment in another Dataset, set the
+ * same value, and compare screenshots: if the two polygons sit at different
+ * heights or shapes, the WSE Polygon Generation Method or the reported WSE
+ * values disagree. Clear restores the Dataset's own value. Nothing is saved.
+ */
+function buildWseOverrideTools(
+  attachment: CreekVisualizationAttachment,
+  modeledSeam: ModeledExperienceSeam | null,
+): HTMLElement {
+  const section = buildSection('WSE override', '04b', 2, 'Selected Creek Segment · temporary');
+  section.root.id = 'dev-tools-wse-override';
+
+  const target = createElement('p', ['text-sm', 'font-bold'], 'Click creek water to select a segment.');
+  const row = createElement('div', ['flex', 'items-center', 'gap-1.5']);
+  const input = createElement('input', [
+    'w-24',
+    'rounded-sm',
+    'border',
+    'border-hud-well-edge',
+    'bg-hud-well',
+    'px-2',
+    'py-1',
+    'font-mono',
+    'text-[12px]',
+    'font-bold',
+    'tabular-nums',
+    'text-hud-ink',
+    'focus-visible:outline',
+    'focus-visible:outline-2',
+    'focus-visible:outline-hud-focus',
+  ]);
+  input.type = 'number';
+  input.step = String(WSE_OVERRIDE_NUDGE_M);
+  input.inputMode = 'decimal';
+  input.setAttribute('aria-label', 'Override water-surface elevation, meters NAVD88');
+  const unitLabel = createElement('span', [FIELD_LABEL_CLASS], 'm NAVD88');
+  const downButton = buildCopyButton('−');
+  downButton.setAttribute('aria-label', `Lower by ${WSE_OVERRIDE_NUDGE_M} m`);
+  const upButton = buildCopyButton('+');
+  upButton.setAttribute('aria-label', `Raise by ${WSE_OVERRIDE_NUDGE_M} m`);
+  row.append(input, unitLabel, downButton, upButton);
+
+  const actionRow = createElement('div', ['flex', 'items-center', 'gap-1.5']);
+  const applyButton = buildCopyButton('Apply');
+  const clearButton = buildCopyButton('Clear');
+  const status = createElement('p', ['ml-auto', 'text-[11px]', 'font-bold', 'text-hud-label']);
+  status.setAttribute('aria-live', 'polite');
+  actionRow.append(applyButton, clearButton, status);
+  section.body.append(target, row, actionRow);
+
+  /**
+   * The one override in effect. It belongs to the Selected Creek Segment only:
+   * selecting another segment, or clicking away, clears it and that segment's
+   * water goes back to the Dataset's value.
+   */
+  const pins = new Map<string, number>();
+  let shownSegmentId: string | null = null;
+
+  const clearPinsExcept = (keepSegmentId: string | null): void => {
+    for (const segmentId of [...pins.keys()]) {
+      if (segmentId === keepSegmentId) continue;
+      pins.delete(segmentId);
+      void attachment.pinSegmentWaterSurfaceElevationM(segmentId, null);
+    }
+  };
+
+  const selectedSegmentId = (): string | null =>
+    attachment.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null;
+
+  /** The Dataset's own value for the segment at the selected time, before any pin. */
+  const datasetValueM = (segmentId: string): number | null => {
+    if (modeledSeam) return modeledSeam.readSegment(segmentId)?.elevationM ?? null;
+    return attachment.observedWaterSurfaceElevationM;
+  };
+
+  const render = (): void => {
+    const segmentId = selectedSegmentId();
+    if (segmentId !== shownSegmentId) clearPinsExcept(segmentId);
+    const enabled = segmentId !== null;
+    for (const control of [input, downButton, upButton, applyButton]) control.disabled = !enabled;
+    clearButton.disabled = !enabled || !pins.has(segmentId ?? '');
+    if (!segmentId) {
+      target.textContent = 'Click creek water to select a segment.';
+      shownSegmentId = null;
+      return;
+    }
+    target.textContent = `Creek Segment ${segmentId}`;
+    if (segmentId !== shownSegmentId) {
+      shownSegmentId = segmentId;
+      const start = pins.get(segmentId) ?? datasetValueM(segmentId);
+      input.value = start === null ? '' : start.toFixed(2);
+    }
+    const pinned = pins.get(segmentId);
+    status.textContent = pinned === undefined ? 'Dataset value' : `Pinned at ${pinned.toFixed(2)} m`;
+  };
+
+  const apply = async (elevationM: number | null): Promise<void> => {
+    const segmentId = selectedSegmentId();
+    if (!segmentId) return;
+    if (elevationM === null) pins.delete(segmentId);
+    else pins.set(segmentId, elevationM);
+    await attachment.pinSegmentWaterSurfaceElevationM(segmentId, elevationM);
+    if (elevationM === null) {
+      const value = datasetValueM(segmentId);
+      input.value = value === null ? '' : value.toFixed(2);
+    }
+    render();
+  };
+
+  const applyInput = (): void => {
+    const value = Number.parseFloat(input.value);
+    if (!Number.isFinite(value)) {
+      status.textContent = 'Type a number in meters.';
+      return;
+    }
+    void apply(value);
+  };
+  const nudge = (deltaM: number): void => {
+    const value = Number.parseFloat(input.value);
+    if (!Number.isFinite(value)) return;
+    input.value = (value + deltaM).toFixed(2);
+    applyInput();
+  };
+
+  applyButton.addEventListener('click', applyInput);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') applyInput();
+  });
+  upButton.addEventListener('click', () => nudge(WSE_OVERRIDE_NUDGE_M));
+  downButton.addEventListener('click', () => nudge(-WSE_OVERRIDE_NUDGE_M));
+  clearButton.addEventListener('click', () => void apply(null));
+
+  render();
+  // Polled so a selection change clears the override within half a second, even with the HUD closed.
+  window.setInterval(render, WSE_OVERRIDE_REFRESH_MS);
+  return section.root;
 }
 
 // --- Drainage-Area Ratio Transfer camera tools --------------------------------
@@ -1575,25 +1793,6 @@ function loadHudDisplayFont(): void {
 }
 
 // --- Map marker and clipboard -------------------------------------------------
-
-function drawClickMarker(
-  view: SceneView,
-  layer: GraphicsLayer,
-  symbol: SimpleMarkerSymbol,
-  mapPoint: Point | null | undefined,
-  setMarker: (next: Graphic | null) => void,
-  previous: Graphic | null,
-): void {
-  if (previous) layer.remove(previous);
-  if (!mapPoint) {
-    setMarker(null);
-    return;
-  }
-  const marker = new Graphic({ geometry: mapPoint, symbol });
-  layer.add(marker);
-  setMarker(marker);
-  void view;
-}
 
 async function copyWithFeedback(text: string, feedback: HTMLElement, successMessage: string): Promise<void> {
   try {
