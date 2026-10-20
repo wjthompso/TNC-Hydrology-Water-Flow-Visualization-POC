@@ -6,9 +6,16 @@ import {
   type PlaybackSpeedControl,
 } from './observation-timeline-controls';
 import {
+  bindSelectedCreekSegmentChart,
+  readWaterSurfaceElevationChartElements,
+  type SelectedCreekSegmentChart,
+} from './selected-creek-segment-chart';
+import {
   resolveSelectedTimeCreekState,
   type SegmentWaterPlacement,
 } from './selected-time-creek-state-resolver';
+
+const OBSERVED_CHART_SOURCE_LABEL = 'Observed at USGS gauge 11120600, Jalama Creek near Lompoc (m NAVD88)';
 
 export interface AttachCreekVisualizationOptions {
   data: LoadedCreekVisualization;
@@ -17,6 +24,8 @@ export interface AttachCreekVisualizationOptions {
   timeReadout: HTMLElement;
   status: HTMLElement;
   speedButtons: readonly PlaybackSpeedControl[];
+  /** Opens at the grid slot nearest this time (clamped to the record); null opens at the data's opening slot. */
+  openingTimeUtcMs?: number | null;
 }
 
 export interface CreekVisualizationAttachment {
@@ -25,6 +34,8 @@ export interface CreekVisualizationAttachment {
   readonly observedWaterSurfaceElevationM: number | null;
   readonly waterSegmentIds: readonly string[];
   readonly waterGraphicGeometryIdentity: readonly WaterGraphicGeometryIdentity[];
+  /** Selected Creek Segment and its Water-Surface Elevation Chart; null when the page has no chart panel. */
+  readonly selectedCreekSegmentChart: SelectedCreekSegmentChart | null;
   flush(): Promise<void>;
   /**
    * Test-only pin: forces a specific water-surface elevation on one Creek Segment,
@@ -58,6 +69,7 @@ export function attachCreekVisualization(
   };
 
   const pinnedBySegmentId = new Map<string, number>();
+  let selectedCreekSegmentChart: SelectedCreekSegmentChart | null = null;
 
   const renderer = createArcGISSceneRenderer(
     view,
@@ -69,6 +81,7 @@ export function attachCreekVisualization(
           .filter((item) => item.bucketMinElevationM != null)
           .map((item) => item.segmentId),
       );
+      selectedCreekSegmentChart?.refresh();
     },
   );
 
@@ -83,8 +96,7 @@ export function attachCreekVisualization(
         options.data.polygonBucketsBySegmentId.get(placement.segmentId),
         pinned,
       );
-      // No matching bucket shouldn't happen in practice; leave the resolved placement intact.
-      if (!bucket) return placement;
+      // Outside the prepared ladder there is no polygon for that elevation, so no water is drawn.
       return { segmentId: placement.segmentId, bucket };
     });
   };
@@ -95,9 +107,10 @@ export function attachCreekVisualization(
     state.observedWaterSurfaceElevationM = resolved.observedWaterSurfaceElevationM;
     options.status.textContent = resolved.hasObservation ? '' : NO_OBSERVATION_STATUS;
     renderer.schedule(applyPins(resolved.placements));
+    selectedCreekSegmentChart?.setSelectedTime(timeUtcMs);
   };
 
-  bindObservationTimelineControls(
+  const timeline = bindObservationTimelineControls(
     {
       playButton: options.playButton,
       slider: options.slider,
@@ -105,9 +118,32 @@ export function attachCreekVisualization(
       speedButtons: options.speedButtons,
     },
     options.data.clock,
-    options.data.openingGridIndex,
+    openingIndexFor(options.data.clock, options.openingTimeUtcMs ?? null, options.data.openingGridIndex),
     applySelectedTime,
   );
+
+  const chartElements = readWaterSurfaceElevationChartElements();
+  if (chartElements) {
+    selectedCreekSegmentChart = bindSelectedCreekSegmentChart({
+      view,
+      waterGraphics: renderer,
+      chartElements,
+      chartContentForSegment: (segmentId) => {
+        const valuesM = options.data.waterSurfaceElevationMBySegmentId.get(segmentId);
+        if (!valuesM) return { emptyText: `No observed readings for Creek Segment ${segmentId}.` };
+        return {
+          series: {
+            segmentId,
+            sourceLabel: OBSERVED_CHART_SOURCE_LABEL,
+            timestampsUtcMs: options.data.timestampsUtcMs,
+            valuesM,
+          },
+        };
+      },
+      onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+    });
+    selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
+  }
 
   return {
     get selectedTimeUtcMs() {
@@ -122,6 +158,9 @@ export function attachCreekVisualization(
     get waterGraphicGeometryIdentity() {
       return state.waterGraphicGeometryIdentity;
     },
+    get selectedCreekSegmentChart() {
+      return selectedCreekSegmentChart;
+    },
     flush: () => renderer.flush(),
     async pinSegmentWaterSurfaceElevationM(segmentId, elevationM) {
       if (elevationM === null) {
@@ -133,6 +172,16 @@ export function attachCreekVisualization(
       await renderer.flush();
     },
   };
+}
+
+function openingIndexFor(
+  clock: LoadedCreekVisualization['clock'],
+  openingTimeUtcMs: number | null,
+  fallbackIndex: number,
+): number {
+  if (openingTimeUtcMs === null) return fallbackIndex;
+  const index = Math.round((openingTimeUtcMs - clock.firstUtcMs) / clock.stepMs);
+  return Math.max(0, Math.min(clock.count - 1, index));
 }
 
 /** Half-open match: `[minimum, maximum)`. Returns null when the buckets list is missing or no bucket contains the elevation. */

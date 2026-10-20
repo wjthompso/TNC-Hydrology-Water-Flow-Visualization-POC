@@ -98,6 +98,10 @@ The organization or model product that publishes one or more Datasets, such as U
 
 A stretch of stream treated as one unit. In NHDPlusV2 (National Hydrography Dataset Plus version 2), one numbered line (COMID) for which California Natural Flows and the NOAA National Water Model report one discharge value per time step. One Reach usually spans many Creek Segments.
 
+## Selected Creek Segment
+
+The one Creek Segment a person picked by clicking its water on the map. Its water carries an amber highlight, and the Water-Surface Elevation Chart shows its values. Clicking another Creek Segment's water moves the selection; clicking where no water is drawn clears it. At most one Creek Segment is selected at a time (UCS-279).
+
 ## Time Series
 
 One Dataset's values for one Variable: one timestamp list plus one value list per Creek Segment. Each Time Series keeps its own timestamps, so Variables in the same Dataset need not align.
@@ -117,6 +121,10 @@ One quantity with one unit, such as water-surface elevation (m), discharge (m³/
 ## Water-surface elevation (WSE)
 
 The absolute height of the water surface, expressed in NAVD88 (North American Vertical Datum of 1988). For the Jalama Near Lompoc gauge, it is gauge height plus the gauge datum, converted from feet to meters.
+
+## Water-Surface Elevation Chart
+
+Short for Water-Surface Elevation Time Series Chart. A line chart of the Selected Creek Segment's water-surface elevation over time, from the active Dataset, with a time cursor at the selected time. Hovering reads the time and value under the pointer without changing the time; clicking a time moves the time slider there, so the map follows. For an hourly modeled Dataset it shows the water year that holds the selected time (UCS-279).
 
 ## WSE Polygon Generation Method
 
