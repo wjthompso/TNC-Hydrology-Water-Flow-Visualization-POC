@@ -1,10 +1,10 @@
 // Development-only corner button that opens and closes the dev tools HUD.
 // Mounted by creek-experience-main.ts when `import.meta.env.DEV` is true, in
 // both the observed and the modeled experiences. Vite replaces that flag with
-// `false` in production builds, so this module is never bundled there. The HUD
-// panel is loaded on startup so a click made while it is closed is still the
-// last click when it opens. The yellow ring is drawn immediately and shown
-// only while the panel is open. The open state is remembered in localStorage;
+// `false` in production builds, so this module is never bundled there. The
+// yellow ring tracks clicks from the moment the toggle mounts, including
+// clicks made while the panel is closed. The HUD panel itself is imported the
+// first time it is opened. The open state is remembered in localStorage;
 // `?devtools` still opens the HUD on load.
 
 import type SceneView from '@arcgis/core/views/SceneView';
@@ -116,9 +116,11 @@ export function installDevToolsToggle(options: DevToolsToggleOptions): void {
     open = next;
     render();
     if (remember) saveOpenState(next);
-    await ensureHud();
-    // Re-read `open`: a second click may have landed while the HUD was loading.
-    hud?.setOpen(open);
+    // The panel stays unloaded until the first open. Clicks before that are
+    // already on the marker layer, and the queued screen point fills the readout.
+    if (next) await ensureHud();
+    if (hud) hud.setOpen(open);
+    else clickMarker.setVisible(false);
   };
 
   button.addEventListener('click', () => {

@@ -55,6 +55,13 @@
       "lifecycleChange": null
     },
     {
+      "id": "F-170",
+      "featureSetId": "FS-100",
+      "name": "Dev tools click marker",
+      "lifecycle": "active",
+      "lifecycleChange": null
+    },
+    {
       "id": "F-900",
       "featureSetId": "FS-900",
       "name": "Account sign-in",
@@ -399,6 +406,25 @@
       "durationBudgetMs": 20000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-160-water-surface-elevation-chart/behavior/FBT-017.live.spec.ts"
+    },
+    {
+      "id": "FBT-018",
+      "name": "Clicking the map while DevTools are closed, then opening DevTools, shows a yellow ring at that on-map click location; collapsing DevTools removes the ring, and opening DevTools again shows the same ring.",
+      "methodology": "Why it matters: a person investigating the map opens dev tools and expects the yellow ring to mark the last place they clicked, including a click made before the panel was open, and expects that ring to leave the map when they collapse the panel so it does not cover the creek. How it checks: opens the locally served page on the National Water Model hourly Dataset for the jalama-gauge-reach extent at the 2023-01-10T01:00Z flood peak, with dev tools closed, moves the camera instantly to a fixed straight-down pose 150 m above Creek Segment 27714637-046's water, waits for the modeled loads and a finished frame, and clicks that segment's water with the real mouse at a pixel where SceneView.hitTest reports it. It screenshots a 64×64 pixel crop centered on that click and counts pixels near the marker yellow #f3ef2a (red and green both high and close, blue low), which is distinct from the selection highlight #fbbf24. Pixels inside the sidebar, the dev tools button, or the dev tools panel are ignored. The test fails unless that crop has no marker-yellow pixels while dev tools are closed, at least 8 after the Dev tools button is clicked open, none again after the button collapses the panel, and at least 8 after the button opens the panel again. Each check polls the crop for up to 4 seconds. What is real: the browser page, ArcGIS SceneView, the dev tools toggle and click marker, the developer's local modeled pipeline output served by the development middleware, the real mouse clicks, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. When the local pipeline output is missing the result is inconclusive with a message naming the pipeline command. What is test-only: the camera command and the read-only seam used to find the water pixel. What it does not check: the ring's exact diameter, the dev tools readout text, clicks on empty ground, the observed experience, or the selection highlight, which FBT-015 covers.",
+      "category": "feature-behavior",
+      "owner": "F-170",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-170-dev-tools-click-marker/behavior/FBT-018.live.spec.ts"
     },
     {
       "id": "FBT-131",

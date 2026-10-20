@@ -122,7 +122,7 @@ export async function findSegmentWaterPixel(
   page: Page,
   input: { segmentId: string; bucket: PolygonBucket },
 ): Promise<{ x: number; y: number }> {
-  const sidebar = await page.locator('aside').boundingBox();
+  const sidebar = await page.locator('aside:not(#dev-tools-hud)').boundingBox();
   const pixel = await page.evaluate(
     async ({ segmentId, candidates, blocked }) => {
       const seam = window.__TNC_TEST__;
@@ -164,7 +164,7 @@ export async function findSegmentWaterPixel(
 export async function clickSegmentWater(
   page: Page,
   input: { segmentId: string; bucket: PolygonBucket },
-): Promise<void> {
+): Promise<{ x: number; y: number }> {
   const pixel = await findSegmentWaterPixel(page, input);
   await page.mouse.click(pixel.x, pixel.y);
   await expect
@@ -172,6 +172,7 @@ export async function clickSegmentWater(
       message: `clicking Creek Segment ${input.segmentId}'s water at (${pixel.x}, ${pixel.y}) selects it`,
     })
     .toBe(input.segmentId);
+  return pixel;
 }
 
 export interface SelectionSnapshot {
