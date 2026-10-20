@@ -50,6 +50,7 @@ import type {
   ModeledSegmentReading,
 } from './modeled-creek-experience';
 import { formatObservationTime } from './observation-timeline-controls';
+import type { StationMarkerGallery } from './station-marker-gallery';
 import { wsePolygonMethodKey, type WsePolygonMethodVersion } from './wse-polygon-generation-methods';
 
 interface DevToolsHudOptions {
@@ -427,6 +428,9 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   if (modeledSeam) {
     scrollHost.appendChild(buildDrainageAreaRatioTransferTools(options.view, modeledSeam));
   }
+
+  // --- Station marker gallery (UCS-261): every candidate model on Jalama Road ---
+  scrollHost.appendChild(buildStationMarkerGalleryTools(options.view));
 
   // --- Footer: shared copy feedback ----------------------------------------
   const footer = createElement('footer', [
@@ -883,6 +887,102 @@ function buildDrainageAreaRatioTransferTools(view: SceneView, seam: ModeledExper
   window.setInterval(() => {
     if (!busy) refreshList();
   }, TRANSFER_LIST_REFRESH_MS);
+  return section.root;
+}
+
+/**
+ * Opens and closes the Station marker gallery: every candidate 3D station
+ * marker lined up along Jalama Road beside the gauge, with status tints to try.
+ * The gallery module loads on first open.
+ */
+function buildStationMarkerGalleryTools(view: SceneView): HTMLElement {
+  const section = buildSection('Station marker gallery', '06', 2, 'All candidate 3D markers, on Jalama Road');
+  section.root.id = 'dev-tools-station-marker-gallery';
+
+  const toggleButton = buildCopyButton('Show all markers');
+  toggleButton.classList.add('px-3', 'py-1.5', 'text-[11px]');
+  toggleButton.setAttribute('aria-pressed', 'false');
+
+  const tintRow = createElement('div', [
+    'flex',
+    'flex-wrap',
+    'overflow-hidden',
+    'rounded',
+    'border',
+    'border-hud-button-edge',
+  ]);
+  tintRow.setAttribute('role', 'group');
+  tintRow.setAttribute('aria-label', 'Station status tint');
+  tintRow.hidden = true;
+
+  const legend = createElement('ol', [READOUT_BLOCK_CLASS, 'list-decimal', 'pl-6']);
+  legend.hidden = true;
+  const status = createElement('p', ['min-h-4', 'text-[11px]', 'font-bold', 'text-hud-label']);
+  status.setAttribute('aria-live', 'polite');
+  section.body.append(toggleButton, tintRow, legend, status);
+
+  let gallery: StationMarkerGallery | null = null;
+  let busy = false;
+
+  const setBusy = (value: boolean): void => {
+    busy = value;
+    toggleButton.disabled = value;
+    for (const button of tintRow.querySelectorAll('button')) button.disabled = value;
+  };
+
+  const open = async (): Promise<void> => {
+    setBusy(true);
+    status.textContent = 'Placing markers…';
+    try {
+      const module = await import('./station-marker-gallery');
+      gallery = await module.openStationMarkerGallery(view);
+      legend.replaceChildren(
+        ...gallery.models.map((model) => createElement('li', [], `${model.label} — ${model.credit}`)),
+      );
+      tintRow.replaceChildren(
+        ...module.STATION_MARKER_STATUS_TINTS.map((tint, index) => {
+          const button = buildToggleButton(tint.label);
+          button.setAttribute('aria-pressed', String(index === 0));
+          button.addEventListener('click', () => {
+            if (!gallery || busy) return;
+            for (const sibling of tintRow.querySelectorAll('button')) {
+              sibling.setAttribute('aria-pressed', String(sibling === button));
+            }
+            void gallery.setStatusTint(tint.id);
+          });
+          return button;
+        }),
+      );
+      tintRow.hidden = false;
+      legend.hidden = false;
+      toggleButton.textContent = 'Hide markers';
+      toggleButton.setAttribute('aria-pressed', 'true');
+      status.textContent = `${gallery.models.length} markers west of the gauge bridge.`;
+    } catch (error) {
+      console.warn('[dev-tools-hud] station marker gallery failed', error);
+      status.textContent = 'Could not place the markers.';
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const close = async (): Promise<void> => {
+    if (!gallery) return;
+    setBusy(true);
+    try {
+      await gallery.close();
+    } finally {
+      gallery = null;
+      tintRow.hidden = true;
+      legend.hidden = true;
+      toggleButton.textContent = 'Show all markers';
+      toggleButton.setAttribute('aria-pressed', 'false');
+      status.textContent = '';
+      setBusy(false);
+    }
+  };
+
+  toggleButton.addEventListener('click', () => void (gallery ? close() : open()));
   return section.root;
 }
 

@@ -1,0 +1,24 @@
+---
+description: Protects .local.code-workspace files from AI modification — these are intentional machine-local workspace config files
+globs: "*.local.code-workspace"
+alwaysApply: false
+---
+
+# Local Workspace File — Do Not Modify
+
+`*.local.code-workspace` files (e.g. `TNC-Hydrology-Water-Flow.local.code-workspace`) are **intentionally authored** machine-local VS Code / Cursor workspace files. They hold project-specific settings that are **not cosmetic throwaway content**.
+
+## ✅ DO
+
+- Leave the file exactly as-is when its contents are not directly relevant to the requested task.
+- If changes are required, preserve **all existing keys** under `"settings"`, including `workbench.colorCustomizations` and its title bar color values.
+
+## ❌ DO NOT
+
+- Remove, strip, or omit `workbench.colorCustomizations` or any of its sub-keys (`titleBar.activeBackground`, `titleBar.activeForeground`, `titleBar.inactiveBackground`, `titleBar.inactiveForeground`, `titleBar.border`).
+- Treat appearance settings in this file as non-essential or clutter. They are **deliberate workspace identity markers** that distinguish this project's window from others.
+- "Clean up" or "simplify" this file without explicit developer instruction.
+
+## Why these settings exist
+
+The title bar colors serve as a **visual workspace identifier** — a deliberate design choice so this project window is immediately recognizable when multiple Cursor windows are open side-by-side.

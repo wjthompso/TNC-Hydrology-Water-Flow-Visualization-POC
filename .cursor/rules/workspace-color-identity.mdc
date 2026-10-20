@@ -1,0 +1,29 @@
+---
+description: Protects workspace color identity — peacock.color and workbench.colorCustomizations in .code-workspace files are deliberate workspace markers and must never be removed.
+globs: "*.code-workspace"
+alwaysApply: true
+---
+
+# Workspace Color Identity — Do Not Modify
+
+`peacock.color` and `workbench.colorCustomizations` inside any `.code-workspace` file (e.g. `worktree-1.code-workspace`) are **deliberate workspace identity markers**. They make each git worktree window immediately distinguishable when multiple Cursor windows are open side-by-side.
+
+## ✅ DO
+
+- Leave `peacock.color` and `workbench.colorCustomizations` exactly as-is when they are not the direct subject of the task.
+- Preserve **all sub-keys**: `titleBar.activeBackground`, `titleBar.activeForeground`, `titleBar.inactiveBackground`, `titleBar.inactiveForeground`, `titleBar.border`.
+
+## ❌ DO NOT
+
+- Remove, strip, or omit `peacock.color` or `workbench.colorCustomizations` (or any sub-keys) from any `.code-workspace` file.
+- Treat these appearance settings as non-essential, clutter, or dead code.
+- "Clean up" or "simplify" a `.code-workspace` file by dropping color configuration without explicit developer instruction.
+
+## Color palette (reference)
+
+| Workspace   | Peacock color |
+|-------------|---------------|
+| `main`      | `#356275` — teal |
+| `worktree-1`| `#B35C00` — burnt orange |
+| `worktree-2`| `#2E7D32` — forest green |
+| `worktree-3`| `#6B2FA0` — purple |

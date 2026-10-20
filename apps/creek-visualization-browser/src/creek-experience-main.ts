@@ -17,6 +17,8 @@ import {
   datasetPageUrl,
   readDatasetSelection,
 } from './modeled-water-catalog';
+import { installMonitoringStationLocator } from './monitoring-station-locator';
+import { addMonitoringStationMarkers } from './monitoring-station-marker-layer';
 import { readPlaybackSpeedButtons } from './observation-timeline-controls';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 
@@ -158,6 +160,9 @@ async function startExperience(): Promise<boolean> {
       speedButtons: readPlaybackSpeedButtons(),
     });
     await attachment.flush();
+    // UCS-261: a stream gauge mast where the Jalama Near Lompoc gauge is installed.
+    const markers = await addMonitoringStationMarkers(sceneView, [data.station], data.segmentsById);
+    await installMonitoringStationLocator(sceneView, markers.stations);
     hideLoadingOverlay();
     await installDevToolsIfRequested();
     return true;
