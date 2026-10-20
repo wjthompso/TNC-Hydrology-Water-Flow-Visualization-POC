@@ -7,6 +7,11 @@ import {
   observeLiveNetwork,
   type LiveNetworkSummary,
 } from '../../../../support/network/live-network-telemetry.ts';
+import {
+  DEFAULT_SCENE_IMAGERY_ID,
+  withSceneImagery,
+  type SceneImageryId,
+} from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 
 export const GAUGE_SEGMENT_ID = '27714637-026';
 export const OBSERVATION_STEP_MS = 15 * 60 * 1000;
@@ -234,8 +239,16 @@ export function watchLiveServices(page: Page): LiveServiceWatch {
   return { pageErrors, summarize: observeLiveNetwork(page) };
 }
 
-export async function openObservedWaterPage(page: Page, watch: LiveServiceWatch): Promise<void> {
-  await page.goto('/', { waitUntil: 'commit', timeout: 30_000 });
+/**
+ * Opens the observed-water page. `imagery` picks the scene imagery dataset; a test
+ * whose promise is not about imagery passes the fast one and names it in its methodology.
+ */
+export async function openObservedWaterPage(
+  page: Page,
+  watch: LiveServiceWatch,
+  imagery: SceneImageryId = DEFAULT_SCENE_IMAGERY_ID,
+): Promise<void> {
+  await page.goto(withSceneImagery('/', imagery), { waitUntil: 'commit', timeout: 30_000 });
   const outcome = await page.evaluate(async (readyBudgetMs: number) => {
     const started = performance.now();
     while (performance.now() - started < readyBudgetMs) {

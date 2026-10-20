@@ -50,9 +50,9 @@ Discharge given to a Creek Segment whose creek has no Reach of its own in the fl
 
 Esri's global terrain service, used as the 3D scene's far-zoom fallback ground surface beyond the ~25 km window around the creek, beneath the USGS 3DEP (3D Elevation Program) 1 m terrain the scene draws near the creek (UCS-275). It is coarser than USGS 3DEP 1 m terrain, so prepared water-surface polygons can sit slightly above or below it.
 
-## Esri World Imagery
+## Esri World Imagery (Base Imagery)
 
-Esri's global aerial and satellite photography, draped on the 3D scene's ground. It is the scene's imagery and also covers the ocean and coast.
+Esri's global aerial and satellite photography, draped on the 3D scene's ground as the base imagery everywhere, including the ocean and coast. Near the creek it is about 50 cm per pixel. Inside the Preserve at close zoom, the Preserve Aerial Imagery Overlay draws on top of it (UCS-262).
 
 ## Experience
 
@@ -86,6 +86,10 @@ An estimated water height, kept separate from observed water. The modeled water-
 
 A water height measured at a real gauge.
 
+## Preserve Aerial Imagery Overlay (Overlay Imagery)
+
+A high-resolution aerial photo layer of the Jack and Laura Dangermond Preserve, drawn over Esri World Imagery near the creek (UCS-262). The default is the January 2024 imagery donated via Vandenberg (8 cm per pixel); the imagery picker also offers the October 2019 imagery flown for Vandenberg, or no overlay. It covers only the Preserve's flight area and is hidden beyond about 1:20,000 scale, so wide and coastal views show Esri World Imagery alone. Like Esri World Imagery, it drapes on USGS 3DEP terrain.
+
 ## Prepared water-surface polygon
 
 A polygon built ahead of time for one Creek Segment at one water-surface elevation. The build finds where that elevation meets the USGS 3DEP (3D Elevation Program) bare-earth terrain, which supplies the banks and not the underwater bed. During playback the browser selects the prepared polygon and does not build a new one.
@@ -97,6 +101,10 @@ The organization or model product that publishes one or more Datasets, such as U
 ## Reach
 
 A stretch of stream treated as one unit. In NHDPlusV2 (National Hydrography Dataset Plus version 2), one numbered line (COMID) for which California Natural Flows and the NOAA National Water Model report one discharge value per time step. One Reach usually spans many Creek Segments.
+
+## Selected Creek Segment
+
+The one Creek Segment a person picked by clicking its water on the map. Its water carries an amber highlight, and the Water-Surface Elevation Chart shows its values. Clicking another Creek Segment's water moves the selection; clicking where no water is drawn clears it. At most one Creek Segment is selected at a time (UCS-279).
 
 ## Time Series
 
@@ -117,6 +125,10 @@ One quantity with one unit, such as water-surface elevation (m), discharge (m³/
 ## Water-surface elevation (WSE)
 
 The absolute height of the water surface, expressed in NAVD88 (North American Vertical Datum of 1988). For the Jalama Near Lompoc gauge, it is gauge height plus the gauge datum, converted from feet to meters.
+
+## Water-Surface Elevation Chart
+
+Short for Water-Surface Elevation Time Series Chart. A line chart of the Selected Creek Segment's water-surface elevation over time, from the active Dataset, with a time cursor at the selected time. Hovering reads the time and value under the pointer without changing the time; clicking a time moves the time slider there, so the map follows. For an hourly modeled Dataset it shows the water year that holds the selected time (UCS-279).
 
 ## WSE Polygon Generation Method
 

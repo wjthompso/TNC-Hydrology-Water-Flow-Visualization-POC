@@ -2,7 +2,7 @@
 
 Standalone experience for observed water on one Creek Segment of Jalama Creek, next to the Jalama Near Lompoc gauge (USGS site 11120600).
 
-An ArcGIS SceneView opens framed on that segment, over Esri World Imagery and Esri World Elevation terrain. Play, Pause, and the time slider walk a regular 15-minute clock from the first observed timestamp to the last, in America/Los_Angeles. The page selects a prepared water-surface polygon for the selected time. It does not build water geometry, fill a missing reading, or show a water-surface elevation, stage, or discharge. A time with no observation shows no water. Neighbouring segments stay empty.
+An ArcGIS SceneView opens framed on that segment. Esri World Imagery is the base imagery everywhere; near the creek the Preserve Aerial Imagery Overlay (January 2024, 8 cm) draws over it. Both drape on USGS 3DEP terrain, with Esri World Elevation for far zoom. The **Imagery** picker, or `?imagery=preserve-2019` / `?imagery=esri-world-imagery`, switches the overlay imagery or turns it off. Play, Pause, and the time slider walk a regular 15-minute clock from the first observed timestamp to the last, in America/Los_Angeles. The page selects a prepared water-surface polygon for the selected time. It does not build water geometry, fill a missing reading, or show a water-surface elevation, stage, or discharge. A time with no observation shows no water. Neighbouring segments stay empty.
 
 ## Run
 
@@ -37,7 +37,8 @@ Files that carry `segmentNetworkVersion` must agree. A mismatch, or any other fa
 
 ## Code map
 
-- `standalone-experience-shell.ts` — page SceneView, Esri imagery, world elevation, and camera
+- `standalone-experience-shell.ts` — page SceneView, base imagery, terrain, and camera
+- `scene-imagery.ts` / `scene-imagery-options.ts` — overlay imagery layers, the imagery picker choices, and their dataset names
 - `creek-visualization-library-interface.ts` — `attachCreekVisualization(view, options)`
 - `http-data-contract-loader.ts` — fetch and validate the five files
 - `creek-data-contract.ts` — contract types, indexes, and the 15-minute clock

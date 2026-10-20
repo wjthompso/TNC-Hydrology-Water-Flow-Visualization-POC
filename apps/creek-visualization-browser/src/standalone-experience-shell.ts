@@ -6,6 +6,8 @@ import Point from '@arcgis/core/geometry/Point';
 import esriConfig from '@arcgis/core/config.js';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
 import Usgs3DepElevationLayer, { preflightElevationAtPoint } from './usgs-elevation-layer';
+import { readSceneImageryId } from './scene-imagery-options';
+import { showSceneImagery } from './scene-imagery';
 
 /** Slant range from the segment midpoint, close enough for a ~20 m segment. */
 const CAMERA_SLANT_RANGE_M = 180;
@@ -62,11 +64,13 @@ export async function createStandaloneExperienceShell(
   configureApiKey();
   const map = new EsriMap({
     // Esri basemap id "satellite" is World Imagery and does not require an API key.
+    // It is the base imagery everywhere; the Preserve Aerial Imagery Overlay draws over it near the creek.
     basemap: 'satellite',
     // world-elevation is the Terrain3D base surface. The USGS 3DEP layer composites
     // on top of it near the creek; world-elevation still covers far-zoom terrain.
     ground: 'world-elevation',
   });
+  showSceneImagery(map, readSceneImageryId(window.location.search));
 
   const view = new SceneView({
     container,

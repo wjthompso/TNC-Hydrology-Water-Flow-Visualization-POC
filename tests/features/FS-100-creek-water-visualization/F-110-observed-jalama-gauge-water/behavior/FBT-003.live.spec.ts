@@ -1,4 +1,5 @@
 import { expect, test } from '../../../../support/browser/response-cache/index.ts';
+import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import {
   midRecordObservation,
   OBSERVATION_STEP_MS,
@@ -20,13 +21,15 @@ import {
  * unavailable the result is inconclusive rather than passed. Nothing else is
  * mocked. It does not check the visual
  * appearance of the water.
+ *
+ * Imagery dataset used in the visualization: Esri World Imagery.
  */
 test('Play the Jalama gauge observations in chronological order, and stop that advance when Pause is pressed.', async ({
   page,
 }) => {
   const watch = watchLiveServices(page);
   try {
-    await openObservedWaterPage(page, watch);
+    await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     const midRecord = midRecordObservation();
     await scrubToTime(page, midRecord);
 

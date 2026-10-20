@@ -20,9 +20,9 @@ import { sampleFlatFrame } from './scene-flat-color.ts';
  * Methodology: Opens the locally served page in test mode and waits until the
  * test seam reports ready and SceneView has finished loading with a still
  * camera. The browser page, ArcGIS SceneView, and committed published creek
- * data are real. Esri World Imagery and Esri World Elevation responses are real
- * and are reused from a local disk cache; a response missing from the cache is
- * fetched live and saved. When a live fetch fails with DNS, TLS, HTTP 429, or
+ * data are real. Preserve Aerial Imagery Overlay, Esri World Imagery, and Esri
+ * World Elevation responses are real and are reused from a local disk cache; a
+ * response missing from the cache is fetched live and saved. When a live fetch fails with DNS, TLS, HTTP 429, or
  * HTTP 5xx and no frame failed, or no terrain tiles arrive, the result is
  * inconclusive rather than passed. Nothing else is mocked. After the opening
  * frame, the test-mode camera command moves the camera instantly to a fixed
@@ -36,6 +36,8 @@ import { sampleFlatFrame } from './scene-flat-color.ts';
  * also reported an outage. It does not check mouse-wheel input, intermediate
  * zoom levels, imagery sharpness, tile vintage differences, terrain accuracy,
  * or water appearance.
+ *
+ * Imagery dataset used in the visualization: Jack and Laura Dangermond Preserve Aerial Imagery - 2024 (8 cm, January 2024, via Vandenberg), over Esri World Imagery outside the Preserve.
  */
 
 /**

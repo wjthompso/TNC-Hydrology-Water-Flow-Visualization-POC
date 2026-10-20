@@ -1,4 +1,5 @@
 import { expect, test } from '../../../../support/browser/response-cache/index.ts';
+import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import {
   floodPeakObservation,
   GAUGE_SEGMENT_ID,
@@ -20,13 +21,15 @@ import {
  * unavailable the result is inconclusive rather than passed. Nothing else is
  * mocked. It does not check the visual appearance
  * of the water.
+ *
+ * Imagery dataset used in the visualization: Esri World Imagery.
  */
 test('Scrub to a different observation time and replace the shown water without leaving the previous water in place.', async ({
   page,
 }) => {
   const watch = watchLiveServices(page);
   try {
-    await openObservedWaterPage(page, watch);
+    await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     const opening = await readSeam(page);
     const openingBucket = opening.waterGraphicGeometryIdentity[0]?.bucketMinElevationM;
     const peak = floodPeakObservation();

@@ -1,4 +1,5 @@
 import { expect, test } from '../../../../support/browser/response-cache/index.ts';
+import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import {
   readSeam,
   watchLiveServices,
@@ -98,6 +99,7 @@ test("No creek segment stitching failures (cracks between water polygons): At th
         datasetId: NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
         extentId: JALAMA_EXTENT_ID,
         timeUtc: FLOOD_PEAK_HOUR_UTC,
+        imagery: FAST_TEST_SCENE_IMAGERY_ID,
       }),
     );
     expect(await readModeledSelectedTimeUtcMs(page), 'opening time from the URL').toBe(timeUtcMs);
@@ -176,6 +178,7 @@ test("No creek segment stitching failures (cracks between water polygons): At th
         datasetId: NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
         extentId: PRESERVE_EXTENT_ID,
         timeUtc: SEAM_HOUR_UTC,
+        imagery: FAST_TEST_SCENE_IMAGERY_ID,
       }),
     );
     expect(await readModeledSelectedTimeUtcMs(page), 'seam opening time from the URL').toBe(seamTimeUtcMs);

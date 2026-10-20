@@ -1,4 +1,5 @@
 import { expect, test } from '../../../../support/browser/response-cache/index.ts';
+import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import {
   GAUGE_SEGMENT_ID,
   openObservedWaterPage,
@@ -30,7 +31,7 @@ test('Looking up from below the water surface, the water-surface polygon fills t
 }) => {
   const watch = watchLiveServices(page);
   try {
-    await openObservedWaterPage(page, watch);
+    await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
 
     await pinSegmentWaterSurfaceElevationM(page, GAUGE_SEGMENT_ID, PINNED_WSE_M);
     await settleScene(page, 'pin-wse');

@@ -9,18 +9,29 @@ import type { TestCameraPose } from '../../../../support/browser/test-mode-api';
 import { approvedExternalDisruptionEvidence } from '../../../../support/network/live-release-evidence.ts';
 import type { LiveServiceWatch } from '../../F-110-observed-jalama-gauge-water/behavior/observed-jalama-gauge-water.ts';
 import type { LonLat } from './local-pipeline-output.ts';
+import {
+  DEFAULT_SCENE_IMAGERY_ID,
+  withSceneImagery,
+  type SceneImageryId,
+} from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 
 const SCENE_READY_MS = 75_000;
 /** Camera height above the creek bed for the straight-down junction frames. */
 const TOP_DOWN_HEIGHT_ABOVE_GROUND_M = 130;
 
-export function modeledWaterPageUrl(input: { datasetId: string; extentId: string; timeUtc: string }): string {
+/** `imagery` picks the scene imagery dataset; the page default applies when it is omitted. */
+export function modeledWaterPageUrl(input: {
+  datasetId: string;
+  extentId: string;
+  timeUtc: string;
+  imagery?: SceneImageryId;
+}): string {
   const params = new URLSearchParams({
     dataset: input.datasetId,
     modeledExtent: input.extentId,
     time: input.timeUtc,
   });
-  return `/?${params.toString()}`;
+  return withSceneImagery(`/?${params.toString()}`, input.imagery ?? DEFAULT_SCENE_IMAGERY_ID);
 }
 
 /**

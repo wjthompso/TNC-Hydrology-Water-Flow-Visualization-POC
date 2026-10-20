@@ -1,4 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import path from 'node:path';
 import { test, type Page, type TestInfo } from '../../../../support/browser/response-cache/index.ts';
 import {
@@ -49,6 +50,8 @@ import {
  * does not check mouse-wheel input, intermediate zoom levels, the return to
  * the opening camera, exact terrain accuracy, imagery appearance, sharpness,
  * vintage, ocean flatness, or water placement.
+ *
+ * Imagery dataset used in the visualization: Esri World Imagery.
  */
 
 /**
@@ -133,7 +136,7 @@ test('Zoom across the Jalama creek scene without raising tile-shaped terrain sla
   const failures: string[] = [];
 
   try {
-    await openObservedWaterPage(page, watch);
+    await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     await settleScene(page, 'opening');
     const grid = centralGrid(await sidebarMask(page));
 

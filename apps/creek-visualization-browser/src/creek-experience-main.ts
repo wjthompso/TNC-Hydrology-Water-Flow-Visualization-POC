@@ -18,6 +18,14 @@ import {
   readDatasetSelection,
 } from './modeled-water-catalog';
 import { readPlaybackSpeedButtons } from './observation-timeline-controls';
+import {
+  SCENE_IMAGERY_OPTIONS,
+  readSceneImageryId,
+  sceneImageryCredit,
+  showSceneImagery,
+  writeSceneImageryToUrl,
+  type SceneImageryId,
+} from './scene-imagery';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 
 interface CreekVisualizationTestSeam {
@@ -137,7 +145,7 @@ async function startExperience(): Promise<boolean> {
       });
       sceneView = started.view;
       attachment = started.attachment;
-      setSceneNote();
+      bindImageryPicker(sceneView);
       hideLoadingOverlay();
       await installDevToolsIfRequested();
       return true;
@@ -148,7 +156,7 @@ async function startExperience(): Promise<boolean> {
     if (!segment) throw new Error('The gauge segment is missing from the creek network.');
 
     sceneView = await createStandaloneExperienceShell(container, segment.pathWgs84);
-    setSceneNote();
+    bindImageryPicker(sceneView);
     attachment = attachCreekVisualization(sceneView, {
       data,
       playButton,
@@ -535,11 +543,37 @@ function geographicPoint(point: Point): Point | null {
   return geographic as Point;
 }
 
-function setSceneNote(): void {
+/**
+ * The shell already drew the URL's imagery. A change swaps the overlay imagery
+ * in place, so the camera, time, and water stay put.
+ */
+function bindImageryPicker(view: SceneView): void {
+  const selectedId = readSceneImageryId(location.search);
+  setSceneNote(selectedId);
+  const picker = document.getElementById('imagery-picker');
+  if (!(picker instanceof HTMLSelectElement)) return;
+  picker.replaceChildren(
+    ...SCENE_IMAGERY_OPTIONS.map((option) => {
+      const node = document.createElement('option');
+      node.value = option.id;
+      node.textContent = option.label;
+      node.selected = option.id === selectedId;
+      return node;
+    }),
+  );
+  picker.addEventListener('change', () => {
+    const option = SCENE_IMAGERY_OPTIONS.find((item) => item.id === picker.value);
+    if (!option || !view.map) return;
+    showSceneImagery(view.map, option.id);
+    writeSceneImageryToUrl(option.id);
+    setSceneNote(option.id);
+  });
+}
+
+function setSceneNote(imageryId: SceneImageryId): void {
   const note = document.getElementById('scene-note');
   if (!note) return;
-  note.textContent =
-    'Imagery: Esri, Maxar, Earthstar Geographics, and the GIS User Community. Terrain: USGS 3DEP, with Esri World Elevation beyond the creek.';
+  note.textContent = `Imagery: ${sceneImageryCredit(imageryId)}. Terrain: USGS 3DEP, with Esri World Elevation beyond the creek.`;
 }
 
 function showExperienceError(message: string): void {

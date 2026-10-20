@@ -1,4 +1,5 @@
 import { expect, test } from '../../../../support/browser/response-cache/index.ts';
+import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import {
   distanceMeters,
   GAUGE_SEGMENT_ID,
@@ -22,13 +23,15 @@ import {
  * 300 m of that segment's midpoint from the committed path, and that the
  * removed synthetic controls are absent. It does not check the visual
  * appearance of the water.
+ *
+ * Imagery dataset used in the visualization: Esri World Imagery.
  */
 test('Open the page on water for the Jalama Near Lompoc gauge Creek Segment only, with the camera framed there and no leftover synthetic ribbons.', async ({
   page,
 }) => {
   const watch = watchLiveServices(page);
   try {
-    await openObservedWaterPage(page, watch);
+    await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     const seam = await readSeam(page);
     const midpoint = gaugeSegmentMidpointWgs84();
 

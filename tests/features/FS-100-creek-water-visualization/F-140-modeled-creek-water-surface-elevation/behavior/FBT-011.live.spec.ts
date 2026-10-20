@@ -1,4 +1,5 @@
 import { expect, test } from '../../../../support/browser/response-cache/index.ts';
+import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import type { TestCameraPose } from '../../../../support/browser/test-mode-api';
 import { watchLiveServices } from '../../F-110-observed-jalama-gauge-water/behavior/observed-jalama-gauge-water.ts';
 import {
@@ -78,6 +79,7 @@ test('No stair-stepping (proper water polygon slanting): Modeled water at a low-
         datasetId: NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
         extentId: PRESERVE_EXTENT_ID,
         timeUtc: LOW_FLOW_HOUR_UTC,
+        imagery: FAST_TEST_SCENE_IMAGERY_ID,
       }),
     );
     expect(await readModeledSelectedTimeUtcMs(page), 'opening time from the URL').toBe(timeUtcMs);
