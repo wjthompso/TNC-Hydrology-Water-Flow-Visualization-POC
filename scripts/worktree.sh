@@ -82,20 +82,20 @@ case "$command_name" in
     fi
     base_branch="$(git -C "$main_checkout" rev-parse --abbrev-ref HEAD)"
     mkdir -p "$worktree_parent"
-    echo "Creating $worktree_name from $base_branch…"
+    echo "Creating ${worktree_name} from ${base_branch}..."
     git -C "$main_checkout" worktree add -b "$worktree_name" "$worktree_path" "$base_branch"
     clone_generated_data
-    echo "  installing packages…"
+    echo "  installing packages..."
     (cd "$worktree_path" && npm install --silent)
     write_workspace_file
-    echo "Done. In Cursor: File → Open Workspace from File… → $worktree_parent/$worktree_name.code-workspace"
+    echo "Done. In Cursor: File > Open Workspace from File... > ${worktree_parent}/${worktree_name}.code-workspace"
     ;;
   refresh-data)
     if [[ ! -d "$worktree_path" ]]; then
       echo "No worktree at $worktree_path." >&2
       exit 1
     fi
-    echo "Replacing $worktree_name's generated data with the main checkout's…"
+    echo "Replacing ${worktree_name}'s generated data with the main checkout's..."
     clone_generated_data
     ;;
   *)
