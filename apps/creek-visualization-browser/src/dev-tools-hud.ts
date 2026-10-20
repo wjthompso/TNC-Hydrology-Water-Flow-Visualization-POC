@@ -1354,7 +1354,7 @@ function datasetAndTimeCapture(
  */
 function buildWsePolygonMethodPicker(seam: ModeledExperienceSeam): HTMLElement {
   const root = createElement('div', ['flex', 'flex-col', 'gap-1']);
-  const label = createElement('label', [FIELD_LABEL_CLASS], 'Polygon method');
+  const label = createElement('label', [FIELD_LABEL_CLASS], 'WSE Polygon Generation Method');
   const select = createElement('select', [
     'w-full',
     'cursor-pointer',
