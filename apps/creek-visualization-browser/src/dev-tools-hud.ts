@@ -50,6 +50,8 @@ import type {
   ModeledSegmentReading,
 } from './modeled-creek-experience';
 import { formatObservationTime } from './observation-timeline-controls';
+import type { DevToolsClickMarker } from './dev-tools-click-marker';
+import { createDevToolsClickMarker } from './dev-tools-click-marker';
 import { wsePolygonMethodKey, type WsePolygonMethodVersion } from './wse-polygon-generation-methods';
 
 interface DevToolsHudOptions {
@@ -61,12 +63,20 @@ interface DevToolsHudOptions {
    * leaves room above it for the development-server toggle button.
    */
   placement?: 'top' | 'below-dev-tools-toggle';
+  /**
+   * When the dev-server toggle already tracks clicks, it owns the marker and
+   * forwards clicks here. A direct `?devtools` mount leaves this unset and the
+   * HUD creates the marker itself.
+   */
+  clickMarker?: DevToolsClickMarker;
 }
 
 export interface DevToolsHudHandle {
   readonly root: HTMLElement;
   readonly isOpen: boolean;
   setOpen(open: boolean): void;
+  /** Fills the click readout for a click the toggle already marked on the map. */
+  captureScreenClick(screen: { x: number; y: number }): void;
 }
 
 type ModeledSeamWindow = Window & { __TNC_MODELED__?: ModeledExperienceSeam };
@@ -197,6 +207,10 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   }
 
   loadHudDisplayFont();
+  const clickMarker = options.clickMarker ?? createDevToolsClickMarker(options.view);
+  // The toggle owns the marker and calls setOpen. A direct mount starts open.
+  const panelStartsOpen = !options.clickMarker;
+  if (panelStartsOpen) clickMarker.setVisible(true);
   const belowToggle = options.placement === 'below-dev-tools-toggle';
   /** Present only in the modeled experience; the water readouts then follow the active Dataset. */
   const modeledSeam = (window as ModeledSeamWindow).__TNC_MODELED__ ?? null;
@@ -236,6 +250,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     'data-[hud-style=flight]:font-semibold',
   ]);
   root.id = 'dev-tools-hud';
+  root.hidden = !panelStartsOpen;
   root.setAttribute('aria-label', 'Developer tools');
 
   const scrollHost = createElement('div', [
@@ -545,27 +560,9 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   detailedCopyPoseButton.addEventListener('click', copyCameraPose);
 
   // --- Click capture: hit-test on each view click --------------------------
-  const markerLayer = new GraphicsLayer({
-    id: 'dev-hud-click-marker',
-    listMode: 'hide',
-  });
-  // Hidden until DevTools is open; set visible = true in setOpen.
-  markerLayer.visible = false;
-  if (options.view.map) options.view.map.add(markerLayer);
-  /** Outer ring: transparent fill, amber outline. */
-  const markerRingSymbol = new SimpleMarkerSymbol({
-    style: 'circle',
-    color: [0, 0, 0, 0],
-    size: 14,
-    outline: new SimpleLineSymbol({ color: '#f3ef2a', width: 2 }),
-  });
-  /** Inner dot: solid amber, no outline — the precise click target. */
-  const markerDotSymbol = new SimpleMarkerSymbol({
-    style: 'circle',
-    color: '#f3ef2a',
-    size: 5,
-  });
-  let markerGraphics: Graphic[] = [];
+  // The yellow ring itself lives in dev-tools-click-marker.ts. This block only
+  // fills the readout. The dev-server toggle marks the map and then calls
+  // captureScreenClick, including for a click made before this panel mounted.
 
   let lastCapture: HitTestCapture | null = null;
   const captureCopyButtons = [simpleCopyCaptureButton, detailedCopyCaptureButton];
@@ -601,8 +598,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   let selectedModeledSegment: SelectedModeledSegment | null = null;
   let renderedWaterKey: string | null = null;
 
-  options.view.on('click', (event) => {
-    const screen = { x: event.x, y: event.y };
+  const captureScreenClick = (screen: { x: number; y: number }): void => {
     seam
       .hitTestAtScreen(screen)
       .then((capture) => {
@@ -622,16 +618,20 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
         }
         lastClickValue.textContent = summarizeClickCapture(capture, selectedModeledSegment);
         for (const button of captureCopyButtons) button.disabled = false;
-        drawClickMarker(options.view, markerLayer, { ring: markerRingSymbol, dot: markerDotSymbol }, event.mapPoint, (next) => {
-          markerGraphics = next;
-        }, markerGraphics);
       })
       .catch((error: unknown) => {
         console.error('[dev-tools-hud] hit test failed', error);
         clickSummary.textContent = 'Hit test failed. See console.';
         lastClickValue.textContent = 'Hit test failed. See console.';
       });
-  });
+  };
+
+  if (panelStartsOpen) {
+    options.view.on('click', (event) => {
+      clickMarker.noteClick(event.mapPoint);
+      captureScreenClick({ x: event.x, y: event.y });
+    });
+  }
 
   const copyClickCapture = (): void => {
     if (!lastCapture) return;
@@ -743,13 +743,10 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
       return !root.hidden;
     },
     setOpen(open) {
-      markerLayer.visible = open;
-      if (!open && markerGraphics.length > 0) {
-        markerLayer.removeAll();
-        markerGraphics = [];
-      }
+      clickMarker.setVisible(open);
       root.hidden = !open;
     },
+    captureScreenClick,
   };
 }
 
@@ -1696,26 +1693,6 @@ function loadHudDisplayFont(): void {
 }
 
 // --- Map marker and clipboard -------------------------------------------------
-
-function drawClickMarker(
-  view: SceneView,
-  layer: GraphicsLayer,
-  symbols: { ring: SimpleMarkerSymbol; dot: SimpleMarkerSymbol },
-  mapPoint: Point | null | undefined,
-  setMarker: (next: Graphic[]) => void,
-  previous: Graphic[],
-): void {
-  if (previous.length > 0) layer.removeMany(previous);
-  if (!mapPoint) {
-    setMarker([]);
-    return;
-  }
-  const ring = new Graphic({ geometry: mapPoint, symbol: symbols.ring });
-  const dot = new Graphic({ geometry: mapPoint, symbol: symbols.dot });
-  layer.addMany([ring, dot]);
-  setMarker([ring, dot]);
-  void view;
-}
 
 async function copyWithFeedback(text: string, feedback: HTMLElement, successMessage: string): Promise<void> {
   try {

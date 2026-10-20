@@ -498,7 +498,7 @@
     {
       "id": "FST-003",
       "name": "Rebuilding the published creek visualization data from retained source snapshots reproduces the shipped files byte for byte.",
-      "methodology": "Why it matters: the observed Jalama gauge water that the app ships is built by the publish pipeline from committed source snapshots. Modeled-water work reuses and refactors shared code such as Creek Segment cutting and water-surface polygon generation. This test makes sure such a change cannot silently alter the observed water people already see. How it checks: it calls the real publish function, publishCreekVisualizationData, offline, writing into a fresh temporary directory, and also redirects the reviewed station-assignment file there, so nothing in the app's public folder or the retained source folder is touched. The inputs are the committed retained snapshots: the TNC flowline, the USGS 11120600 station and observations, and the USGS 3DEP 1 m elevation window. It then compares the set of rebuilt file names with the published files tracked by Git, and the SHA-256 hash of each rebuilt file with that file's content at the current Git commit (HEAD). Comparing with HEAD rather than the working copy means an uncommitted republish cannot make the test agree with itself. A deliberate data change therefore fails this test until the new published files are committed. What is real: the whole publish pipeline, its validation, and the committed snapshots and published files. Nothing is mocked except silencing console output, and there is no network. What it does not check: whether the source snapshots are still current with USGS or TNC, how the browser draws the files, the reviewed station-assignment file's contents, or modeled water.",
+      "methodology": "Why it matters: the observed Jalama gauge water that the app ships is built by the publish pipeline from committed source snapshots. Modeled-water work reuses and refactors shared code such as Creek Segment cutting and corridor measurement. This test makes sure such a change cannot silently alter the observed water people already see. How it checks: it calls the real publish function, publishCreekVisualizationData, offline, writing into a fresh temporary directory, and also redirects the reviewed station-assignment file there, so nothing in the app's public folder or the retained source folder is touched. The inputs are the committed retained snapshots: the TNC flowline, the USGS 11120600 station and observations, the USGS 3DEP 1 m elevation window, and the reviewed snapshot of the modeled pipeline's Stage 4 polygon set for the gauge's Creek Segment (WSE Polygon Generation Method junction-sloped-terrain-fill v1). Observed water-surface polygons are copied from that Stage 4 snapshot, not traced by publish; the elevation window is used only to measure the corridor the release validation checks the copied polygons against. It then compares the set of rebuilt file names with the published files tracked by Git, and the SHA-256 hash of each rebuilt file with that file's content at the current Git commit (HEAD). Comparing with HEAD rather than the working copy means an uncommitted republish cannot make the test agree with itself. A deliberate data change therefore fails this test until the new published files are committed. What is real: the whole publish pipeline, its validation, and the committed snapshots and published files. Nothing is mocked except silencing console output, and there is no network. What it does not check: whether the source snapshots are still current with USGS or TNC, how the browser draws the files, the reviewed station-assignment file's contents, or modeled water.",
       "category": "feature-supporting",
       "owner": "F-110",
       "additionalFeatureAssociations": [],
@@ -513,6 +513,25 @@
       "durationBudgetMs": 5000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/supporting/FST-003.test.ts"
+    },
+    {
+      "id": "FST-004",
+      "name": "The observed gauge segment's published water polygons are identical to the modeled Stage 4 polygons for that segment.",
+      "methodology": "Why it matters: observed and modeled water must draw one set of prepared water-surface polygons, so switching between the Jalama gauge readings and a modeled Dataset never changes the water's shape at the same water-surface elevation. Publish copies a reviewed, committed snapshot of Stage 4's polygon set for the gauge's Creek Segment, 27714637-026, so a drifted snapshot or a newer Stage 4 run that nobody re-reviewed would quietly split them again. How it checks: it reads the snapshot's provenance file to find the Stage 4 source path and method (junction-sloped-terrain-fill v1), then reads the 27714637-026 polygon set from three places: the local Stage 4 output for the jalama-gauge-reach extent, the published water-surface-polygon-sets.json, and the retained snapshot. Each must hold exactly one set for that Creek Segment. The published set and the retained set must each deep-equal the Stage 4 set: segmentNetworkVersion, segment id, and every bucket's minimum, maximum, and ring coordinates. When the gitignored local Stage 4 output is missing, the test is skipped with a message naming npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach; a skip is reported as not run, never passed. What is real: the committed published file, the committed snapshot and provenance, and the developer's local Stage 4 output. Nothing is mocked, nothing is rebuilt, and there is no network. What it does not check: whether Stage 4's polygons are hydraulically right, other Creek Segments, the dangermond-preserve extent, how the browser draws the polygons, or that the published file is reproducible from retained sources (FST-003 does).",
+      "category": "feature-supporting",
+      "owner": "F-110",
+      "additionalFeatureAssociations": ["F-140"],
+      "scope": "integration",
+      "environment": "non-browser",
+      "browserMode": "not-applicable",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "nonblocking",
+      "enforcementChange": null,
+      "durationBudgetMs": 2000,
+      "fast": true,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/supporting/FST-004.test.ts"
     },
     {
       "id": "SST-001",

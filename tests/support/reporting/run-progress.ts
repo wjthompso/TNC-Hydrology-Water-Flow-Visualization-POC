@@ -19,15 +19,22 @@ export function maximumDurationMs(tests: readonly PlannedTest[]): number {
   return tests.reduce((total, test) => total + test.durationBudgetMs, 0);
 }
 
-export function introductionLines(tests: readonly PlannedTest[], workers: number): string[] {
+export function introductionLines(
+  tests: readonly PlannedTest[],
+  workers: number,
+  includeInitialProgress = true,
+): string[] {
   const total = tests.length;
   const budgetMs = maximumDurationMs(tests);
-  return [
+  const lines = [
     `About to run ${total} ${testsWord(total)}.`,
     `Maximum duration is ${formatBudget(budgetMs)}.`,
     `Running with ${workers} ${workers === 1 ? 'worker' : 'workers'}.`,
-    progressSentence({ completed: 0, total, remainingBudgetMs: budgetMs }),
   ];
+  if (includeInitialProgress) {
+    lines.push(progressSentence({ completed: 0, total, remainingBudgetMs: budgetMs }));
+  }
+  return lines;
 }
 
 export function progressSentence(input: {
@@ -81,6 +88,76 @@ export function readRunPlan(raw: string | undefined): PlannedTest[] {
   }
 }
 
+export function runPlanUsesInPlaceProgress(raw: string | undefined): boolean {
+  if (!raw) return false;
+  try {
+    return (JSON.parse(raw) as { inPlaceProgress?: unknown }).inPlaceProgress === true;
+  } catch {
+    return false;
+  }
+}
+
+const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
+const clearTerminalLine = '\r\u001b[2K';
+
+/**
+ * Animates and rewrites one terminal line. Non-interactive output stays append-only so saved logs
+ * contain no cursor-control codes.
+ */
+export class ProgressLine {
+  private frameIndex = 0;
+  private interval: NodeJS.Timeout | undefined;
+  private finished = false;
+  private line: string;
+  private readonly inPlace: boolean;
+
+  constructor(line: string, inPlace: boolean) {
+    this.line = line;
+    this.inPlace = inPlace;
+    if (!inPlace) return;
+    this.render();
+    this.interval = setInterval(() => {
+      this.frameIndex = (this.frameIndex + 1) % spinnerFrames.length;
+      this.render();
+    }, 80);
+    this.interval.unref();
+  }
+
+  update(line: string, complete = false): void {
+    this.line = line;
+    if (!this.inPlace) {
+      console.log(line);
+      return;
+    }
+    if (complete) {
+      this.finish();
+      return;
+    }
+    this.render();
+  }
+
+  writePersistentLine(line: string): void {
+    if (!this.inPlace) {
+      console.log(line);
+      return;
+    }
+    process.stdout.write(`${clearTerminalLine}${line}\n`);
+    this.render();
+  }
+
+  finish(): void {
+    if (this.finished || !this.inPlace) return;
+    this.finished = true;
+    if (this.interval) clearInterval(this.interval);
+    process.stdout.write(`${clearTerminalLine}${this.line}\n`);
+  }
+
+  private render(): void {
+    if (this.finished) return;
+    process.stdout.write(`${clearTerminalLine}${spinnerFrames[this.frameIndex]} ${this.line}`);
+  }
+}
+
 export class RunProgress {
   private readonly waiting = new Map<string, PlannedTest[]>();
   private remainingBudgetMs: number;
@@ -99,6 +176,18 @@ export class RunProgress {
 
   idFor(name: string): string | undefined {
     return this.waiting.get(name)?.[0]?.id;
+  }
+
+  initialLine(): string {
+    return progressSentence({
+      completed: 0,
+      total: this.total,
+      remainingBudgetMs: this.remainingBudgetMs,
+    });
+  }
+
+  isComplete(): boolean {
+    return this.completed === this.total;
   }
 
   finish(name: string, outcome: string): string | null {
