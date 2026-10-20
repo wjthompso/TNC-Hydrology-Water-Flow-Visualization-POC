@@ -20,3 +20,5 @@ test-results/
 
 # Live browser test response cache (Esri and USGS 3DEP), filled by live tests
 /.test-cache
+TNC-Hydrology-Water-Flow.local.code-workspace
+*.code-workspace
