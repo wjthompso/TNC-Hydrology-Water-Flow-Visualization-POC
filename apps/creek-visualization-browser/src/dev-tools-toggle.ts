@@ -2,11 +2,14 @@
 // Mounted by creek-experience-main.ts when `import.meta.env.DEV` is true, in
 // both the observed and the modeled experiences. Vite replaces that flag with
 // `false` in production builds, so this module is never bundled there. The HUD
-// itself is imported the first time it is opened. The open state is remembered
-// in localStorage; `?devtools` still opens the HUD on load.
+// panel is loaded on startup so a click made while it is closed is still the
+// last click when it opens. The yellow ring is drawn immediately and shown
+// only while the panel is open. The open state is remembered in localStorage;
+// `?devtools` still opens the HUD on load.
 
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { CreekVisualizationAttachment } from './creek-visualization-library-interface';
+import { createDevToolsClickMarker } from './dev-tools-click-marker';
 import type { DevToolsHudHandle } from './dev-tools-hud';
 
 const DEV_TOOLS_OPEN_STORAGE_KEY = 'tnc-dev-tools-open';
@@ -76,6 +79,16 @@ export function installDevToolsToggle(options: DevToolsToggleOptions): void {
   let hud: DevToolsHudHandle | null = null;
   let open = false;
   let mounting: Promise<void> | null = null;
+  // The latest click that landed before the HUD panel finished loading.
+  let pendingScreen: { x: number; y: number } | null = null;
+  const clickMarker = createDevToolsClickMarker(options.view);
+
+  options.view.on('click', (event) => {
+    clickMarker.noteClick(event.mapPoint);
+    const screen = { x: event.x, y: event.y };
+    if (hud) hud.captureScreenClick(screen);
+    else pendingScreen = screen;
+  });
 
   const render = (): void => {
     button.setAttribute('aria-expanded', String(open));
@@ -83,21 +96,27 @@ export function installDevToolsToggle(options: DevToolsToggleOptions): void {
     chevron.textContent = open ? '▴' : '▾';
   };
 
+  const ensureHud = (): Promise<void> => {
+    mounting ??= import('./dev-tools-hud').then(({ installDevToolsHud }) => {
+      hud = installDevToolsHud({
+        view: options.view,
+        attachment: options.attachment,
+        container: options.container,
+        placement: 'below-dev-tools-toggle',
+        clickMarker,
+      });
+      const queued = pendingScreen;
+      pendingScreen = null;
+      if (queued && hud) hud.captureScreenClick(queued);
+    });
+    return mounting;
+  };
+
   const setOpen = async (next: boolean, remember: boolean): Promise<void> => {
     open = next;
     render();
     if (remember) saveOpenState(next);
-    if (next && !hud) {
-      mounting ??= import('./dev-tools-hud').then(({ installDevToolsHud }) => {
-        hud = installDevToolsHud({
-          view: options.view,
-          attachment: options.attachment,
-          container: options.container,
-          placement: 'below-dev-tools-toggle',
-        });
-      });
-      await mounting;
-    }
+    await ensureHud();
     // Re-read `open`: a second click may have landed while the HUD was loading.
     hud?.setOpen(open);
   };
