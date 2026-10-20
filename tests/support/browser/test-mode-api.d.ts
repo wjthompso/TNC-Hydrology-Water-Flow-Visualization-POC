@@ -73,6 +73,23 @@ declare global {
         readonly segmentId: string;
         readonly bucketMinElevationM: number | null;
       }[];
+      /** The Selected Creek Segment, or null. */
+      readonly selectedCreekSegmentId: string | null;
+      /** Creek Segments whose drawn, visible water carries the selection highlight. */
+      readonly highlightedSegmentIds: readonly string[];
+      /** Water-Surface Elevation Chart state; null when the page has no chart. */
+      readonly waterSurfaceElevationChart: {
+        readonly segmentId: string | null;
+        readonly pointCount: number;
+        readonly domainUtcMs: readonly [number, number] | null;
+        readonly viewWindowUtcMs: readonly [number, number] | null;
+        readonly isZoomed: boolean;
+        readonly cursorTimeUtcMs: number | null;
+        readonly hoverTimeUtcMs: number | null;
+        clientPointForTime(timeUtcMs: number): { readonly x: number; readonly y: number } | null;
+        overviewClientXForTime(timeUtcMs: number): number | null;
+        nearestReading(timeUtcMs: number): { readonly timeUtcMs: number; readonly valueM: number } | null;
+      } | null;
     };
     /**
      * Modeled-water experience seam, present only on a page opened with a

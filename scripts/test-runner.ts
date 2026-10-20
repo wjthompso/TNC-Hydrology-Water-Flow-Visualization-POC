@@ -295,8 +295,9 @@ function playwrightWorkerCount(mode: 'deterministic' | 'live'): number {
 
 function announceRun(selected: CatalogTest[], workers: number): string {
   const tests = plannedTests(selected);
-  for (const line of introductionLines(tests, workers)) console.log(line);
-  return JSON.stringify({ tests });
+  const inPlaceProgress = process.stdout.isTTY === true;
+  for (const line of introductionLines(tests, workers, !inPlaceProgress)) console.log(line);
+  return JSON.stringify({ tests, inPlaceProgress });
 }
 
 async function runNonBrowser(

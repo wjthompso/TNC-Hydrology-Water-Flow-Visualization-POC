@@ -56,10 +56,62 @@ export function readDatasetSelection(locationSearch: string): DatasetSelection {
   };
 }
 
-/** Builds the page URL for a picker choice, keeping the extent and devtools flags. */
-export function datasetPageUrl(datasetOptionId: string, current: Location): string {
+/** Camera pose carried across a Dataset switch: longitude, latitude, height (m), heading, tilt. */
+export const CAMERA_QUERY_PARAM = 'camera';
+/** Selected Creek Segment carried across a Dataset switch. */
+export const SEGMENT_QUERY_PARAM = 'segment';
+
+export interface CameraQueryPose {
+  readonly positionWgs84: readonly [number, number, number];
+  readonly headingDegrees: number;
+  readonly tiltDegrees: number;
+}
+
+export function writeCameraQuery(pose: CameraQueryPose): string {
+  const [longitude, latitude, z] = pose.positionWgs84;
+  return [longitude.toFixed(7), latitude.toFixed(7), z.toFixed(1), pose.headingDegrees.toFixed(1), pose.tiltDegrees.toFixed(1)].join(',');
+}
+
+export function readCameraQuery(locationSearch: string): CameraQueryPose | null {
+  const raw = new URLSearchParams(locationSearch).get(CAMERA_QUERY_PARAM);
+  if (!raw) return null;
+  const parts = raw.split(',').map(Number);
+  if (parts.length !== 5 || parts.some((part) => !Number.isFinite(part))) return null;
+  const [longitude, latitude, z, headingDegrees, tiltDegrees] = parts as [number, number, number, number, number];
+  return { positionWgs84: [longitude, latitude, z], headingDegrees, tiltDegrees };
+}
+
+/** Opening time from `?time=`, for either experience; null when absent or unreadable. */
+export function readOpeningTimeQuery(locationSearch: string): number | null {
+  const raw = new URLSearchParams(locationSearch).get(TIME_QUERY_PARAM);
+  const parsed = raw ? Date.parse(raw) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Builds the page URL for a picker choice, keeping the extent and devtools
+ * flags. The selected time and camera ride along, so the new Dataset opens at
+ * the same moment and view; each experience snaps the time to its own grid.
+ */
+export function datasetPageUrl(
+  datasetOptionId: string,
+  current: Location,
+  carry: {
+    selectedTimeUtcMs: number | null;
+    cameraPose: CameraQueryPose | null;
+    selectedCreekSegmentId?: string | null;
+  } = {
+    selectedTimeUtcMs: null,
+    cameraPose: null,
+  },
+): string {
   const params = new URLSearchParams(current.search);
   params.delete(TIME_QUERY_PARAM);
+  params.delete(CAMERA_QUERY_PARAM);
+  params.delete(SEGMENT_QUERY_PARAM);
+  if (carry.selectedCreekSegmentId) params.set(SEGMENT_QUERY_PARAM, carry.selectedCreekSegmentId);
+  if (carry.selectedTimeUtcMs !== null) params.set(TIME_QUERY_PARAM, new Date(carry.selectedTimeUtcMs).toISOString());
+  if (carry.cameraPose) params.set(CAMERA_QUERY_PARAM, writeCameraQuery(carry.cameraPose));
   if (datasetOptionId === OBSERVED_DATASET_OPTION_ID) {
     params.delete(DATASET_QUERY_PARAM);
   } else {

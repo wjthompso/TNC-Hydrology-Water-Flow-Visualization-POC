@@ -54,6 +54,14 @@ export interface ObservationTimelineElements {
   speedButtons?: readonly PlaybackSpeedControl[];
 }
 
+export interface ObservationTimelineController {
+  /**
+   * Moves the slider to the grid slot nearest the time, the same way a scrub
+   * does: the readout and the map follow, and running playback keeps going.
+   */
+  selectTime(timeUtcMs: number): void;
+}
+
 /**
  * The slider indexes the 15-minute grid, including gap slots.
  * Speed buttons choose 0.5×, 1×, 2×, 5×, or 10× and do not start playback.
@@ -69,7 +77,7 @@ export function bindObservationTimelineControls(
   clock: ObservationClock,
   openingGridIndex: number,
   onSelectedTime: (timeUtcMs: number) => void,
-): void {
+): ObservationTimelineController {
   const { playButton, slider, timeReadout, speedButtons = [] } = elements;
   let currentIndex = 0;
   let selectedSpeed = 1;
@@ -148,12 +156,23 @@ export function bindObservationTimelineControls(
 
   updateSpeedButtons();
 
+  const scrubToIndex = (index: number): void => {
+    selectIndex(index);
+    if (playbackTimer != null && currentIndex >= clock.count - 1) stopPlayback();
+  };
+
   slider.addEventListener('input', () => {
     const index = Number.parseInt(slider.value, 10);
     if (!Number.isFinite(index)) return;
-    selectIndex(index);
-    if (playbackTimer != null && currentIndex >= clock.count - 1) stopPlayback();
+    scrubToIndex(index);
   });
 
   selectIndex(openingGridIndex);
+
+  return {
+    selectTime(timeUtcMs) {
+      if (!Number.isFinite(timeUtcMs)) return;
+      scrubToIndex(Math.round((timeUtcMs - clock.firstUtcMs) / clock.stepMs));
+    },
+  };
 }

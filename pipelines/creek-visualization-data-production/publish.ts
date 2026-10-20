@@ -1,3 +1,4 @@
+import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
@@ -5,6 +6,7 @@ import {
   ASSIGNMENT_FILE,
   ELEVATION_SNAPSHOT_FILE,
   FLOWLINE_SNAPSHOT_FILE,
+  OBSERVED_POLYGON_SET_SNAPSHOT_FILE,
   OBSERVED_SOURCE_ID,
   OBSERVED_SOURCE_NAME,
   OBSERVATIONS_SNAPSHOT_FILE,
@@ -14,13 +16,17 @@ import {
   publishedDirectory,
   retainedSourceDirectory,
 } from './constants.ts';
+import { adjacentSegmentsById } from './creek-segment-adjacency.ts';
 import { readJson, writeCompactJson, writePrettyJson } from './json-files.ts';
 import { assignMonitoringStation, readMonitoringStation } from './monitoring-station-assignment.ts';
 import { buildObservedTimeSeries } from './observed-time-series-publication.ts';
-import { validateSegmentNetworkRelease } from './segment-network-release-validation.ts';
+import {
+  validateSegmentNetworkRelease,
+  type PublishedWaterSurfacePolygonSets,
+} from './segment-network-release-validation.ts';
 import type { CreekSegment } from './tnc-flowline-segmentation.ts';
 import { segmentTncFlowline } from './tnc-flowline-segmentation.ts';
-import { buildWaterSurfaceElevationBuckets, generateWaterSurfacePolygons } from './water-surface-polygon-generation.ts';
+import { generateWaterSurfacePolygons } from './water-surface-polygon-generation.ts';
 
 function publishedCreekSegment(segment: CreekSegment) {
   return {
@@ -57,25 +63,33 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
   const observed = buildObservedTimeSeries(observations, assignment.reviewed.segmentId);
   const series = observed.document.segments[0];
   if (!series) throw new Error('Observed time series did not include the assigned Creek Segment.');
-  const buckets = buildWaterSurfaceElevationBuckets(series.waterSurfaceElevationM);
-  const polygons = await generateWaterSurfacePolygons({
+
+  // Observed water draws the modeled pipeline's Stage 4 polygons for the gauge's Creek Segment,
+  // copied from a reviewed retained snapshot, so observed and modeled water share one polygon set.
+  const polygonSetSnapshotPath = path.join(retainedSourceDirectory, OBSERVED_POLYGON_SET_SNAPSHOT_FILE);
+  const waterSurfacePolygonSets = (await readJson(polygonSetSnapshotPath)) as PublishedWaterSurfacePolygonSets;
+  const snapshotSegmentIds = waterSurfacePolygonSets.waterSurfacePolygonSets.map((polygonSet) => polygonSet.segmentId);
+  if (snapshotSegmentIds.length !== 1 || snapshotSegmentIds[0] !== assignment.segment.segmentId) {
+    throw new Error(
+      `${OBSERVED_POLYGON_SET_SNAPSHOT_FILE} must hold exactly the assigned Creek Segment ${assignment.segment.segmentId}; it holds ${snapshotSegmentIds.join(', ') || 'none'}.`,
+    );
+  }
+  const elevationBuckets = waterSurfacePolygonSets.waterSurfacePolygonSets[0]?.elevationBuckets ?? [];
+
+  // Stage 4 cuts each corridor end at the junction bisector, so the corridor bounding box the
+  // release validation checks rings against must use the same neighbours. Tracing zero buckets
+  // only measures that corridor on the retained USGS 3DEP window; it draws no polygon.
+  const corridor = await generateWaterSurfacePolygons({
     elevationRasterPath: path.join(retainedSourceDirectory, ELEVATION_SNAPSHOT_FILE),
     segment: assignment.segment,
-    buckets,
+    buckets: [],
+    adjacentSegments: adjacentSegmentsById(segments).get(assignment.segment.segmentId) ?? {},
+    logProgress: false,
   });
 
   const creekSegments = {
     segmentNetworkVersion: SEGMENT_NETWORK_VERSION,
     creekSegments: segments.map(publishedCreekSegment),
-  };
-  const waterSurfacePolygonSets = {
-    segmentNetworkVersion: SEGMENT_NETWORK_VERSION,
-    waterSurfacePolygonSets: [
-      {
-        segmentId: assignment.segment.segmentId,
-        elevationBuckets: polygons.elevationBuckets,
-      },
-    ],
   };
   const monitoringStations = {
     segmentNetworkVersion: SEGMENT_NETWORK_VERSION,
@@ -107,11 +121,12 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
     dataSourceMetadata,
     timeSeries: observed.document,
     assignment: assignment.reviewed,
-    corridorBboxBySegmentId: new Map([[assignment.segment.segmentId, polygons.corridorBboxWgs84]]),
+    corridorBboxBySegmentId: new Map([[assignment.segment.segmentId, corridor.corridorBboxWgs84]]),
   });
 
   await writePrettyJson(path.join(outputDirectory, 'creek-segments.json'), creekSegments);
-  await writePrettyJson(path.join(outputDirectory, 'water-surface-polygon-sets.json'), waterSurfacePolygonSets);
+  await mkdir(outputDirectory, { recursive: true });
+  await copyFile(polygonSetSnapshotPath, path.join(outputDirectory, 'water-surface-polygon-sets.json'));
   await writePrettyJson(path.join(outputDirectory, 'monitoring-stations.json'), monitoringStations);
   await writePrettyJson(path.join(outputDirectory, 'data-source-metadata.json'), dataSourceMetadata);
   await writeCompactJson(
@@ -120,14 +135,13 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
   );
   await writePrettyJson(assignmentOutputPath, assignment.reviewed);
 
-  const firstBucket = buckets[0];
-  const lastBucket = buckets[buckets.length - 1];
+  const firstBucket = elevationBuckets[0];
+  const lastBucket = elevationBuckets[elevationBuckets.length - 1];
+  const emptyBuckets = elevationBuckets.filter((bucket) => bucket.ringsWgs84.length === 0);
   const emptyText =
-    polygons.emptyBuckets.length === 0
+    emptyBuckets.length === 0
       ? 'none'
-      : polygons.emptyBuckets
-          .map((bucket) => `${bucket.minWaterSurfaceElevationM}–${bucket.maxWaterSurfaceElevationM}`)
-          .join(', ');
+      : emptyBuckets.map((bucket) => `${bucket.minWaterSurfaceElevationM}–${bucket.maxWaterSurfaceElevationM}`).join(', ');
   const duplicateText =
     observed.droppedDuplicateIds.length === 0
       ? 'no duplicate timestamps'
@@ -140,10 +154,10 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
     `Observed series: ${observed.rowCount} timestamps, ${observed.nullCount} null water-surface elevations, ${duplicateText}.`,
   );
   console.log(
-    `Elevation buckets: ${buckets.length} from ${firstBucket?.minWaterSurfaceElevationM} to ${lastBucket?.maxWaterSurfaceElevationM} m. Empty polygons: ${emptyText}.`,
+    `Water-surface polygons copied from ${OBSERVED_POLYGON_SET_SNAPSHOT_FILE}: ${elevationBuckets.length} elevation buckets from ${firstBucket?.minWaterSurfaceElevationM} to ${lastBucket?.maxWaterSurfaceElevationM} m. Empty polygons: ${emptyText}.`,
   );
   console.log(
-    `Centerline ground elevation: ${polygons.centerlineElevationM.min.toFixed(2)}–${polygons.centerlineElevationM.max.toFixed(2)} m (${polygons.centerlineNoDataSamples} no-data samples).`,
+    `Centerline ground elevation: ${corridor.centerlineElevationM.min.toFixed(2)}–${corridor.centerlineElevationM.max.toFixed(2)} m (${corridor.centerlineNoDataSamples} no-data samples).`,
   );
   console.log(`Published Creek Visualization Data in ${outputDirectory}.`);
 }

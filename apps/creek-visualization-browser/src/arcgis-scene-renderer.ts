@@ -38,6 +38,10 @@ export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_OUTLINE_COLOR = '#0369a1';
 export interface ArcGISSceneRenderer {
   schedule(placements: readonly SegmentPolygonPlacement[]): void;
   flush(): Promise<void>;
+  /** The layer holding every water graphic; click hit-testing is limited to it. */
+  readonly layer: GraphicsLayer;
+  /** The drawn water graphic of one Creek Segment, or null when it has never been drawn. */
+  graphicForSegment(segmentId: string): Graphic | null;
 }
 
 /** Shared by the observed renderer and the modeled renderer so both waters look the same. */
@@ -153,6 +157,11 @@ export function createArcGISSceneRenderer(
       return new Promise((resolve) => {
         requestAnimationFrame(() => resolve());
       });
+    },
+    layer,
+    graphicForSegment(segmentId) {
+      const graphic = graphicsBySegmentId.get(segmentId);
+      return graphic?.layer ? graphic : null;
     },
   };
 }

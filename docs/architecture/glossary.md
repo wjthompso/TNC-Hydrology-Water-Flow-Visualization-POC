@@ -4,7 +4,7 @@ This file is the canonical glossary. The [Linear Glossary](https://linear.app/uc
 
 ## Bank-overlap margin
 
-The small outward horizontal distance by which a prepared water-surface polygon is extended past the modeled waterline, so that the surrounding bank terrain depth-occludes the polygon's jagged 1 m rim. The margin is bounded by the Creek Segment corridor, so it cannot bleed into a neighbouring creek. Current value: 2 m. Implemented in the publishing pipeline as an isotropic dilation of the wet mask before the water-surface polygon is traced, in `pipelines/creek-visualization-data-production/water-surface-polygon-generation.ts`.
+The small outward horizontal distance by which a prepared water-surface polygon is extended past the modeled waterline, so that the surrounding bank terrain depth-occludes the polygon's jagged 1 m rim. The margin is bounded by the Creek Segment corridor, so it cannot bleed into a neighbouring creek. Current value: 2 m. Implemented as an isotropic dilation of the wet mask before the water-surface polygon is traced, in `pipelines/creek-visualization-data-production/water-surface-polygon-generation.ts`, which Stage 4 of the modeled water-surface elevation pipeline uses to trace the polygons both observed and modeled water draw.
 
 ## Bug Check
 

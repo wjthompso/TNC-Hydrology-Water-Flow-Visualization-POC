@@ -14,6 +14,7 @@ export default defineConfig({
     exclude: ['@arcgis/core'],
   },
   server: {
+    port: process.env.PORT ? parseInt(process.env.PORT) : 5173,
     proxy: {
       // The USGS 3DEP ImageServer has no CORS headers for localhost. The custom
       // elevation layer fetches tiles through this same-origin path instead.

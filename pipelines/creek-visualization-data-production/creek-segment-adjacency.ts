@@ -5,7 +5,7 @@ import type { CreekSegment } from './tnc-flowline-segmentation.ts';
  * Stage 4 clips each corridor end at the angle bisector of the two segments' directions, and the
  * browser slopes each water polygon between the same two bisector lines, so neighbouring
  * polygons meet on one line at one height. Absent, an end is cut at the segment's own
- * perpendicular, as publish does.
+ * perpendicular.
  */
 export interface AdjacentCreekSegments {
   atStart?: CreekSegment;

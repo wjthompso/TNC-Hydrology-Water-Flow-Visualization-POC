@@ -34,6 +34,10 @@ export interface ModeledWaterSceneRenderer {
    * rings can differ even where the bucket and junction heights match.
    */
   clear(): void;
+  /** The layer holding every water graphic; click hit-testing is limited to it. */
+  readonly layer: GraphicsLayer;
+  /** The drawn water graphic of one Creek Segment, or null when it is not drawn. */
+  graphicForSegment(segmentId: string): Graphic | null;
 }
 
 export function createModeledWaterSceneRenderer(
@@ -152,6 +156,11 @@ export function createModeledWaterSceneRenderer(
       writtenElevationM.clear();
       writtenSurfaceKey.clear();
       onApplied([]);
+    },
+    layer,
+    graphicForSegment(segmentId) {
+      const graphic = graphicsBySegmentId.get(segmentId);
+      return graphic?.layer ? graphic : null;
     },
   };
 }
