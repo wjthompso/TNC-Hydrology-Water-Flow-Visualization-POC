@@ -1,0 +1,15 @@
+---
+description: Keep new live browser tests on the shared fast path so the suite stays short
+alwaysApply: true
+---
+
+# Live browser tests stay on the fast path
+
+Read [TESTING.md](mdc:TESTING.md) sections "Fixtures, cache, and reports" and "Live browser rendering and test mode" before proposing or writing a browser test. Details live there. This rule is the checklist.
+
+- **Label the test live.** A live browser test is a `*.live.spec.ts` file with catalog `browserMode: live`. The response cache, a disk cache of Esri and USGS 3DEP (3D Elevation Program) terrain responses, makes warm runs repeatable. A missing response is still fetched from the live service, so the test is not deterministic. Deterministic mode is the separate project that fails unexpected external requests.
+- **Import the cached test.** Import `test` and `expect` from `tests/support/browser/response-cache/index.ts`. A missing cache entry is fetched and saved, and that miss never fails the test. Do not assert the list of network requests. Do not add a second way to fetch Esri or USGS tiles. A new live service gets its own source module in that folder.
+- **Check a finished frame.** Wait until SceneView has finished loading and the camera is still before reading pixels or ground heights. Use `settleScene` and `moveCameraAndSettle` in `tests/features/FS-100-creek-water-visualization/F-120-creek-scene-imagery-and-terrain-navigation/behavior/scene-camera.ts`. Move to a fixed camera. Use the mouse wheel only when the wheel gesture itself is the protected behavior, and say that in the methodology.
+- **Report the behavior first.** A measured scene failure stays a failure even when Esri also returned HTTP 429 or 5xx. Inconclusive is for a run that could not check the frame.
+- **Budget 20 seconds.** Set `durationBudgetMs` to `20000` unless a longer budget is explicitly approved. The live Playwright timeout is 20 seconds.
+- **Leave the runner settings alone.** Live tests use 3 workers and the `chromium` channel so WebGL uses the GPU. Do not raise workers or switch renderers to make one test pass.

@@ -1,0 +1,12 @@
+{
+  "stationId": "USGS-11120600",
+  "comid": 27714637,
+  "segmentId": "27714637-026",
+  "vertexIndexStart": 26,
+  "vertexIndexEnd": 27,
+  "snapDistanceM": 7.73,
+  "method": "nearest original-vertex Creek Segment in EPSG 32610",
+  "runnerUpSegmentId": "27714637-025",
+  "runnerUpSnapDistanceM": 9.55,
+  "segmentNetworkVersion": "jalama-27714637-v1"
+}

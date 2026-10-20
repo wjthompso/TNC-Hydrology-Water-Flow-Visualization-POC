@@ -1,0 +1,29 @@
+{
+  "capturedAt": "2026-10-15",
+  "scenario": "upward view from below the water surface at WSE 26.50 m on segment 27714637-026",
+  "cameraPose": {
+    "positionWgs84": [-120.48482532093283, 34.5136878982537, 26.03710826765746],
+    "headingDegrees": 342.69522920950175,
+    "tiltDegrees": 95.47481579768125
+  },
+  "holeCapture": {
+    "screenPoint": { "x": 836.3307495117188, "y": 512.7421875 },
+    "mapHitWgs84": { "longitude": -120.48485150773564, "latitude": 34.51378253234741, "z": 26.58644055498867 },
+    "hits": []
+  },
+  "knownGoodCapture": {
+    "screenPoint": { "x": 810.34375, "y": 413.3359375 },
+    "mapHitWgs84": { "longitude": -120.4848876180176, "latitude": 34.513897743065634, "z": 28.75532928903502 },
+    "hits": [
+      {
+        "layerId": "water-dynamic",
+        "graphicType": "water-surface",
+        "segmentId": "27714637-026",
+        "bucketMinElevationM": 26.5,
+        "bucketMaxElevationM": 26.55,
+        "mapPointWgs84": { "longitude": -120.48483592988221, "latitude": 34.51372363407967, "z": 26.499997991137207 },
+        "distanceM": 2.1173672599100333
+      }
+    ]
+  }
+}

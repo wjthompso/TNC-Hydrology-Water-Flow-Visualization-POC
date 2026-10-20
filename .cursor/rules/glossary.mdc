@@ -1,0 +1,11 @@
+---
+description: Keep domain terms aligned with the canonical glossary
+alwaysApply: true
+---
+
+# Canonical glossary
+
+- **Consult the glossary first.** Before introducing, renaming, or redefining an important domain term, read [glossary.md](mdc:docs/architecture/glossary.md).
+- **The local file is canonical.** [Glossary](https://linear.app/ucsb-spatial-center/document/glossary-a3c56f69f036) is a synced copy. Update the local file first, then update that Linear document in the same change.
+- **Approval comes before a new term.** Explain why an existing term is insufficient, propose 5–10 names, recommend one with a definition, and wait for explicit developer approval before editing the glossary.
+- **Do not silently redefine a term.** If an instruction conflicts with a glossary definition, flag the conflict and ask whether the concept or the definition should change.

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "linear-digital-twin": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://mcp.linear.app/mcp"],
+      "env": {
+        "MCP_REMOTE_CONFIG_DIR": "${userHome}/.mcp-auth/linear-digital-twin"
+      }
+    }
+  }
+}

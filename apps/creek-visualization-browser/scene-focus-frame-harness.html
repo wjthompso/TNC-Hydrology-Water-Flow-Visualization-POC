@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Scene focus frame harness</title>
+  </head>
+  <body>
+    <!--
+      FBT-009 only. This page loads the same stylesheets as the creek scene
+      and the view markup Esri's focus rule targets. It does not start a SceneView.
+    -->
+    <div id="arcgis-view">
+      <div class="esri-view">
+        <div class="esri-view-root">
+          <div class="esri-view-surface" tabindex="0"></div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/scene-focus-frame-harness.ts"></script>
+  </body>
+</html>

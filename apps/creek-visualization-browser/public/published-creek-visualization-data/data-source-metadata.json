@@ -1,0 +1,9 @@
+{
+  "dataSources": [
+    {
+      "sourceId": "usgs-11120600-observed-wse",
+      "name": "USGS 11120600 Jalama Creek near Lompoc gauge height",
+      "kind": "observed"
+    }
+  ]
+}

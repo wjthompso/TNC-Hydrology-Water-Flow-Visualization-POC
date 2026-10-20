@@ -1,0 +1,8 @@
+node_modules/
+.env
+.env.local
+dist/
+
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store

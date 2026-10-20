@@ -1,0 +1,14 @@
+{
+  "extends": "./apps/creek-visualization-browser/tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "apps/creek-visualization-browser/src",
+    "tests",
+    "playwright.config.ts",
+    "vitest.config.ts",
+    "scripts/test-runner.ts",
+    "pipelines/creek-visualization-data-production"
+  ]
+}

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Empty icon so the browser does not request a missing /favicon.ico and log a 404. -->
+    <link rel="icon" href="data:," />
+    <title>Jalama Creek observed water</title>
+  </head>
+  <body class="m-0 h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div id="app-root" class="relative h-screen w-screen">
+      <div id="arcgis-view" class="absolute inset-0"></div>
+
+      <aside
+        class="pointer-events-none absolute left-4 top-4 z-10 max-h-[calc(100vh-2rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-slate-700/80 bg-slate-900/90 p-4 shadow-xl backdrop-blur"
+      >
+        <header class="mb-3 border-b border-slate-700 pb-3">
+          <p class="text-xs font-medium uppercase tracking-wide text-cyan-300">Jalama Creek</p>
+          <h1 id="experience-title" class="mt-1 text-lg font-semibold leading-tight">Observed water</h1>
+          <p id="experience-subtitle" class="mt-1 text-sm text-slate-400">
+            Observed water at USGS gauge 11120600, Jalama Creek near Lompoc.
+          </p>
+          <label for="dataset-picker" class="mt-3 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            Dataset
+          </label>
+          <select
+            id="dataset-picker"
+            class="pointer-events-auto mt-1 w-full cursor-pointer rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          ></select>
+        </header>
+
+        <section class="pointer-events-auto mb-4">
+          <div class="mb-2 flex items-center justify-between gap-3">
+            <h2 class="text-sm font-medium text-slate-200">Time</h2>
+            <button
+              id="timeline-play-btn"
+              type="button"
+              aria-pressed="false"
+              aria-label="Play"
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2.5 py-1 text-xs font-medium text-cyan-100 transition-colors hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Play
+            </button>
+          </div>
+          <p id="timeline-readout" class="mb-2 text-sm font-medium text-cyan-100">Loading time…</p>
+          <label for="timeline-slider" class="sr-only">Observation time</label>
+          <input
+            id="timeline-slider"
+            type="range"
+            min="0"
+            max="0"
+            step="1"
+            value="0"
+            aria-valuetext="Loading time"
+            class="w-full accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          />
+          <div class="mt-2 grid grid-cols-5 gap-1.5" role="group" aria-label="Playback speed">
+            <button
+              id="timeline-speed-0-5x"
+              type="button"
+              aria-label="0.5 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none whitespace-nowrap rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              0.5×
+            </button>
+            <button
+              id="timeline-speed-1x"
+              type="button"
+              aria-label="1 times speed"
+              aria-pressed="true"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              1×
+            </button>
+            <button
+              id="timeline-speed-2x"
+              type="button"
+              aria-label="2 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              2×
+            </button>
+            <button
+              id="timeline-speed-5x"
+              type="button"
+              aria-label="5 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              5×
+            </button>
+            <button
+              id="timeline-speed-10x"
+              type="button"
+              aria-label="10 times speed"
+              aria-pressed="false"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              10×
+            </button>
+          </div>
+          <p id="timeline-status" class="mt-2 min-h-5 text-sm text-slate-300" aria-live="polite"></p>
+        </section>
+
+        <section id="modeled-panel" class="pointer-events-auto mb-4 hidden border-t border-slate-700 pt-3">
+          <label class="flex cursor-pointer items-start gap-2 text-sm text-slate-200">
+            <input
+              id="transfer-water-toggle"
+              type="checkbox"
+              checked
+              class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            />
+            <span id="transfer-water-toggle-label"></span>
+          </label>
+          <div id="modeled-dataset-info" class="mt-3"></div>
+        </section>
+
+        <section class="border-t border-slate-700 pt-3">
+          <h2 class="text-sm font-semibold text-slate-100">Legend</h2>
+          <div class="mt-2 flex items-center gap-2 text-xs leading-relaxed text-slate-300">
+            <span class="inline-block h-3 w-6 shrink-0 rounded-sm bg-[#1d9bf0]" aria-hidden="true"></span>
+            <span id="legend-water-label">Observed water on the gauge's creek segment</span>
+          </div>
+          <!-- Modeled experience only: shown by modeled-creek-experience.ts. -->
+          <div id="legend-transfer-row" class="mt-1.5 hidden items-center gap-2 text-xs leading-relaxed text-slate-300">
+            <span class="inline-block h-3 w-6 shrink-0 rounded-sm border border-sky-700 bg-sky-300" aria-hidden="true"></span>
+            <!-- Text set from drainage-area-ratio-transfer-labels.ts. -->
+            <span id="legend-transfer-label"></span>
+          </div>
+        </section>
+
+        <p
+          id="experience-error"
+          class="pointer-events-auto mt-3 hidden rounded-md border border-red-400/40 bg-red-950/60 p-2 text-sm text-red-100"
+          role="alert"
+        ></p>
+
+        <footer class="mt-4 border-t border-slate-700 pt-3 text-[11px] leading-relaxed text-slate-500">
+          <p id="scene-note">Imagery: Esri, Maxar, Earthstar Geographics, and the GIS User Community. Terrain: Esri World Elevation.</p>
+          <p class="mt-1 text-slate-400">Drag to pan. Scroll to zoom. Right-drag to tilt.</p>
+        </footer>
+      </aside>
+
+      <!--
+        Station info card: shown when the user clicks a monitoring station marker
+        or its map pin. monitoring-station-locator.ts sets left/top to the mast
+        top's screen point every camera frame, so the card floats over the
+        station. The translate classes put the tail tip exactly on that point.
+      -->
+      <div
+        id="station-info-card"
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="station-info-name"
+        aria-live="polite"
+        class="pointer-events-auto absolute z-10 hidden w-[min(18rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-[calc(100%+12px)] rounded-xl border border-slate-700/80 bg-slate-900/90 p-3.5 shadow-xl shadow-black/40 backdrop-blur after:absolute after:left-1/2 after:top-full after:h-3 after:w-3 after:-translate-x-1/2 after:-translate-y-1.5 after:rotate-45 after:border-b after:border-r after:border-slate-700/80 after:bg-slate-900/90 after:content-['']"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-[10px] font-semibold uppercase tracking-widest text-cyan-300">Monitoring station</p>
+            <p id="station-info-name" class="mt-0.5 text-sm font-semibold leading-snug"></p>
+          </div>
+          <button
+            id="station-info-close"
+            type="button"
+            aria-label="Close station info"
+            class="shrink-0 cursor-pointer rounded p-0.5 text-slate-400 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+        <dl class="mt-2.5 space-y-1 text-xs text-slate-300">
+          <div class="flex gap-2">
+            <dt class="shrink-0 font-semibold text-slate-400 w-14">Location</dt>
+            <dd id="station-info-coords" class="font-mono tabular-nums"></dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="shrink-0 font-semibold text-slate-400 w-14">Operator</dt>
+            <dd id="station-info-operator">USGS</dd>
+          </div>
+          <div class="flex gap-2">
+            <dt class="shrink-0 font-semibold text-slate-400 w-14">Measures</dt>
+            <dd id="station-info-measures">Water level, water temperature</dd>
+          </div>
+        </dl>
+        <a
+          id="station-info-link"
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="mt-3 flex items-center gap-1.5 text-xs font-semibold text-cyan-300 underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+        >
+          View live data on waterdata.usgs.gov
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M2 10L10 2M5 2h5v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+
+      <div
+        id="loading-overlay"
+        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 text-sm text-slate-300"
+      >
+        Loading observed water…
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

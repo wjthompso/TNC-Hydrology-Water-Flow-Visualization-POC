@@ -1,0 +1,498 @@
+{
+  "note": "Two COMID numbering systems are in use. Creek Segment ids carry an NHD 1:24K COMID (27714637 is the Jalama TNC flowline). California Natural Flows and the NOAA National Water Model are keyed by NHDPlusV2 COMIDs (17593507 is the Jalama gauge reach). The same number never names the same line in both. REACHCODE 18060013000078 links the two for Jalama. Each Creek Segment midpoint was snapped to an NHDPlusV2 reach with the USGS NLDI (Network-Linked Data Index) position service.",
+  "segmentNetworkVersion": "jalama-27714637-v1",
+  "method": "USGS NLDI comid/position lookup at each Creek Segment midpoint (WGS84); a segment whose NLDI reach has a different REACHCODE than the TNC flowline is reassigned to the single NLDI-returned reach that shares the TNC flowline REACHCODE. reachDrainageAreaKm2 is the reach's NHDPlusV2 TotDASqKm from the EPA NHDPlus flowline service. drainageAreaRatioTransfer (Drainage-Area Ratio Transfer) is true when no NLDI reach on the TNC flowline shares its REACHCODE, so the segment keeps the nearest reach of a different creek; transferDistanceM is the segment midpoint's distance to that reach's flowline geometry, and a segment farther than 1000 m gets no discharge.",
+  "drainageAreaMethod": "USGS drainage-area ratio method: segment discharge = reach discharge × drainageAreaRatio, where drainageAreaRatio = segmentDrainageAreaKm2 ÷ reachDrainageAreaKm2 capped to [0, 1] (flow is never increased). reachDrainageAreaKm2 is the NHDPlusV2 TotDASqKm of the assigned reach. segmentDrainageAreaKm2 is the largest upstream cell count within 15 m of the Creek Segment's downstream thalweg point in the Dangermond Preserve 2018 flow-accumulation raster (2 m cells), × 4 m² per cell. A segment whose point lies outside the raster, or whose reach has no TotDASqKm, keeps ratio 1. A segment marked drainageAreaRatioTransfer (Drainage-Area Ratio Transfer) borrows a neighbouring creek's reach, so the ratio transfers that reach's discharge to it; one farther than 1000 m (transferDistanceM) gets no discharge.",
+  "segments": [
+    {
+      "segmentId": "27714637-000",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.3013,
+      "drainageAreaRatio": 0.961206
+    },
+    {
+      "segmentId": "27714637-001",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.5999,
+      "drainageAreaRatio": 0.966801
+    },
+    {
+      "segmentId": "27714637-002",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.6141,
+      "drainageAreaRatio": 0.967067
+    },
+    {
+      "segmentId": "27714637-003",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.6534,
+      "drainageAreaRatio": 0.967803
+    },
+    {
+      "segmentId": "27714637-004",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.6837,
+      "drainageAreaRatio": 0.968371
+    },
+    {
+      "segmentId": "27714637-005",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.6868,
+      "drainageAreaRatio": 0.968429
+    },
+    {
+      "segmentId": "27714637-006",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.6933,
+      "drainageAreaRatio": 0.968551
+    },
+    {
+      "segmentId": "27714637-007",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.6965,
+      "drainageAreaRatio": 0.968611
+    },
+    {
+      "segmentId": "27714637-008",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.7169,
+      "drainageAreaRatio": 0.968993
+    },
+    {
+      "segmentId": "27714637-009",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.7235,
+      "drainageAreaRatio": 0.969117
+    },
+    {
+      "segmentId": "27714637-010",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.724,
+      "drainageAreaRatio": 0.969126
+    },
+    {
+      "segmentId": "27714637-011",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.7256,
+      "drainageAreaRatio": 0.969156
+    },
+    {
+      "segmentId": "27714637-012",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.7278,
+      "drainageAreaRatio": 0.969197
+    },
+    {
+      "segmentId": "27714637-013",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.7296,
+      "drainageAreaRatio": 0.969231
+    },
+    {
+      "segmentId": "27714637-014",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.7314,
+      "drainageAreaRatio": 0.969265
+    },
+    {
+      "segmentId": "27714637-015",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.7327,
+      "drainageAreaRatio": 0.969289
+    },
+    {
+      "segmentId": "27714637-016",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.8142,
+      "drainageAreaRatio": 0.970816
+    },
+    {
+      "segmentId": "27714637-017",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.817,
+      "drainageAreaRatio": 0.970869
+    },
+    {
+      "segmentId": "27714637-018",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 51.8181,
+      "drainageAreaRatio": 0.970889
+    },
+    {
+      "segmentId": "27714637-019",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.0784,
+      "drainageAreaRatio": 0.975766
+    },
+    {
+      "segmentId": "27714637-020",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.0836,
+      "drainageAreaRatio": 0.975864
+    },
+    {
+      "segmentId": "27714637-021",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.0848,
+      "drainageAreaRatio": 0.975886
+    },
+    {
+      "segmentId": "27714637-022",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.1262,
+      "drainageAreaRatio": 0.976662
+    },
+    {
+      "segmentId": "27714637-023",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.1388,
+      "drainageAreaRatio": 0.976898
+    },
+    {
+      "segmentId": "27714637-024",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.1421,
+      "drainageAreaRatio": 0.97696
+    },
+    {
+      "segmentId": "27714637-025",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.2316,
+      "drainageAreaRatio": 0.978637
+    },
+    {
+      "segmentId": "27714637-026",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 52.2425,
+      "drainageAreaRatio": 0.978841
+    },
+    {
+      "segmentId": "27714637-027",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.1035,
+      "drainageAreaRatio": 0.994973
+    },
+    {
+      "segmentId": "27714637-028",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.117,
+      "drainageAreaRatio": 0.995226
+    },
+    {
+      "segmentId": "27714637-029",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.1177,
+      "drainageAreaRatio": 0.995239
+    },
+    {
+      "segmentId": "27714637-030",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.1229,
+      "drainageAreaRatio": 0.995336
+    },
+    {
+      "segmentId": "27714637-031",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.126,
+      "drainageAreaRatio": 0.995395
+    },
+    {
+      "segmentId": "27714637-032",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.1274,
+      "drainageAreaRatio": 0.995421
+    },
+    {
+      "segmentId": "27714637-033",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.155,
+      "drainageAreaRatio": 0.995938
+    },
+    {
+      "segmentId": "27714637-034",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.1752,
+      "drainageAreaRatio": 0.996316
+    },
+    {
+      "segmentId": "27714637-035",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2012,
+      "drainageAreaRatio": 0.996804
+    },
+    {
+      "segmentId": "27714637-036",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.209,
+      "drainageAreaRatio": 0.99695
+    },
+    {
+      "segmentId": "27714637-037",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2103,
+      "drainageAreaRatio": 0.996974
+    },
+    {
+      "segmentId": "27714637-038",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2364,
+      "drainageAreaRatio": 0.997463
+    },
+    {
+      "segmentId": "27714637-039",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2661,
+      "drainageAreaRatio": 0.99802
+    },
+    {
+      "segmentId": "27714637-040",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2721,
+      "drainageAreaRatio": 0.998132
+    },
+    {
+      "segmentId": "27714637-041",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2771,
+      "drainageAreaRatio": 0.998226
+    },
+    {
+      "segmentId": "27714637-042",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.28,
+      "drainageAreaRatio": 0.99828
+    },
+    {
+      "segmentId": "27714637-043",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2824,
+      "drainageAreaRatio": 0.998325
+    },
+    {
+      "segmentId": "27714637-044",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.2849,
+      "drainageAreaRatio": 0.998372
+    },
+    {
+      "segmentId": "27714637-045",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.297,
+      "drainageAreaRatio": 0.998599
+    },
+    {
+      "segmentId": "27714637-046",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.3112,
+      "drainageAreaRatio": 0.998865
+    },
+    {
+      "segmentId": "27714637-047",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.3639,
+      "drainageAreaRatio": 0.999852
+    },
+    {
+      "segmentId": "27714637-048",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.3647,
+      "drainageAreaRatio": 0.999867
+    },
+    {
+      "segmentId": "27714637-049",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5117,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-050",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5127,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-051",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5442,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-052",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5485,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-053",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5522,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-054",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5545,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-055",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5601,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-056",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5608,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-057",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5624,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-058",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5636,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-059",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "segmentDrainageAreaKm2": 53.5652,
+      "drainageAreaRatio": 1
+    },
+    {
+      "segmentId": "27714637-060",
+      "nhdplusV2Comid": 17593507,
+      "reachDrainageAreaKm2": 53.3718,
+      "drainageAreaRatioTransfer": false,
+      "nldiComid": 17593487,
+      "reassignedReason": "NLDI reach REACHCODE 18060013000121 differs from TNC flowline REACHCODE 18060013000078",
+      "segmentDrainageAreaKm2": 62.2407,
+      "drainageAreaRatio": 1
+    }
+  ]
+}

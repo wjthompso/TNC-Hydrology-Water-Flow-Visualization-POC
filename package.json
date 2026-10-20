@@ -1,0 +1,51 @@
+{
+  "name": "creek-water-visualization",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/creek-visualization-browser"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w creek-visualization-browser",
+    "lint": "eslint apps/creek-visualization-browser/src tests playwright.config.ts vitest.config.ts scripts/test-runner.ts pipelines/creek-visualization-data-production",
+    "pipeline:acquire": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/acquire.ts",
+    "pipeline:publish": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/publish.ts",
+    "pipeline:modeled-wse:acquire": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-00-acquire.ts",
+    "pipeline:modeled-wse:cross-sections": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-01-cross-sections.ts",
+    "pipeline:modeled-wse:rating-curves": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-02-rating-curves.ts",
+    "pipeline:modeled-wse:time-series": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-03-time-series.ts",
+    "pipeline:modeled-wse:water-surface-polygons": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-04-water-surface-polygons.ts",
+    "pipeline:modeled-wse:catalog-and-validate": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-05-catalog-and-validate.ts",
+    "pipeline:modeled-wse:all": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/run-all-stages.ts",
+    "test:fast-only": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts fast-only",
+    "test:features": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts features",
+    "test:core": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts core",
+    "test:shared": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts shared",
+    "test:browser-deterministic": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts browser-deterministic",
+    "test:browser-live": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts browser-live",
+    "test:refresh-map-cache": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts refresh-map-cache",
+    "test:browser-all": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts browser-all",
+    "test:browser-only": "npm run test:browser-all",
+    "test:gate": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts gate",
+    "test:all": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts all",
+    "test:view-test-catalog": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/view-test-catalog.mjs",
+    "test:feature": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts feature",
+    "test:id": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts id",
+    "test:feature-set": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/test-runner.ts feature-set"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
+    "@types/d3-contour": "^3.0.6",
+    "@types/node": "^22.20.5",
+    "d3-contour": "^4.0.2",
+    "eslint": "^10.12.0",
+    "geotiff": "^3.0.5",
+    "pngjs": "^7.0.0",
+    "proj4": "^2.22.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^3.2.7"
+  }
+}

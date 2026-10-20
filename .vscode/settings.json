@@ -1,0 +1,9 @@
+{
+  "workbench.colorCustomizations": {
+    "commandCenter.background": "#356275",
+    "commandCenter.activeBackground": "#4A7D93",
+    "commandCenter.activeForeground": "#E6F2F6",
+    "commandCenter.inactiveBackground": "#2F5566",
+    "commandCenter.inactiveForeground": "#B8CDD6"
+  }
+}

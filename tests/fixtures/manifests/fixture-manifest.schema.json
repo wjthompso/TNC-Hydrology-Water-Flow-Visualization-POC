@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tnc.example/testing/fixture-manifest.schema.json",
+  "title": "Reviewed test fixture manifest",
+  "type": "object",
+  "required": [
+    "fixture",
+    "source",
+    "captureDate",
+    "sourceVersion",
+    "sha256",
+    "reviewStatus",
+    "reviewer",
+    "associations"
+  ],
+  "properties": {
+    "fixture": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "required": ["description", "redactedEndpoint"],
+      "properties": {
+        "description": { "type": "string", "minLength": 1 },
+        "redactedEndpoint": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "captureDate": { "type": "string", "format": "date" },
+    "sourceVersion": { "type": "string", "minLength": 1 },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "reviewStatus": { "enum": ["approved", "pending", "rejected"] },
+    "reviewer": { "type": "string", "minLength": 1 },
+    "associations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}
