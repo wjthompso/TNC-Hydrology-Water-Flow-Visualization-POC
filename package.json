@@ -6,6 +6,40 @@
   "workspaces": [
     "apps/creek-visualization-browser"
   ],
+  "scriptDescriptions": {
+    "usage": "Run a command with `npm run <name>`. Arguments after `--` pass through to that command.",
+    "testSelectors": "Run one Feature Behavior Test (FBT) with `npm run test:id -- FBT-018`; run one Feature with `npm run test:feature -- F-170`; run one Feature Set with `npm run test:feature-set -- FS-100`.",
+    "testViewingFlags": "Add `--headed` to show browser windows or `--ui` for interactive Playwright UI mode. UI-mode results are not recorded; `test:gate` rejects `--ui`.",
+    "modeledWseFlags": "Modeled water-surface elevation (WSE) commands accept `--extent=<id>` (default: `dangermond-preserve`; fast development extent: `jalama-gauge-reach`), `--water-years=2020-2022`, and `--force`. Stage 4 also accepts `--wse-polygon-method=<id>`.",
+    "commands": {
+      "dev": "Starts the creek visualization browser's Vite development server.",
+      "lint": "Checks application, test, configuration, runner, and data-pipeline source files with ESLint; it does not run tests or modify files.",
+      "pipeline:acquire": "Downloads and retains the browser publication pipeline's source snapshots; requires network access and does not publish browser-ready data.",
+      "pipeline:publish": "Rebuilds browser-ready creek visualization data from retained snapshots; uses no network and does not rerun acquisition or the modeled-WSE pipeline.",
+      "pipeline:modeled-wse:acquire": "Runs modeled-WSE Stage 0: acquires flowlines, United States Geological Survey 3D Elevation Program (USGS 3DEP) terrain, reach assignments, and modeled discharge.",
+      "pipeline:modeled-wse:cross-sections": "Runs Stage 1: derives terrain-based creek cross-sections, bed elevations, slopes, banks, and reviewed reach assignments.",
+      "pipeline:modeled-wse:rating-curves": "Runs Stage 2: converts cross-sections into per-segment WSE-to-discharge rating curves.",
+      "pipeline:modeled-wse:time-series": "Runs Stage 3: combines rating curves and modeled discharge into per-segment WSE time series.",
+      "pipeline:modeled-wse:water-surface-polygons": "Runs Stage 4: generates prepared water-surface polygon sets from terrain and WSE inputs.",
+      "pipeline:modeled-wse:catalog-and-validate": "Runs Stage 5: builds the modeled-WSE catalog and validation report; exits nonzero for default-method validation failures.",
+      "pipeline:modeled-wse:all": "Runs modeled-WSE Stages 0–5 in order and forwards all arguments to every stage; writes ignored pipeline output and does not publish browser-ready data.",
+      "test:fast-only": "Runs enabled non-browser tests marked fast across all test categories; excludes browser tests.",
+      "test:features": "Runs every enabled FBT, including required and nonblocking tests; excludes Critical Core and Supporting Tests.",
+      "test:core": "Runs every enabled Critical Core Test (CCT) only.",
+      "test:shared": "Runs every enabled Shared Supporting Test (SST) only; these tests are advisory and never release-blocking.",
+      "test:browser-deterministic": "Runs enabled browser tests with controlled network inputs; unexpected external requests fail.",
+      "test:browser-live": "Runs enabled live-service browser tests against cached-or-live external map and terrain services.",
+      "test:refresh-map-cache": "Deletes cached Esri and USGS 3DEP responses, then runs every enabled live browser test to refill the cache.",
+      "test:browser-all": "Runs every enabled browser test in deterministic and live modes; excludes non-browser tests.",
+      "test:browser-only": "Alias for `test:browser-all`.",
+      "test:gate": "Runs required CCTs, then required FBTs, stopping on a blocking failure or inconclusive result; excludes Supporting Tests and lint.",
+      "test:all": "Runs every enabled catalog test plus lint, then reports release eligibility separately from overall diagnostic health.",
+      "test:view-test-catalog": "Writes and serves the static human-facing test catalog without running tests; accepts `--no-open`, `--no-serve`, and the `TNC_CATALOG_PORT` environment variable.",
+      "test:feature": "Runs enabled tests associated with one Feature, for example `npm run test:feature -- F-170`; a Feature Behavior, Critical Core, Feature Supporting, or Shared Supporting Test identifier instead runs that single test even when disabled.",
+      "test:id": "Runs exactly one catalog test by identifier, for example `npm run test:id -- FBT-018`; explicitly selected disabled tests also run.",
+      "test:feature-set": "Runs enabled tests associated with one Feature Set, for example `npm run test:feature-set -- FS-100`."
+    }
+  },
   "scripts": {
     "dev": "npm run dev -w creek-visualization-browser",
     "lint": "eslint apps/creek-visualization-browser/src tests playwright.config.ts vitest.config.ts scripts/test-runner.ts pipelines/creek-visualization-data-production",

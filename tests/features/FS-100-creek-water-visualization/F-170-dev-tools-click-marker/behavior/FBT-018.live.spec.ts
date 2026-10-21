@@ -43,7 +43,7 @@ test('Clicking the map while DevTools are closed, then opening DevTools, shows a
   const watch = watchLiveServices(page);
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
-  try {
+  try { 
     const peakUtcMs = Date.parse(PEAK_HOUR_UTC);
     const missing = missingLocalPipelineOutput({
       extentId: JALAMA_EXTENT_ID,
