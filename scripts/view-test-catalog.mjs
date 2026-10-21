@@ -426,15 +426,12 @@ function errorLogDetails(test, latest) {
     log.errorContextPath &&
       `<a href="${escapeHtml(artifactUrl(log.errorContextPath))}" target="_blank" rel="noopener">Page snapshot at failure</a> <span class="log-path">${escapeHtml(log.errorContextPath)}</span>`,
   ].filter(Boolean);
-  const isBrowserTest = test.environment === 'browser';
   return `<details class="methodology error-logs">
       <summary>Error logs</summary>
       <div class="log-body">
-        <!-- Actions first, so replaying a failure needs no scrolling past the log. -->
         <div class="log-actions">
           <button type="button" class="log-button" data-copy-llm>Copy for LLM</button>
           ${launchButton('open-trace', test, Boolean(log.tracePath), 'No trace was saved for this attempt.', 'Open trace')}
-          ${launchButton('replay-ui', test, isBrowserTest, 'Playwright UI mode opens browser tests only.', 'Replay in Playwright UI')}
           <span class="log-status" role="status" aria-live="polite"></span>
         </div>
         <pre class="llm-markdown log-block" hidden>${escapeHtml(failureMarkdown(test, latest, log))}</pre>
@@ -479,15 +476,25 @@ function testCard(test, feature, latestResults) {
   }
   const measured = latest && !display.stale ? formatSeconds(latest.durationMs) : '—';
   const mark = resultMark(display.primary);
+  const isBrowserTest = test.environment === 'browser';
   return `<details class="test-row">
     <summary>
       <span class="scan"><span class="identifier">${escapeHtml(test.id)}</span>&nbsp;<span class="behavior">${escapeHtml(test.name)}</span></span>
-      <span class="tags">
-        <span class="timing">${escapeHtml(measured)} / ${escapeHtml(formatSeconds(test.durationBudgetMs))}</span>
-        ${mark ? `<span class="mark ${mark.className}" role="img" aria-label="${mark.label}">${mark.symbol}</span>` : `<span class="tag ${statusTagClass(display.primary)}">${escapeHtml(statusLabel(display.primary))}</span>`}
-        <span class="result-badges">
-          ${bugCheckBadge(test)}
-          ${passedAfterRetry(latest, display.primary) ? '<span class="tag tag-retry">Passed after retry</span>' : ''}
+      <span class="result-column">
+        <span class="tags">
+          <span class="timing">${escapeHtml(measured)} / ${escapeHtml(formatSeconds(test.durationBudgetMs))}</span>
+          ${mark ? `<span class="mark ${mark.className}" role="img" aria-label="${mark.label}">${mark.symbol}</span>` : `<span class="tag ${statusTagClass(display.primary)}">${escapeHtml(statusLabel(display.primary))}</span>`}
+          <span class="result-badges">
+            ${bugCheckBadge(test)}
+            ${passedAfterRetry(latest, display.primary) ? '<span class="tag tag-retry">Passed after retry</span>' : ''}
+          </span>
+        </span>
+        <span class="row-launch-actions">
+          <span class="launch-note" role="status" aria-live="polite" hidden>
+            <span class="launch-note-text"></span>
+            <button type="button" class="launch-note-close" data-dismiss-note aria-label="Dismiss message">×</button>
+          </span>
+          ${launchButton('run-playwright-ui', test, isBrowserTest, 'Playwright runs browser tests only.', 'Run in Playwright')}
         </span>
       </span>
     </summary>
@@ -668,6 +675,57 @@ const html = `<!doctype html>
     .field-label::after { content: ":"; }
     .none { margin: 0 0 10px 20px; }
     .test-row { border-bottom: 1px solid #5c5c5c; margin-left: 20px; }
+    .result-column {
+      align-items: flex-end;
+      display: flex;
+      flex: 0 0 auto;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+    }
+    /* Launch note floats under the button, so it never narrows the test title. */
+    .launch-note {
+      align-items: flex-start;
+      background: #000000;
+      border: 1px solid #5c5c5c;
+      color: #b1b4b6;
+      cursor: default;
+      display: flex;
+      font-size: 14px;
+      gap: 8px;
+      line-height: 18px;
+      padding: 4px 4px 4px 8px;
+      position: absolute;
+      right: 0;
+      text-align: left;
+      top: 100%;
+      width: 18rem;
+      z-index: 1;
+    }
+    .launch-note[hidden] { display: none; }
+    .launch-note-text { flex: 1 1 auto; }
+    .launch-note-close {
+      background: none;
+      border: 0;
+      color: #ffffff;
+      cursor: pointer;
+      flex: 0 0 auto;
+      font: inherit;
+      font-size: 18px;
+      line-height: 18px;
+      padding: 0 6px;
+    }
+    .launch-note-close:focus-visible {
+      background: #ffdd00;
+      color: #0b0c0c;
+      outline: 3px solid #ffdd00;
+    }
+    .row-launch-actions {
+      align-items: center;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
     .metadata { padding: 0 0 4px 28px; }
     .metadata p { margin: 0; }
     .methodology { margin: 0 0 10px 28px; }
@@ -868,10 +926,22 @@ const html = `<!doctype html>
     ${coreHtml}
   </main>
   <script>
-    // Error-log buttons. Copy works anywhere; the launch buttons need the local catalog server.
+    // Copy works anywhere; Playwright and trace launch buttons need the local catalog server.
     function setStatus(button, message) {
-      const status = button.closest('.log-actions').querySelector('.log-status');
-      status.textContent = message;
+      const rowActions = button.closest('.row-launch-actions');
+      if (rowActions) {
+        const note = rowActions.querySelector('.launch-note');
+        note.querySelector('.launch-note-text').textContent = message;
+        note.hidden = false;
+        return;
+      }
+      button.closest('.log-actions').querySelector('.log-status').textContent = message;
+    }
+
+    function dismissLaunchNotes(exceptNote) {
+      for (const note of document.querySelectorAll('.launch-note:not([hidden])')) {
+        if (note !== exceptNote) note.hidden = true;
+      }
     }
 
     async function copyForLlm(button) {
@@ -938,10 +1008,28 @@ const html = `<!doctype html>
     }
 
     document.addEventListener('click', (event) => {
+      const insideNote = event.target.closest('.launch-note');
       const button = event.target.closest('button');
+      // A click outside the open note closes it. Clicking the button re-opens it right after.
+      dismissLaunchNotes(insideNote);
+      if (insideNote) {
+        // The note sits inside a row header, so keep its clicks from toggling the row.
+        event.preventDefault();
+        event.stopPropagation();
+        if (button?.hasAttribute('data-dismiss-note')) insideNote.hidden = true;
+        return;
+      }
       if (!button || button.disabled) return;
       if (button.hasAttribute('data-copy-llm')) copyForLlm(button);
-      else if (button.dataset.launch) launch(button);
+      else if (button.dataset.launch) {
+        event.preventDefault();
+        event.stopPropagation();
+        launch(button);
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') dismissLaunchNotes(null);
     });
   </script>
 </body>
@@ -1087,7 +1175,7 @@ async function locateCatalogFile(requestUrl) {
 // Only two fixed commands exist. The request supplies a catalog test id, never a command or path.
 // ---------------------------------------------------------------------------
 
-const launchActions = new Set(['open-trace', 'replay-ui']);
+const launchActions = new Set(['open-trace', 'run-playwright-ui']);
 const maxLaunchBodyBytes = 1024;
 let servingPort = null;
 
@@ -1190,15 +1278,15 @@ async function handleLaunchRequest(request, response, action) {
   }
   const log = await spawnDetached(
     'npm',
-    ['run', 'test:id', '--', test.id, '--ui'],
-    `replay-ui-${test.id}.log`,
+    ['run', 'test:id', '--', test.id, '--ui', '--autorun'],
+    `run-playwright-ui-${test.id}.log`,
   );
-  console.log(`Replaying ${test.id} in Playwright UI mode.`);
+  console.log(`Running ${test.id} in Playwright UI mode.`);
   sendText(
     response,
     'POST',
     202,
-    `Starting Playwright UI for ${test.id}; the window opens after the page server starts. Output: ${log}\n`,
+    `Opening Playwright UI for ${test.id} and running it. The window appears after the page server starts. Output: ${log}\n`,
   );
 }
 

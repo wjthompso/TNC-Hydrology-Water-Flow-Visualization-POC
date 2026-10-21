@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { chromium } from '@playwright/test';
 import playwrightConfig from '../playwright.config.ts';
 import type { CatalogTest, TestCatalog } from '../tests/support/catalog/test-catalog.ts';
 import { runReleaseGate } from '../tests/support/reporting/gate.ts';
@@ -52,11 +53,13 @@ interface CommandLine {
   headed: boolean;
   /** Playwright UI mode opens the selected browser tests interactively. Nothing is recorded. */
   ui: boolean;
+  /** With `--ui`, press UI mode's "Run all" button as soon as the window opens. */
+  autorun: boolean;
 }
 
-const browserViewingFlags = new Set(['--headed', '--ui']);
+const browserViewingFlags = new Set(['--headed', '--ui', '--autorun']);
 
-// `--headed` and `--ui` may appear before or after the selector. Other arguments keep their positions.
+// `--headed`, `--ui`, and `--autorun` may appear before or after the selector. Other arguments keep their positions.
 function parseCommandLine(argv: string[]): CommandLine {
   const positional = argv.filter((argument) => !browserViewingFlags.has(argument));
   return {
@@ -64,6 +67,7 @@ function parseCommandLine(argv: string[]): CommandLine {
     selector: positional[1],
     headed: argv.includes('--headed'),
     ui: argv.includes('--ui'),
+    autorun: argv.includes('--autorun'),
   };
 }
 
@@ -397,6 +401,56 @@ async function runBrowser(
 }
 
 /**
+ * Playwright UI mode has no run-on-open setting. This serves the same UI app on a free local port
+ * (`--ui-port=0`), opens it in a Chromium app window, and presses its "Run all" button.
+ * Playwright skips its own browser tab when COPILOT_CLI is set, so only our window opens.
+ */
+async function openUiModeAndRun(
+  playwrightArguments: string[],
+  environment: Record<string, string>,
+): Promise<number> {
+  const server = spawn('npx', [...playwrightArguments, '--ui', '--ui-port=0'], {
+    cwd: root,
+    stdio: ['inherit', 'pipe', 'inherit'],
+    env: { ...process.env, ...environment, COPILOT_CLI: '1' },
+  });
+  const serverExit = new Promise<number>((resolve, reject) => {
+    server.on('error', reject);
+    server.on('exit', (code) => resolve(code ?? 1));
+  });
+  const uiAddress = new Promise<string>((resolve, reject) => {
+    let output = '';
+    server.stdout?.on('data', (chunk: Buffer) => {
+      process.stdout.write(chunk);
+      output += chunk.toString();
+      const match = /Listening on (http:\/\/\S+)/.exec(output);
+      if (match) resolve(match[1]);
+    });
+    void serverExit.then(() => reject(new Error('Playwright UI mode exited before it started.')));
+  });
+
+  const profileDirectory = await mkdtemp(path.join(os.tmpdir(), 'tnc-playwright-ui-'));
+  try {
+    const address = await uiAddress;
+    const context = await chromium.launchPersistentContext(profileDirectory, {
+      headless: false,
+      viewport: null,
+      args: [`--app=${address}`, '--window-size=1280,800'],
+    });
+    const page = context.pages()[0] ?? (await context.newPage());
+    // The button is disabled until the test list has loaded; click retries until it is enabled.
+    await page.getByTitle(/^Run all/).click({ timeout: 60_000 });
+    console.log('Pressed Run all in Playwright UI mode. Close the window to finish.');
+    await new Promise<void>((resolve) => context.on('close', () => resolve()));
+  } finally {
+    server.kill('SIGINT');
+    await serverExit.catch(() => 1);
+    await rm(profileDirectory, { recursive: true, force: true });
+  }
+  return 0;
+}
+
+/**
  * Opens Playwright UI mode for the browser tests this command selected, one browser mode at a time.
  * UI mode is interactive and has no machine-readable report, so nothing is recorded.
  */
@@ -416,11 +470,13 @@ async function openUiMode(
     console.log(
       `Opening Playwright UI mode for ${browserTests.length} ${mode} browser tests. Close the window to continue.`,
     );
-    const processResult = await runProcess(
-      'npx',
-      [...playwrightSelectionArguments(browserTests, mode, titlePattern), '--ui'],
-      playwrightEnvironment(mode, runKey),
-    );
+    const selectionArguments = playwrightSelectionArguments(browserTests, mode, titlePattern);
+    const environment = playwrightEnvironment(mode, runKey);
+    if (commandLine.autorun) {
+      exitCode ||= await openUiModeAndRun(selectionArguments, environment);
+      continue;
+    }
+    const processResult = await runProcess('npx', [...selectionArguments, '--ui'], environment);
     exitCode ||= processResult.exitCode;
   }
   console.log(
@@ -638,7 +694,7 @@ try {
 
   const { mode, selector } = commandLine;
   if (mode === 'gate') {
-    if (commandLine.ui) {
+    if (commandLine.ui || commandLine.autorun) {
       throw new Error('test:gate does not accept --ui. Release verification cannot be interactive.');
     }
     if (commandLine.headed) {
@@ -648,6 +704,9 @@ try {
   } else {
     const selected = selectTests(mode, selector);
     const selectsBrowserTests = selected.some(({ environment }) => environment === 'browser');
+    if (commandLine.autorun && !commandLine.ui) {
+      throw new Error('--autorun needs --ui. It presses Run all in Playwright UI mode.');
+    }
     if (commandLine.ui && !selectsBrowserTests) {
       throw new Error('--ui opens browser tests only, and this command selected none.');
     }
