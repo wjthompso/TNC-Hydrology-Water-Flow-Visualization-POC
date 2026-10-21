@@ -12,6 +12,7 @@
     "testViewingFlags": "Add `--headed` to show browser windows or `--ui` for interactive Playwright UI mode. UI-mode results are not recorded; `test:gate` rejects `--ui`.",
     "modeledWseFlags": "Modeled water-surface elevation (WSE) commands accept `--extent=<id>` (default: `dangermond-preserve`; fast development extent: `jalama-gauge-reach`), `--water-years=2020-2022`, and `--force`. Stage 4 also accepts `--wse-polygon-method=<id>`.",
     "commands": {
+      "help": "Prints this command reference with descriptions, selectors, and supported flags; it does not run another command.",
       "dev": "Starts the creek visualization browser's Vite development server.",
       "lint": "Checks application, test, configuration, runner, and data-pipeline source files with ESLint; it does not run tests or modify files.",
       "pipeline:acquire": "Downloads and retains the browser publication pipeline's source snapshots; requires network access and does not publish browser-ready data.",
@@ -41,6 +42,7 @@
     }
   },
   "scripts": {
+    "help": "node scripts/show-script-help.mjs",
     "dev": "npm run dev -w creek-visualization-browser",
     "lint": "eslint apps/creek-visualization-browser/src tests playwright.config.ts vitest.config.ts scripts/test-runner.ts pipelines/creek-visualization-data-production",
     "pipeline:acquire": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/acquire.ts",
