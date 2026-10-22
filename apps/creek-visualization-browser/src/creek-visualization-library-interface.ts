@@ -26,6 +26,8 @@ export interface AttachCreekVisualizationOptions {
   speedButtons: readonly PlaybackSpeedControl[];
   /** Opens at the grid slot nearest this time (clamped to the record); null opens at the data's opening slot. */
   openingTimeUtcMs?: number | null;
+  /** Creek Segment selected on open, so the chart shows without a click. Null opens with no selection. */
+  initialSelectedSegmentId?: string | null;
 }
 
 export interface CreekVisualizationAttachment {
@@ -151,6 +153,7 @@ export function attachCreekVisualization(
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
     });
     selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
+    selectedCreekSegmentChart.selectSegment(options.initialSelectedSegmentId ?? null);
   }
 
   return {
