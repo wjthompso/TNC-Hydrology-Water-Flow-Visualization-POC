@@ -2,6 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  /*
+   * Loading spinner (UCS-285): a small ring with one clear edge, next to every
+   * loading message. Built in loading-spinner.ts; index.html uses the same
+   * class before scripts run. Reduced motion keeps a still ring and the text.
+   */
+  .loading-spinner {
+    @apply mr-2 inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent align-[-0.125em] motion-reduce:animate-none;
+  }
+}
+
 html,
 body,
 #app-root,

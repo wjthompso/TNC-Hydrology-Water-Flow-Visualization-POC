@@ -6,8 +6,7 @@
 // only source of each segment's drainage-area ratio. The file is optional: a
 // missing or malformed crosswalk yields null and the experience carries on.
 
-import { modeledDataUrl } from './modeled-water-catalog';
-import { fetchJson } from './modeled-water-data-store';
+import { modeledDataSource } from './modeled-data-source';
 
 export const REACH_CROSSWALK_PATH = 'reach-crosswalk.json';
 
@@ -33,7 +32,7 @@ export interface ReachCrosswalk {
 /** Null when the extent has no crosswalk on this server or the file is unreadable. */
 export async function loadReachCrosswalk(extentId: string): Promise<ReachCrosswalk | null> {
   try {
-    return readReachCrosswalk(await fetchJson(modeledDataUrl(extentId, REACH_CROSSWALK_PATH)));
+    return readReachCrosswalk(await modeledDataSource().loadReachCrosswalk(extentId));
   } catch (error) {
     console.info('[reach-crosswalk] No usable crosswalk for this extent.', error);
     return null;

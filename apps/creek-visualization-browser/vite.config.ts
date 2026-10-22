@@ -9,6 +9,8 @@ export default defineConfig({
   plugins: [modeledWaterDataPlugin()],
   build: {
     chunkSizeWarningLimit: 2000,
+    // src/main.ts uses top-level await (the timeline-fixture branch); Vite's default es2020 target rejects it.
+    target: 'es2022',
   },
   optimizeDeps: {
     exclude: ['@arcgis/core'],

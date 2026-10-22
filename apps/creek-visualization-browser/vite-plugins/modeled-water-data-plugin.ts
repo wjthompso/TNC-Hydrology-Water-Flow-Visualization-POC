@@ -1,6 +1,7 @@
 // Dev-only middleware that serves the modeled water-surface elevation pipeline
-// output (git-ignored, under data/) at /modeled-water-surface-elevation-data/
-// <extent>/<path>. Nothing is copied into public/. It also computes one small
+// working output (git-ignored, under data/pipeline-working-output/) at
+// /modeled-water-surface-elevation-data/<extent>/<path>. Nothing is copied into
+// public/. It also computes one small
 // per-extent `flowline-index.json` (bounding box and segment centers per TNC
 // flowline) so the browser can decide which per-flowline files are near the
 // camera before it downloads any of them, and exposes the extent's tracked
@@ -40,12 +41,9 @@ const POLYGON_SETS_FOLDER_NAME = 'water-surface-polygon-sets';
 const CROSS_SECTIONS_FILE = '01-cross-sections/cross-sections.json';
 
 const pluginDirectory = fileURLToPath(new URL('.', import.meta.url));
-const DATA_ROOT = path.resolve(
-  pluginDirectory,
-  '../../../data/modeled-water-surface-elevation-pipeline-output',
-);
-const RETAINED_SOURCE_ROOT = path.resolve(pluginDirectory, '../../../data/retained-backend-source-data');
-const REACH_CROSSWALK_ROOT = path.join(RETAINED_SOURCE_ROOT, 'reviewed-assignments');
+const DATA_ROOT = path.resolve(pluginDirectory, '../../../data/pipeline-working-output');
+const SOURCE_INPUTS_ROOT = path.resolve(pluginDirectory, '../../../data/source-inputs');
+const REACH_CROSSWALK_ROOT = path.join(SOURCE_INPUTS_ROOT, 'reviewed-assignments');
 
 /**
  * The TNC flowline snapshot each extent was cut from; mirrors `flowlineSnapshotPath`
@@ -53,8 +51,8 @@ const REACH_CROSSWALK_ROOT = path.join(RETAINED_SOURCE_ROOT, 'reviewed-assignmen
  * because it reads `--extent=` from the process arguments on import.
  */
 function flowlineSnapshotPathFor(extent: string): string {
-  if (extent === 'jalama-gauge-reach') return path.join(RETAINED_SOURCE_ROOT, 'tnc-flowline-27714637.json');
-  return path.join(RETAINED_SOURCE_ROOT, `tnc-flowlines-${extent}.json`);
+  if (extent === 'jalama-gauge-reach') return path.join(SOURCE_INPUTS_ROOT, 'tnc-flowline-27714637.json');
+  return path.join(SOURCE_INPUTS_ROOT, `tnc-flowlines-${extent}.json`);
 }
 
 type LonLat = [number, number];
@@ -270,7 +268,7 @@ async function loadFlowlineIndex(methodFolder: string): Promise<CachedIndex> {
   return building;
 }
 
-async function buildFlowlineIndex(folder: string, names: string[]): Promise<FlowlineIndex> {
+export async function buildFlowlineIndex(folder: string, names: string[]): Promise<FlowlineIndex> {
   let segmentNetworkVersion: string | null = null;
   const flowlines: FlowlineIndexEntry[] = [];
   // Sequential on purpose: the preserve's polygon files total ~190 MB.
@@ -359,7 +357,7 @@ async function loadSegmentPaths(extent: string, extentRoot: string): Promise<Cac
   return building;
 }
 
-async function buildSegmentPaths(snapshotPath: string, crossSectionsPath: string): Promise<SegmentPathsFile> {
+export async function buildSegmentPaths(snapshotPath: string, crossSectionsPath: string): Promise<SegmentPathsFile> {
   const snapshot = JSON.parse(await readFile(snapshotPath, 'utf8')) as unknown;
   const crossSections = JSON.parse(await readFile(crossSectionsPath, 'utf8')) as {
     segmentNetworkVersion?: unknown;

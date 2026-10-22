@@ -10,16 +10,14 @@ import {
   type LonLat,
   type LonLatRing,
 } from './creek-data-contract';
-import { modeledDataUrl, waterYearOf, type CatalogTimeSeries } from './modeled-water-catalog';
+import { waterYearOf, type CatalogTimeSeries } from './modeled-water-catalog';
+import type { ModeledDataSource } from './modeled-data-source';
 import type { JunctionWaterSurface, SegmentFlowlinePath, SegmentSurfaceGeometry } from './sloped-water-surface';
 
 /** Flowlines kept in memory before least-recently-needed ones are dropped. */
 const MAX_CACHED_FLOWLINES = 24;
 /** Parallel fetches. The preserve's largest polygon file is ~13 MB. */
 const MAX_PARALLEL_FETCHES = 4;
-/** Inside a WSE Polygon Generation Method version folder. */
-const POLYGON_SETS_FOLDER_NAME = 'water-surface-polygon-sets';
-const TIME_SERIES_ROOT = '03-time-series';
 
 export interface FlowlineIndexSegment {
   segmentId: string;
@@ -62,6 +60,8 @@ export interface LoadedFlowline {
 
 export interface ModeledWaterDataStoreOptions {
   extentId: string;
+  /** Local dev-middleware files or the hosted ArcGIS services; see `modeled-data-source.ts`. */
+  dataSource: ModeledDataSource;
   /**
    * The WSE Polygon Generation Method version folder polygons load from,
    * relative to the extent, e.g. `04-water-surface-polygons/junction-sloped-terrain-fill/v1`.
@@ -154,7 +154,7 @@ export function createModeledWaterDataStore(
     const relative = pathByKey.get(`${flowline.tncComid}/${seriesKey}`);
     if (!relative) return; // No Time Series for this flowline and time; nothing to show.
     enqueue(`series:${flowline.tncComid}/${seriesKey}`, async () => {
-      const file = await fetchJson(modeledDataUrl(options.extentId, `${TIME_SERIES_ROOT}/${relative}`));
+      const file = await options.dataSource.loadTimeSeries(options.extentId, relative);
       flowline.seriesByKey.set(seriesKey, readTimeSeriesFile(file));
       // Keep only the current water year plus one neighbour per flowline.
       for (const key of [...flowline.seriesByKey.keys()]) {
@@ -190,9 +190,9 @@ export function createModeledWaterDataStore(
           continue;
         }
         const generation = cacheGeneration;
-        const polygonSetsPath = `${wsePolygonMethodPath}/${POLYGON_SETS_FOLDER_NAME}`;
+        const methodPath = wsePolygonMethodPath;
         enqueue(`polygons:${generation}:${comid}`, async () => {
-          const file = await fetchJson(modeledDataUrl(options.extentId, `${polygonSetsPath}/${comid}.json`));
+          const file = await options.dataSource.loadPolygonSets(options.extentId, methodPath, comid);
           if (generation !== cacheGeneration) return; // The method changed while this file loaded.
           const flowline: LoadedFlowline = {
             tncComid: comid,

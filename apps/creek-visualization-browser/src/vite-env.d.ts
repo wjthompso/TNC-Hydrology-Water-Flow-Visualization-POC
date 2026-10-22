@@ -4,6 +4,18 @@ interface ImportMetaEnv {
   readonly VITE_ARCGIS_API_KEY?: string;
   /** "true" when the page is served for automated tests. */
   readonly VITE_TEST_MODE?: string;
+  /** "hosted" or "local"; default local in dev/test mode, hosted in production builds. */
+  readonly VITE_CREEK_DATA_SOURCE?: string;
+  /** ArcGIS Enterprise portal URL used for sign-in to private hosted items. */
+  readonly VITE_ARCGIS_PORTAL_URL?: string;
+  /** Modeled water surface elevation FeatureServer URL. */
+  readonly VITE_MODELED_WSE_SERVICE_URL?: string;
+  /** Water surface elevation polygons FeatureServer URL. */
+  readonly VITE_WSE_POLYGONS_SERVICE_URL?: string;
+  /** Observed Creek Gauge Data FeatureServer URL (public). */
+  readonly VITE_CREEK_GAUGE_SERVICE_URL?: string;
+  /** "true" shows the California Natural Flows monthly Dataset; default hidden. */
+  readonly VITE_SHOW_CALIFORNIA_NATURAL_FLOWS_MONTHLY?: string;
 }
 
 interface ImportMeta {

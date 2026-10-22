@@ -25,7 +25,6 @@ import { renderModeledDatasetInfoPanel } from './modeled-dataset-info-panel';
 import {
   DATASET_PICKER_OPTIONS,
   datasetHoldMs,
-  modeledDataUrl,
   readModeledCatalog,
   selectModeledDataset,
   timelineGridStepMs,
@@ -34,7 +33,6 @@ import {
 } from './modeled-water-catalog';
 import {
   createModeledWaterDataStore,
-  fetchJson,
   heldJunctionWaterSurfaceAt,
   heldValueAt,
   readCreekSegmentPaths,
@@ -43,6 +41,7 @@ import {
   type FlowlineIndex,
 } from './modeled-water-data-store';
 import { createModeledWaterSceneRenderer } from './modeled-water-scene-renderer';
+import { modeledDataSource } from './modeled-data-source';
 import { loadReachCrosswalk } from './reach-crosswalk';
 import {
   bindSelectedCreekSegmentChart,
@@ -52,6 +51,7 @@ import {
 } from './selected-creek-segment-chart';
 import { bucketForWaterSurfaceElevation } from './selected-time-creek-state-resolver';
 import type { JunctionWaterSurface } from './sloped-water-surface';
+import { showLoadingMessage } from './loading-spinner';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 import {
   MAX_FLOWLINES_IN_VIEW,
@@ -60,7 +60,6 @@ import {
 } from './visible-flowlines';
 import {
   WSE_POLYGON_METHOD_QUERY_PARAM,
-  WSE_POLYGON_METHODS_PATH,
   readWsePolygonMethodList,
   resolveWsePolygonMethod,
   wsePolygonMethodKey,
@@ -70,10 +69,6 @@ import {
 
 /** Jalama Near Lompoc gauge Creek Segment; both extents include its flowline. */
 const OPENING_SEGMENT_ID = '27714637-026';
-const CATALOG_PATH = '05-catalog/catalog.json';
-const FLOWLINE_INDEX_FILE = 'flowline-index.json';
-/** Dev-middleware file: each Creek Segment's flowline vertices, upstream to downstream, and its neighbours. */
-const SEGMENT_PATHS_PATH = 'creek-segment-paths.json';
 /**
  * The selected WSE Polygon Generation Method's `browserDrawing` decides the
  * drawing: `sloped-between-junctions` slopes water between the pipeline's
@@ -133,7 +128,7 @@ export interface DrainageAreaRatioTransferSegment {
 
 export interface ModeledExperienceSeam {
   readonly datasetId: string;
-  /** Picker label of the Dataset, e.g. "California Natural Flows monthly". */
+  /** Picker label of the Dataset, e.g. "Inferred Creek WSE — monthly (from California Natural Flows)". */
   readonly datasetLabel: string;
   readonly extentId: string;
   readonly selectedTimeUtcMs: number;
@@ -190,8 +185,8 @@ export async function startModeledCreekExperience(
 ): Promise<{ view: SceneView; attachment: CreekVisualizationAttachment }> {
   const { datasetId, extentId } = selection;
   const [catalogFile, methodListFile, crosswalk, segmentPaths] = await Promise.all([
-    fetchJson(modeledDataUrl(extentId, CATALOG_PATH)),
-    fetchJson(modeledDataUrl(extentId, WSE_POLYGON_METHODS_PATH)),
+    modeledDataSource().loadCatalog(extentId),
+    modeledDataSource().loadWsePolygonMethodList(extentId),
     loadReachCrosswalk(extentId),
     loadSegmentPaths(extentId),
   ]);
@@ -254,6 +249,7 @@ export async function startModeledCreekExperience(
 
   const store = createModeledWaterDataStore({
     extentId,
+    dataSource: modeledDataSource(),
     wsePolygonMethodPath: wsePolygonMethod.path,
     timeSeries: selected.timeSeries,
     timeStep: selected.dataset.timeStep,
@@ -368,7 +364,9 @@ export async function startModeledCreekExperience(
     }
     if (store.isLoading) parts.push('loading…');
     if (store.lastError) parts.push(store.lastError);
-    elements.status.textContent = parts.join(' · ');
+    const statusText = parts.join(' · ');
+    if (store.isLoading) showLoadingMessage(elements.status, statusText);
+    else elements.status.textContent = statusText;
   };
 
   const applySelectedTime = (timeUtcMs: number): void => {
@@ -562,7 +560,7 @@ export async function startModeledCreekExperience(
  */
 async function loadSegmentPaths(extentId: string): Promise<ReadonlyMap<string, CreekSegmentPathRecord>> {
   try {
-    return readCreekSegmentPaths(await fetchJson(modeledDataUrl(extentId, SEGMENT_PATHS_PATH)));
+    return readCreekSegmentPaths(await modeledDataSource().loadCreekSegmentPaths(extentId));
   } catch (error) {
     console.warn(`Creek Segment paths unavailable; modeled water draws flat. ${String(error)}`);
     return new Map();
@@ -571,7 +569,7 @@ async function loadSegmentPaths(extentId: string): Promise<ReadonlyMap<string, C
 
 /** The flowline index of one WSE Polygon Generation Method version, computed by the dev middleware. */
 async function loadFlowlineIndex(extentId: string, method: WsePolygonMethodVersion): Promise<FlowlineIndex> {
-  return readFlowlineIndex(await fetchJson(modeledDataUrl(extentId, `${method.path}/${FLOWLINE_INDEX_FILE}`)));
+  return readFlowlineIndex(await modeledDataSource().loadFlowlineIndex(extentId, method.path));
 }
 
 /**
@@ -602,7 +600,7 @@ function labelPage(
     elements.subtitle.textContent = `${datasetLabel}, extent ${selection.extentId}. Modeled, not observed.`;
   }
   if (elements.legendLabel) {
-    elements.legendLabel.textContent = `Modeled water on Creek Segments near the camera (${datasetLabel})`;
+    elements.legendLabel.textContent = `Modeled water on Creek Segments near the camera: ${datasetLabel}`;
   }
 }
 
