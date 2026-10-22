@@ -4,20 +4,17 @@ import {
   FLOWLINE_SNAPSHOT_FILE,
   SEGMENT_NETWORK_VERSION,
   repositoryRoot,
-  retainedSourceDirectory,
+  sourceInputsDirectory,
 } from '../constants.ts';
 import type { TimeSeriesDerivation } from './stage-file-formats.ts';
 
 /**
  * Settings shared by every modeled water-surface elevation (WSE) stage.
  * Every stage builds one extent, chosen with `--extent=<extentId>`, and writes under
- * `data/modeled-water-surface-elevation-pipeline-output/<extentId>/`.
+ * `data/pipeline-working-output/<extentId>/` (git-ignored, regenerable scratch; see data/README.md).
  */
 
-export const pipelineOutputDirectory = path.join(
-  repositoryRoot,
-  'data/modeled-water-surface-elevation-pipeline-output',
-);
+export const pipelineWorkingOutputDirectory = path.join(repositoryRoot, 'data/pipeline-working-output');
 
 export interface ModeledExtentDefinition {
   extentId: string;
@@ -36,7 +33,7 @@ export interface ModeledExtentDefinition {
 }
 
 function crosswalkPathFor(extentId: string): string {
-  return path.join(retainedSourceDirectory, `reviewed-assignments/nhdplusv2-reach-crosswalk-${extentId}.json`);
+  return path.join(sourceInputsDirectory, `reviewed-assignments/nhdplusv2-reach-crosswalk-${extentId}.json`);
 }
 
 export const MODELED_EXTENTS = {
@@ -44,7 +41,7 @@ export const MODELED_EXTENTS = {
     extentId: 'jalama-gauge-reach',
     description: 'The 61 Creek Segments of TNC flowline COMID 27714637 around the Jalama Near Lompoc gauge. Fast dev extent.',
     segmentNetworkVersion: SEGMENT_NETWORK_VERSION,
-    flowlineSnapshotPath: path.join(retainedSourceDirectory, FLOWLINE_SNAPSHOT_FILE),
+    flowlineSnapshotPath: path.join(sourceInputsDirectory, FLOWLINE_SNAPSHOT_FILE),
     terrainBufferM: 150,
     nhdplusV2CrosswalkPath: crosswalkPathFor('jalama-gauge-reach'),
     blockedReason: null,
@@ -54,7 +51,7 @@ export const MODELED_EXTENTS = {
     description: 'Every TNC flowline intersecting the Dangermond Preserve boundary (jldp_boundary layer 2): 105 flowlines, 3,338 Creek Segments.',
     segmentNetworkVersion: 'dangermond-preserve-v1',
     // Tracked source input (see retain-dangermond-preserve-flowlines.ts), not pipeline output.
-    flowlineSnapshotPath: path.join(retainedSourceDirectory, 'tnc-flowlines-dangermond-preserve.json'),
+    flowlineSnapshotPath: path.join(sourceInputsDirectory, 'tnc-flowlines-dangermond-preserve.json'),
     terrainBufferM: 150,
     nhdplusV2CrosswalkPath: crosswalkPathFor('dangermond-preserve'),
     // Unblocked: browser-facing files are now split per TNC flowline (see METHODOLOGY.md "File layout").
@@ -85,7 +82,7 @@ export function requestedModeledExtentId(argv: readonly string[] = process.argv)
 /** The Creek Segment network this process builds. */
 export const MODELED_EXTENT: ModeledExtentDefinition = MODELED_EXTENTS[requestedModeledExtentId()];
 
-export const extentOutputDirectory = path.join(pipelineOutputDirectory, MODELED_EXTENT.extentId);
+export const extentOutputDirectory = path.join(pipelineWorkingOutputDirectory, MODELED_EXTENT.extentId);
 
 export const STAGE_DIRECTORY_NAMES = {
   acquire: '00-acquire',
@@ -195,7 +192,7 @@ export const NATIONAL_WATER_MODEL = {
  * second extent downloads only chunks not yet seen. The retrospective store never changes.
  */
 export const NATIONAL_WATER_MODEL_CHUNK_CACHE_DIRECTORY = path.join(
-  pipelineOutputDirectory,
+  pipelineWorkingOutputDirectory,
   'national-water-model-zarr-chunk-cache',
 );
 

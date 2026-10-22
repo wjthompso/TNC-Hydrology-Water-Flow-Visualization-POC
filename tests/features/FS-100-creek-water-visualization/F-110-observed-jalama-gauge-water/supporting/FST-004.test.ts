@@ -7,6 +7,7 @@ import {
   OBSERVED_POLYGON_SET_PROVENANCE_FILE,
   OBSERVED_POLYGON_SET_SNAPSHOT_FILE,
 } from '../../../../../pipelines/creek-visualization-data-production/constants.ts';
+import { currentRepositoryRelativePath } from '../../../../../pipelines/creek-visualization-data-production/migrate-data-folder-names.ts';
 
 const TEST_NAME =
   "The observed gauge segment's published water polygons are identical to the modeled Stage 4 polygons for that segment.";
@@ -17,7 +18,7 @@ const PUBLISHED_POLYGON_SETS_PATH = path.join(
   repositoryRoot,
   'apps/creek-visualization-browser/public/published-creek-visualization-data/water-surface-polygon-sets.json',
 );
-const RETAINED_DIRECTORY = path.join(repositoryRoot, 'data/retained-backend-source-data');
+const SOURCE_INPUTS_DIRECTORY = path.join(repositoryRoot, 'data/source-inputs');
 const STAGE_4_COMMAND = 'npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach';
 
 interface PolygonSetsFile {
@@ -43,23 +44,25 @@ function gaugeSegmentSet(file: PolygonSetsFile, label: string) {
 
 describe('FST-004', () => {
   it(TEST_NAME, async (context) => {
-    const provenance = await readJson<PolygonSetProvenance>(path.join(RETAINED_DIRECTORY, OBSERVED_POLYGON_SET_PROVENANCE_FILE));
+    const provenance = await readJson<PolygonSetProvenance>(path.join(SOURCE_INPUTS_DIRECTORY, OBSERVED_POLYGON_SET_PROVENANCE_FILE));
     expect(provenance.segmentId).toBe(GAUGE_SEGMENT_ID);
     const { id, version } = provenance.wsePolygonGenerationMethod;
     expect(provenance.source.path).toContain(`/04-water-surface-polygons/${id}/v${version}/water-surface-polygon-sets/`);
 
-    const stage4Path = path.join(repositoryRoot, provenance.source.path);
+    // The recorded path may predate the UCS-295 data folder rename; resolve it to the current folder.
+    const stage4RelativePath = currentRepositoryRelativePath(provenance.source.path);
+    const stage4Path = path.join(repositoryRoot, stage4RelativePath);
     if (!existsSync(stage4Path)) {
       // Pipeline output is gitignored and local. Skipping reports NOT RUN, never passed.
       context.skip(
-        `Local Stage 4 output ${provenance.source.path} is missing, so the comparison cannot run. Run \`${STAGE_4_COMMAND}\` first.`,
+        `Local Stage 4 output ${stage4RelativePath} is missing, so the comparison cannot run. Run \`${STAGE_4_COMMAND}\` first.`,
       );
     }
 
     const stage4 = gaugeSegmentSet(await readJson<PolygonSetsFile>(stage4Path), 'Stage 4 output');
     const published = gaugeSegmentSet(await readJson<PolygonSetsFile>(PUBLISHED_POLYGON_SETS_PATH), 'Published file');
     const retained = gaugeSegmentSet(
-      await readJson<PolygonSetsFile>(path.join(RETAINED_DIRECTORY, OBSERVED_POLYGON_SET_SNAPSHOT_FILE)),
+      await readJson<PolygonSetsFile>(path.join(SOURCE_INPUTS_DIRECTORY, OBSERVED_POLYGON_SET_SNAPSHOT_FILE)),
       'Retained snapshot',
     );
 

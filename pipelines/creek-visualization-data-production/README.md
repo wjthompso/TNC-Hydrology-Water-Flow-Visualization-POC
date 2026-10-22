@@ -6,14 +6,14 @@ Offline pipeline for the Jalama Near Lompoc gauge (USGS 11120600) on TNC flowlin
 
 From the repository root:
 
-- `npm run pipeline:acquire` downloads Retained Backend Source Data into `data/retained-backend-source-data/`. It needs the network.
+- `npm run pipeline:acquire` downloads source snapshots into the tracked source inputs folder, `data/source-inputs/`. It needs the network.
 - `npm run pipeline:publish` reads those snapshots and writes Published Creek Visualization Data to `apps/creek-visualization-browser/public/published-creek-visualization-data/`. It does not use the network. Running it twice writes the same bytes.
 
 Acquire centers the USGS 3DEP window on the assigned Creek Segment, using the same nearest-segment calculation as publish. The reviewed assignment file is written only by publish.
 
 ## What goes where
 
-Retained Backend Source Data:
+Source inputs (`data/source-inputs/`; the whole `data/` layout is in [data/README.md](../../data/README.md)):
 
 - `tnc-flowline-27714637.json` — raw TNC flowline in EPSG 32610 (UTM zone 10N, meters)
 - `usgs-11120600-station.json` — raw gauge location
@@ -46,4 +46,4 @@ To refresh the snapshot after a new Stage 4 method or version, rerun `npm run pi
 
 ## Modeled water-surface elevation
 
-`npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach` runs a separate staged pipeline. It turns California Natural Flows and NOAA National Water Model discharge into a modeled WSE Time Series, prepared water-surface polygons, and a validated catalog for every Creek Segment in one extent. `jalama-gauge-reach` is the 61-segment dev extent. `dangermond-preserve` covers all 105 preserve flowlines and is the default. It writes only to `data/modeled-water-surface-elevation-pipeline-output/<extentId>/`, which git ignores, plus one tracked crosswalk per extent in `data/retained-backend-source-data/reviewed-assignments/`. It does not touch the published files above; observed polygons change only when the retained Stage 4 snapshot is refreshed by hand (see [Observed water-surface polygons](#observed-water-surface-polygons)). See [modeled-water-surface-elevation/METHODOLOGY.md](modeled-water-surface-elevation/METHODOLOGY.md) for the stages, equation, parameters, and limitations. Stage 4 runs one versioned WSE Polygon Generation Method at a time (`--wse-polygon-method=<method-id>`) and keeps each version's output side by side; [WSE Polygon Generation Methods](modeled-water-surface-elevation/METHODOLOGY.md#wse-polygon-generation-methods) covers the folder layout, the version bump rule, and how to add a method.
+`npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach` runs a separate staged pipeline. It turns California Natural Flows and NOAA National Water Model discharge into a modeled WSE Time Series, prepared water-surface polygons, and a validated catalog for every Creek Segment in one extent. `jalama-gauge-reach` is the 61-segment dev extent. `dangermond-preserve` covers all 105 preserve flowlines and is the default. It writes only to `data/pipeline-working-output/<extentId>/`, which git ignores, plus one tracked crosswalk per extent in `data/source-inputs/reviewed-assignments/`. It does not touch the published files above; observed polygons change only when the retained Stage 4 snapshot is refreshed by hand (see [Observed water-surface polygons](#observed-water-surface-polygons)). See [modeled-water-surface-elevation/METHODOLOGY.md](modeled-water-surface-elevation/METHODOLOGY.md) for the stages, equation, parameters, and limitations. Stage 4 runs one versioned WSE Polygon Generation Method at a time (`--wse-polygon-method=<method-id>`) and keeps each version's output side by side; [WSE Polygon Generation Methods](modeled-water-surface-elevation/METHODOLOGY.md#wse-polygon-generation-methods) covers the folder layout, the version bump rule, and how to add a method.

@@ -2,7 +2,7 @@
 
 This offline pipeline turns modeled discharge (flow rate) from two Publishers into a modeled water-surface elevation (WSE) Time Series for every Creek Segment in one extent. It also builds prepared water-surface polygons for those elevations and a catalog that describes the result. Every elevation is in meters NAVD88 (North American Vertical Datum of 1988). Each stage writes a `manifest.json` that records input hashes, parameters, counts, and warnings. A stage skips itself when nothing changed. Add `--force` to rerun it anyway.
 
-Run everything with `npm run pipeline:modeled-wse:all -- --extent=<extentId>`. The runner passes every argument to all six stages and prints per-stage wall-clock time. A single stage takes the same flags, for example `npm run pipeline:modeled-wse:time-series -- --extent=jalama-gauge-reach --force`. Outputs go to `data/modeled-water-surface-elevation-pipeline-output/<extentId>/0X-…/`, which git ignores. The NOAA National Water Model chunk cache sits at the output root and every extent shares it.
+Run everything with `npm run pipeline:modeled-wse:all -- --extent=<extentId>`. The runner passes every argument to all six stages and prints per-stage wall-clock time. A single stage takes the same flags, for example `npm run pipeline:modeled-wse:time-series -- --extent=jalama-gauge-reach --force`. Outputs go to `data/pipeline-working-output/<extentId>/0X-…/`, which git ignores. The NOAA National Water Model chunk cache sits at the output root and every extent shares it.
 
 ## Extents
 
@@ -11,7 +11,7 @@ Run everything with `npm run pipeline:modeled-wse:all -- --extent=<extentId>`. T
 | `jalama-gauge-reach` | 61, on TNC flowline COMID 27714637 | `jalama-27714637-v1` | Runs. Fast development extent, about 15 s with `--force` once the 61 flow-accumulation samples and the NLDI answers are cached (about 30 s before that). |
 | `dangermond-preserve` | 3,338, on all 105 TNC flowlines in the preserve | `dangermond-preserve-v1` | Runs. Default. Cold run 14.3 min (Stage 0 terrain download ≈ 10 min, ~1.0 GB of overlapping 2 km 3DEP tiles) plus about 4 min of flow-accumulation samples in Stage 1 on the first run; largest browser-facing file 13.6 MB. Reruns skip unchanged stages; a full `--force` rerun with cached terrain, samples, and NLDI answers takes 5.4 min (Stage 4 and Stage 5 about 2 min each). |
 
-Creek Segment ids stay `<tncComid>-<vertexIndex>`. A flowline with several paths keeps one vertex numbering across its paths, and no Creek Segment spans the gap between two paths. Bed slope and network distance are computed per TNC flowline. Each extent has its own tracked crosswalk, `data/retained-backend-source-data/reviewed-assignments/nhdplusv2-reach-crosswalk-<extentId>.json`. Stage 0 writes the reach assignment to `00-acquire/nhdplusv2-reach-crosswalk.json`; Stage 1 adds the drainage-area ratio and writes the tracked file. The Jalama file was renamed from `nhdplusv2-reach-crosswalk.json`.
+Creek Segment ids stay `<tncComid>-<vertexIndex>`. A flowline with several paths keeps one vertex numbering across its paths, and no Creek Segment spans the gap between two paths. Bed slope and network distance are computed per TNC flowline. Each extent has its own tracked crosswalk, `data/source-inputs/reviewed-assignments/nhdplusv2-reach-crosswalk-<extentId>.json`. Stage 0 writes the reach assignment to `00-acquire/nhdplusv2-reach-crosswalk.json`; Stage 1 adds the drainage-area ratio and writes the tracked file. The Jalama file was renamed from `nhdplusv2-reach-crosswalk.json`.
 
 ## Stages
 
@@ -115,7 +115,7 @@ modeled-water-surface-elevation/wse-polygon-generation-methods/
     method-config.ts                          { id, label, version, description, browserDrawing, sharedCodeFiles, parameters }
     generate-water-surface-polygons.ts        the method's code
 
-data/modeled-water-surface-elevation-pipeline-output/<extentId>/04-water-surface-polygons/
+data/pipeline-working-output/<extentId>/04-water-surface-polygons/
   <method-id>/v<version>/
     manifest.json                             parameters.wsePolygonGenerationMethod records id, label, version, description,
                                               browserDrawing, parameters, codeSha256ByFile, and methodSha256

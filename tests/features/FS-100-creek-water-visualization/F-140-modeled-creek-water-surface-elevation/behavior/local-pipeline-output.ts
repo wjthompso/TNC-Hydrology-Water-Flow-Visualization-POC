@@ -1,6 +1,6 @@
 /**
  * Reads the developer's LOCAL modeled water-surface elevation pipeline output
- * (git-ignored, under data/modeled-water-surface-elevation-pipeline-output/)
+ * (git-ignored, under data/pipeline-working-output/)
  * for the F-140 seam tests. Nothing here touches the browser.
  *
  * Approved fixture decision (UCS-271 seam tests, 2026-10-16): the tests read
@@ -19,7 +19,7 @@ export const JALAMA_TNC_COMID = '27714637';
 export const NATIONAL_WATER_MODEL_HOURLY_DATASET_ID = 'national-water-model-hourly';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
-const pipelineOutputRoot = path.join(repositoryRoot, 'data/modeled-water-surface-elevation-pipeline-output');
+const pipelineOutputRoot = path.join(repositoryRoot, 'data/pipeline-working-output');
 const publishedCreekSegmentsFile = path.join(
   repositoryRoot,
   'apps/creek-visualization-browser/public/published-creek-visualization-data/creek-segments.json',

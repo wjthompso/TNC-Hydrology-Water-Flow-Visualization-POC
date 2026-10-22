@@ -19,7 +19,7 @@ import {
   USGS_3DEP_EXPORT,
   USGS_OBSERVATION_QUERY,
   USGS_STATION_QUERY,
-  retainedSourceDirectory,
+  sourceInputsDirectory,
 } from './constants.ts';
 import {
   expectNumber,
@@ -155,7 +155,7 @@ async function retainObservations(): Promise<{
     }
   }
 
-  await writeCompactJson(path.join(retainedSourceDirectory, OBSERVATIONS_SNAPSHOT_FILE), {
+  await writeCompactJson(path.join(sourceInputsDirectory, OBSERVATIONS_SNAPSHOT_FILE), {
     requestParams: {
       url: USGS_OBSERVATION_QUERY,
       where: `station_id=${OBSERVATION_STATION_ID}`,
@@ -191,7 +191,7 @@ function elevationWindowUrl(midpointX: number, midpointY: number): string {
 
 /** Fetch unchanged source snapshots, including a 3DEP window centered on the assigned Creek Segment. */
 export async function retainSourceInputs(): Promise<void> {
-  await mkdir(retainedSourceDirectory, { recursive: true });
+  await mkdir(sourceInputsDirectory, { recursive: true });
 
   const flowlineUrl = queryUrl(TNC_FLOWLINE_QUERY, {
     where: `COMID=${COMID}`,
@@ -220,8 +220,8 @@ export async function retainSourceInputs(): Promise<void> {
     throw error;
   }
 
-  await writeFile(path.join(retainedSourceDirectory, FLOWLINE_SNAPSHOT_FILE), flowline.text);
-  await writeFile(path.join(retainedSourceDirectory, STATION_SNAPSHOT_FILE), station.text);
+  await writeFile(path.join(sourceInputsDirectory, FLOWLINE_SNAPSHOT_FILE), flowline.text);
+  await writeFile(path.join(sourceInputsDirectory, STATION_SNAPSHOT_FILE), station.text);
   console.log(`Retained ${FLOWLINE_SNAPSHOT_FILE} and ${STATION_SNAPSHOT_FILE}.`);
 
   const segments = segmentTncFlowline(JSON.parse(flowline.text) as unknown);
@@ -238,7 +238,7 @@ export async function retainSourceInputs(): Promise<void> {
         `USGS 3DEP export was not a TIFF. Body starts: ${elevationBytes.subarray(0, 180).toString('utf8')}`,
       );
     }
-    await writeFile(path.join(retainedSourceDirectory, ELEVATION_SNAPSHOT_FILE), elevationBytes);
+    await writeFile(path.join(sourceInputsDirectory, ELEVATION_SNAPSHOT_FILE), elevationBytes);
     const elevationRetrievedAt = new Date().toISOString();
     console.log(
       `Retained ${ELEVATION_SNAPSHOT_FILE} (${elevationBytes.length} bytes) around Creek Segment ${assignment.reviewed.segmentId}.`,
@@ -257,8 +257,8 @@ export async function retainSourceInputs(): Promise<void> {
       },
       { file: ELEVATION_SNAPSHOT_FILE, url: elevationUrl, retrievedAt: elevationRetrievedAt },
     ];
-    await writePrettyJson(path.join(retainedSourceDirectory, RETENTION_MANIFEST_FILE), { sources });
-    console.log(`Source Input Retention wrote ${sources.length} snapshots to ${retainedSourceDirectory}.`);
+    await writePrettyJson(path.join(sourceInputsDirectory, RETENTION_MANIFEST_FILE), { sources });
+    console.log(`Source Input Retention wrote ${sources.length} snapshots to ${sourceInputsDirectory}.`);
   } catch (error) {
     await observationTask.catch(() => undefined);
     throw error;

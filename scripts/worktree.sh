@@ -7,15 +7,17 @@
 # Worktrees live next to each other in ../creek-water-visualization/<name>, with a
 # <name>.code-workspace file to open in Cursor.
 #
-# Generated data (the pipeline output and the live-test response cache) is gitignored,
-# so git never brings it into a worktree. Each worktree gets its own APFS clone of the
+# Generated data (the pipeline working output, the frozen data-product versions, and the
+# live-test response cache) is gitignored, so git never brings it into a worktree. A
+# folder the main checkout does not have yet is skipped. Each worktree gets its own APFS clone of the
 # main checkout's copy: instant, and it takes no extra disk until a file changes.
 # Nothing is shared or symlinked, so one window's pipeline run cannot change another's
 # data, and nothing generated can end up in a commit or a merge.
 set -euo pipefail
 
 GENERATED_DATA_FOLDERS=(
-  "data/modeled-water-surface-elevation-pipeline-output"
+  "data/pipeline-working-output"
+  "data/data-product-versions"
   ".test-cache"
 )
 

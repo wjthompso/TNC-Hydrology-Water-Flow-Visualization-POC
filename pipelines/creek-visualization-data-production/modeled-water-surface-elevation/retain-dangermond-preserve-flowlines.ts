@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { TNC_FLOWLINE_QUERY, retainedSourceDirectory } from '../constants.ts';
+import { TNC_FLOWLINE_QUERY, sourceInputsDirectory } from '../constants.ts';
 
 /**
  * Downloads every TNC flowline in the Dangermond Preserve (the layer is already
@@ -49,6 +49,6 @@ while (page.exceededTransferLimit && (page.features?.length ?? 0) > 0) {
 
 // Keep the service's own response shape (spatialReference, fields, ...) with every feature.
 const snapshot = { ...firstPage, features, exceededTransferLimit: false };
-const outputPath = path.join(retainedSourceDirectory, DANGERMOND_PRESERVE_FLOWLINE_SNAPSHOT_FILE);
+const outputPath = path.join(sourceInputsDirectory, DANGERMOND_PRESERVE_FLOWLINE_SNAPSHOT_FILE);
 await writeFile(outputPath, `${JSON.stringify(snapshot, null, 2)}\n`);
 console.log(`Saved ${features.length} TNC flowlines to ${path.relative(process.cwd(), outputPath)}.`);

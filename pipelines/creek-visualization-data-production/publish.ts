@@ -14,7 +14,7 @@ import {
   SEGMENT_NETWORK_VERSION,
   STATION_SNAPSHOT_FILE,
   publishedDirectory,
-  retainedSourceDirectory,
+  sourceInputsDirectory,
 } from './constants.ts';
 import { adjacentSegmentsById } from './creek-segment-adjacency.ts';
 import { readJson, writeCompactJson, writePrettyJson } from './json-files.ts';
@@ -42,7 +42,7 @@ function publishedCreekSegment(segment: CreekSegment) {
 export interface PublishCreekVisualizationDataOptions {
   /** Where the published browser files go. Default: the app's public published-creek-visualization-data folder. */
   outputDirectory?: string;
-  /** Where the reviewed monitoring-station assignment is written. Default: the retained source snapshot folder. */
+  /** Where the reviewed monitoring-station assignment is written. Default: the tracked source inputs folder, data/source-inputs/. */
   assignmentOutputPath?: string;
 }
 
@@ -53,10 +53,10 @@ export interface PublishCreekVisualizationDataOptions {
  */
 export async function publishCreekVisualizationData(options: PublishCreekVisualizationDataOptions = {}): Promise<void> {
   const outputDirectory = options.outputDirectory ?? publishedDirectory;
-  const assignmentOutputPath = options.assignmentOutputPath ?? path.join(retainedSourceDirectory, ASSIGNMENT_FILE);
-  const flowline = await readJson(path.join(retainedSourceDirectory, FLOWLINE_SNAPSHOT_FILE));
-  const stationResponse = await readJson(path.join(retainedSourceDirectory, STATION_SNAPSHOT_FILE));
-  const observations = await readJson(path.join(retainedSourceDirectory, OBSERVATIONS_SNAPSHOT_FILE));
+  const assignmentOutputPath = options.assignmentOutputPath ?? path.join(sourceInputsDirectory, ASSIGNMENT_FILE);
+  const flowline = await readJson(path.join(sourceInputsDirectory, FLOWLINE_SNAPSHOT_FILE));
+  const stationResponse = await readJson(path.join(sourceInputsDirectory, STATION_SNAPSHOT_FILE));
+  const observations = await readJson(path.join(sourceInputsDirectory, OBSERVATIONS_SNAPSHOT_FILE));
   const segments = segmentTncFlowline(flowline);
   const station = readMonitoringStation(stationResponse);
   const assignment = assignMonitoringStation(station, segments);
@@ -66,7 +66,7 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
 
   // Observed water draws the modeled pipeline's Stage 4 polygons for the gauge's Creek Segment,
   // copied from a reviewed retained snapshot, so observed and modeled water share one polygon set.
-  const polygonSetSnapshotPath = path.join(retainedSourceDirectory, OBSERVED_POLYGON_SET_SNAPSHOT_FILE);
+  const polygonSetSnapshotPath = path.join(sourceInputsDirectory, OBSERVED_POLYGON_SET_SNAPSHOT_FILE);
   const waterSurfacePolygonSets = (await readJson(polygonSetSnapshotPath)) as PublishedWaterSurfacePolygonSets;
   const snapshotSegmentIds = waterSurfacePolygonSets.waterSurfacePolygonSets.map((polygonSet) => polygonSet.segmentId);
   if (snapshotSegmentIds.length !== 1 || snapshotSegmentIds[0] !== assignment.segment.segmentId) {
@@ -80,7 +80,7 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
   // release validation checks rings against must use the same neighbours. Tracing zero buckets
   // only measures that corridor on the retained USGS 3DEP window; it draws no polygon.
   const corridor = await generateWaterSurfacePolygons({
-    elevationRasterPath: path.join(retainedSourceDirectory, ELEVATION_SNAPSHOT_FILE),
+    elevationRasterPath: path.join(sourceInputsDirectory, ELEVATION_SNAPSHOT_FILE),
     segment: assignment.segment,
     buckets: [],
     adjacentSegments: adjacentSegmentsById(segments).get(assignment.segment.segmentId) ?? {},

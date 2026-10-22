@@ -5,7 +5,8 @@ const pipelineDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 export const repositoryRoot = path.resolve(pipelineDirectory, '../..');
 
-export const retainedSourceDirectory = path.join(repositoryRoot, 'data/retained-backend-source-data');
+/** Tracked source inputs every pipeline reads (see data/README.md). */
+export const sourceInputsDirectory = path.join(repositoryRoot, 'data/source-inputs');
 export const publishedDirectory = path.join(
   repositoryRoot,
   'apps/creek-visualization-browser/public/published-creek-visualization-data',
