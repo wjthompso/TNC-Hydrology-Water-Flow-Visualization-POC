@@ -1,4 +1,3 @@
-import './style.css';
 import {
   OBSERVATION_GRID_STEP_MS,
   type ObservationClock,

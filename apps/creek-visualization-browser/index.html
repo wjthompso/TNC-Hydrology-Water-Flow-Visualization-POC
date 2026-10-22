@@ -6,6 +6,13 @@
     <!-- Empty icon so the browser does not request a missing /favicon.ico and log a 404. -->
     <link rel="icon" href="data:," />
     <title>Jalama Creek observed water</title>
+    <!--
+      Linked here, not imported from the scene module: main.ts loads the ArcGIS
+      modules with a dynamic import, so an import there paints the page unstyled
+      until the whole ArcGIS bundle has downloaded. Vite bundles and processes
+      this link through Tailwind in dev and in the build.
+    -->
+    <link rel="stylesheet" href="/src/style.css" />
     <style>
       /* Auto-hiding overlay scrollbar for the info sidebar.
          scrollbar-gutter: stable both-edges mirrors the gutter on both sides so
@@ -316,7 +323,7 @@
       <div
         id="loading-overlay"
         role="status"
-        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 text-sm text-slate-300"
+        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 text-sm text-slate-300 transition-opacity duration-500 motion-reduce:transition-none"
       ><span class="loading-spinner" aria-hidden="true"></span>Loading observed water…</div>
 
       <!--
