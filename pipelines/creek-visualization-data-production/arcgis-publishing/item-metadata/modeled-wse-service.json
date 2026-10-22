@@ -1,0 +1,23 @@
+{
+  "id": "a1cbf72906f44070a01930ddb3e9d1f3",
+  "type": "Feature Service",
+  "title": "Dangermond Preserve — Inferred Creek Water Surface Elevations",
+  "snippet": "Inferred water surface elevations (WSE) for the creeks of the Jack and Laura Dangermond Preserve, estimated by combining modeled stream flow with high-resolution terrain using Manning's equation.",
+  "description": "<p><b>What this is</b><br />Inferred <b>water surface elevation (WSE)</b> values: the estimated height of the water surface in each short stretch of creek in the Jack and Laura Dangermond Preserve, California, in meters above the North American Vertical Datum of 1988 (NAVD88). These values are estimates, not measurements. Most of these creeks have no stream gauge.</p><p><b>How it was made</b><br />We combined two inputs using Manning's equation:</p><ol><li><b>Flow rate:</b> modeled hourly stream flow from the <a href='https://registry.opendata.aws/nwm-archive/' rel='nofollow ugc'>NOAA National Water Model v3.0 retrospective</a> (October 2020 – January 2023), with modeled monthly flow from the <a href='https://rivers.codefornature.org/' rel='nofollow ugc'>California Natural Flows Database</a> (1950–2024) as a second source. Each creek stretch gets a share of its stream's flow based on the land area that drains into it.</li><li><b>Channel shape:</b> creek cross sections from the <a href='https://www.usgs.gov/3d-elevation-program' rel='nofollow ugc'>USGS 3D Elevation Program (3DEP)</a> 1-meter bare-earth terrain.</li></ol><p>For each stretch, Manning's equation gives the water height that flow rate reaches in that channel.</p><p><b>Data used</b></p><ul><li><a href='https://registry.opendata.aws/nwm-archive/' rel='nofollow ugc'>NOAA National Water Model v3.0 retrospective</a>: modeled hourly stream flow.</li><li><a href='https://rivers.codefornature.org/' rel='nofollow ugc'>California Natural Flows Database</a> (The Nature Conservancy and USGS): modeled monthly natural stream flow.</li><li><a href='https://www.usgs.gov/3d-elevation-program' rel='nofollow ugc'>USGS 3DEP</a> 1-meter bare-earth terrain: creek cross sections.</li><li><a href='https://www.arcgis.com/home/item.html?id=7c4fb7bf8b4e47f1ace186b24152bb1b' rel='nofollow ugc'>The Nature Conservancy creek centerlines</a> and the <a href='https://www.epa.gov/waterdata/nhdplus-national-hydrography-dataset-plus' rel='nofollow ugc'>EPA NHDPlus Version 2</a> stream network: where the creeks are and which stream each stretch draws flow from.</li></ul><p><b>Accuracy and limits</b><br />Both flow inputs are themselves model estimates, and their error carries through. The National Water Model's flows are not corrected against gauge readings and can be off by a factor of 2 to 5 on small creeks like these, so the timing of rises and falls is more reliable than the exact heights. The terrain can't see below the water surface, so channel beds are approximate. A few small side creeks borrow flow from a neighboring creek; these are flagged in the data.</p><p><b>What's inside</b></p><ul><li>Creek stretches (lines), each linked to the stream it draws flow from.</li><li>WSE tables. To keep them small, each row is one water level and the time span it held steady, so a long dry spell is a single row.</li><li>A versions table. When the method improves, new versions are added next to the old ones, never replacing them.</li><li>Every hourly value is also a downloadable CSV file, one per water year.</li></ul><p>Version m1-v1. Produced by the UCSB Spatial Center for the Dangermond Preserve Digital Twin.</p>",
+  "tags": [
+    "Dangermond Preserve",
+    "water surface elevation",
+    "WSE",
+    "inferred",
+    "Manning's equation",
+    "National Water Model",
+    "California Natural Flows",
+    "USGS 3DEP",
+    "creek",
+    "hydrology",
+    "UCSB Spatial Center"
+  ],
+  "accessInformation": "NOAA National Water Model v3.0 retrospective; California Natural Flows Database (The Nature Conservancy, USGS); USGS 3D Elevation Program; The Nature Conservancy; EPA NHDPlus Version 2. Derived by the UCSB Spatial Center.",
+  "licenseInfo": "Inferred estimates for research and visualization. Not measurements; see Accuracy and limits. Please credit the UCSB Spatial Center and the source datasets listed.",
+  "access": "public"
+}

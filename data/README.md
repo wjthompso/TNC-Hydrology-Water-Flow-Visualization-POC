@@ -35,7 +35,9 @@ npm run data-products:publish-arcgis -- --product modeled-wse --version m1-v1   
 npm run data-products:publish-arcgis -- --product modeled-wse --version m1-v1 --upload-raw-csv --publish # private hosted feature layer
 ```
 
-Published items live in the private portal folder **Creek Water Visualization**. The registry records each version's service item id, service URL, layer and table ids, row counts, and raw CSV item ids. The publish script never deletes portal items; the portal has no recycle bin.
+Step-by-step publishing, updating, verification, and troubleshooting are in [arcgis-publishing/README.md](../pipelines/creek-visualization-data-production/arcgis-publishing/README.md).
+
+Published items live in the portal folder **Creek Water Visualization** (the two services and the raw CSV items are public; the script itself publishes private). The registry records each version's service item id, service URL, layer and table ids, row counts, and raw CSV item ids. The publish script never deletes portal items; the portal has no recycle bin.
 
 ## Two data products
 

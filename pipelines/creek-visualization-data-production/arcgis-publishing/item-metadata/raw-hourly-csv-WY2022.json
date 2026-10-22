@@ -1,0 +1,19 @@
+{
+  "id": "68e9a0dd34d7489a8d1704561486e7c3",
+  "type": "CSV Collection",
+  "title": "Dangermond Preserve — Inferred Creek Water Surface Elevations, hourly values WY2022 (CSV)",
+  "snippet": "Every hourly inferred water surface elevation for every creek stretch in the Dangermond Preserve, WY2022, as a zipped CSV.",
+  "description": "<p>Every hourly inferred water surface elevation (WSE) for every short creek stretch in the Jack and Laura Dangermond Preserve, water year WY2022 (October 2021 – September 2022), as a zipped CSV file. Columns: segment_id, tnc_comid, time_utc, wse_m (meters above NAVD88), junction_wse_upstream_m, junction_wse_downstream_m.</p><p>Companion download for <a href='https://dangermondpreserve-spatial.com/portal/home/item.html?id=a1cbf72906f44070a01930ddb3e9d1f3' rel='nofollow ugc'>the inferred creek water surface elevation layer</a>; see that item for how the values were made and their accuracy limits. Estimates, not measurements. Produced by the UCSB Spatial Center for the Dangermond Preserve Digital Twin.</p>",
+  "tags": [
+    "Dangermond Preserve",
+    "water surface elevation",
+    "WSE",
+    "hourly",
+    "CSV",
+    "WY2022",
+    "UCSB Spatial Center"
+  ],
+  "accessInformation": "NOAA National Water Model v3.0 retrospective; California Natural Flows Database; USGS 3D Elevation Program (3DEP) 1 m terrain; TNC (The Nature Conservancy) flowlines; EPA NHDPlusV2. Derived by the UCSB Spatial Center.",
+  "licenseInfo": null,
+  "access": "public"
+}

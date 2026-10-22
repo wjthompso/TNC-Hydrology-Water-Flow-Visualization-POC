@@ -1,0 +1,21 @@
+{
+  "id": "991d2270a8d74b30bfe8862a764226b9",
+  "type": "Feature Service",
+  "title": "Dangermond Preserve — Creek Water Outlines",
+  "snippet": "Outlines of where creek water would sit at a range of water surface elevations (WSE), for every short stretch of creek in the Jack and Laura Dangermond Preserve.",
+  "description": "<p><b>What this is</b><br />Water outlines for the creeks of the Jack and Laura Dangermond Preserve, California. Each short stretch of creek has a set of outlines showing where water would sit at a range of <b>water surface elevations (WSE)</b>, in meters above the North American Vertical Datum of 1988 (NAVD88). The steps are 5 centimeters apart up to the highest estimated level, then 25 centimeters apart for 2 meters above it. Pair them with the companion inferred creek water surface elevation layer to see where the water was at any hour.</p><p><b>How it was made</b><br />For each stretch and each water surface elevation, we filled the <a href='https://www.usgs.gov/3d-elevation-program' rel='nofollow ugc'>USGS 3D Elevation Program (3DEP)</a> 1-meter bare-earth terrain with water, from the lowest point of the channel up to that height, and traced the edge of the wet area. Each outline extends 2 meters past the waterline so it tucks under the banks on a 3D map. On a 3D map, the surface slopes downstream between the estimated levels at each end of the stretch, so neighboring stretches meet smoothly.</p><p><b>Data used</b></p><ul><li><a href='https://www.usgs.gov/3d-elevation-program' rel='nofollow ugc'>USGS 3DEP</a> 1-meter bare-earth terrain.</li><li><a href='https://www.arcgis.com/home/item.html?id=7c4fb7bf8b4e47f1ace186b24152bb1b' rel='nofollow ugc'>The Nature Conservancy creek centerlines</a>.</li><li>Inferred water surface elevations from the companion layer, which combine modeled stream flow from the <a href='https://registry.opendata.aws/nwm-archive/' rel='nofollow ugc'>NOAA National Water Model</a> and the <a href='https://rivers.codefornature.org/' rel='nofollow ugc'>California Natural Flows Database</a> using Manning's equation (version m1-v1).</li></ul><p><b>Accuracy and limits</b><br />These outlines carry every limit of the inferred water surface elevations they are built from. The terrain can't see below the water surface, so low-water outlines are approximate. The outlines are flat 2D shapes; a 3D map sets their height from the water surface elevation.</p><p><b>What's inside</b></p><ul><li>One outline per creek stretch per water-height step, each listing the lowest and highest water surface elevation it covers.</li><li>A versions table. New versions are added next to the old ones, never replacing them.</li></ul><p>Version m1-v1. Produced by the UCSB Spatial Center for the Dangermond Preserve Digital Twin.</p>",
+  "tags": [
+    "Dangermond Preserve",
+    "water surface elevation",
+    "WSE",
+    "water outlines",
+    "inundation",
+    "USGS 3DEP",
+    "creek",
+    "hydrology",
+    "UCSB Spatial Center"
+  ],
+  "accessInformation": "USGS 3D Elevation Program; The Nature Conservancy; NOAA National Water Model v3.0 retrospective; California Natural Flows Database. Derived by the UCSB Spatial Center.",
+  "licenseInfo": "Inferred estimates for research and visualization. Not measurements; see Accuracy and limits. Please credit the UCSB Spatial Center and the source datasets listed.",
+  "access": "public"
+}
