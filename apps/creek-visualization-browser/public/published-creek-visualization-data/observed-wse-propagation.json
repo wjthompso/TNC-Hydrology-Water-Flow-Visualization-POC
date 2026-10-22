@@ -1,0 +1,65 @@
+{
+  "segmentNetworkVersion": "jalama-27714637-v1",
+  "gaugeSegmentId": "27714637-026",
+  "hopsPerDirection": 3,
+  "flowDirection": 1,
+  "rule": "Inferred WSE = neighbour bed + (observed WSE − gauge segment bed) while that depth is above zero; otherwise no water. Beds are Stage 1 representative cross-section beds (USGS 3DEP).",
+  "segments": [
+    {
+      "segmentId": "27714637-026",
+      "role": "gauge",
+      "hops": 0,
+      "bedElevationM": 25.748,
+      "upstreamSegmentId": "27714637-025",
+      "downstreamSegmentId": "27714637-027"
+    },
+    {
+      "segmentId": "27714637-025",
+      "role": "upstream",
+      "hops": 1,
+      "bedElevationM": 26.262,
+      "upstreamSegmentId": "27714637-024",
+      "downstreamSegmentId": "27714637-026"
+    },
+    {
+      "segmentId": "27714637-024",
+      "role": "upstream",
+      "hops": 2,
+      "bedElevationM": 27.358,
+      "upstreamSegmentId": "27714637-023",
+      "downstreamSegmentId": "27714637-025"
+    },
+    {
+      "segmentId": "27714637-023",
+      "role": "upstream",
+      "hops": 3,
+      "bedElevationM": 27.877,
+      "upstreamSegmentId": "27714637-022",
+      "downstreamSegmentId": "27714637-024"
+    },
+    {
+      "segmentId": "27714637-027",
+      "role": "downstream",
+      "hops": 1,
+      "bedElevationM": 24.91,
+      "upstreamSegmentId": "27714637-026",
+      "downstreamSegmentId": "27714637-028"
+    },
+    {
+      "segmentId": "27714637-028",
+      "role": "downstream",
+      "hops": 2,
+      "bedElevationM": 25.305,
+      "upstreamSegmentId": "27714637-027",
+      "downstreamSegmentId": "27714637-029"
+    },
+    {
+      "segmentId": "27714637-029",
+      "role": "downstream",
+      "hops": 3,
+      "bedElevationM": 24.575,
+      "upstreamSegmentId": "27714637-028",
+      "downstreamSegmentId": "27714637-030"
+    }
+  ]
+}

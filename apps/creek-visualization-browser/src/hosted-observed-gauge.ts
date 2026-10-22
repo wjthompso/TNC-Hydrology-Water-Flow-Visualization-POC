@@ -20,7 +20,7 @@
  * one-shared-version check holds.
  */
 
-import type { PublishedCreekFiles } from './creek-data-contract.ts';
+import { readObservedWsePropagationFile, type PublishedCreekFiles } from './creek-data-contract.ts';
 import {
   layerUrl,
   numberOrNull,
@@ -59,6 +59,12 @@ export interface LoadHostedObservedGaugeRequest {
   readonly modeledWseServiceUrl: string;
   readonly wsePolygonsServiceUrl: string;
   readonly creekGaugeServiceUrl: string;
+  /**
+   * `observed-wse-propagation.json` (Creek Segment Observed WSE Propagation, UCS-300): the gauge segment's
+   * beds and neighbours. Hosted services carry no bed elevations, so this small file ships with the app.
+   * When given, the neighbours' polygons load too. Absent, only the gauge segment draws water.
+   */
+  readonly observedWsePropagation?: unknown;
 }
 
 export interface HostedObservedGauge {
@@ -87,6 +93,12 @@ export async function loadHostedObservedGauge(
     throw new Error('The WSE polygons service has no default WSE Polygon Generation Method layer.');
   }
 
+  // Inferred neighbours draw the same default-method polygons as the gauge segment.
+  const polygonSegmentIds =
+    request.observedWsePropagation === undefined
+      ? [JALAMA_GAUGE.segmentId]
+      : readObservedWsePropagationFile(request.observedWsePropagation).segments.map((segment) => segment.segmentId);
+
   const [network, gaugeRows] = await Promise.all([
     loadHostedCreekSegmentNetwork(
       {
@@ -105,7 +117,7 @@ export async function loadHostedObservedGauge(
       polygonLayerId,
       network,
       tncComid: JALAMA_GAUGE.tncComid,
-      segmentId: JALAMA_GAUGE.segmentId,
+      segmentIds: polygonSegmentIds,
     },
     options,
   );
@@ -151,6 +163,7 @@ export async function loadHostedObservedGauge(
         approvalStatuses: readings.approvalStatuses,
         segments: [{ segmentId: JALAMA_GAUGE.segmentId, waterSurfaceElevationM: readings.waterSurfaceElevationM }],
       },
+      ...(request.observedWsePropagation === undefined ? {} : { observedWsePropagation: request.observedWsePropagation }),
     },
   };
 }

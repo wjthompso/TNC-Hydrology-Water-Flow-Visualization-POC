@@ -47,8 +47,10 @@ export interface LoadHostedWaterSurfacePolygonsRequest {
   readonly polygonLayerId: number;
   readonly network: HostedCreekSegmentNetwork;
   readonly tncComid: string;
-  /** Load and return only this Creek Segment's polygons (the observed gauge draws one segment). Default: the whole flowline. */
+  /** Load and return only this Creek Segment's polygons. Default: the whole flowline. */
   readonly segmentId?: string;
+  /** Load and return only these Creek Segments' polygons (the observed gauge and its inferred neighbours), in this order. */
+  readonly segmentIds?: readonly string[];
 }
 
 export async function loadHostedWaterSurfacePolygonsForFlowline(
@@ -60,7 +62,8 @@ export async function loadHostedWaterSurfacePolygonsForFlowline(
       layerUrl: layerUrl(request.wsePolygonsServiceUrl, request.polygonLayerId),
       where:
         `tnc_comid = ${sqlString(request.tncComid)}` +
-        (request.segmentId === undefined ? '' : ` AND segment_id = ${sqlString(request.segmentId)}`),
+        (request.segmentId === undefined ? '' : ` AND segment_id = ${sqlString(request.segmentId)}`) +
+        (request.segmentIds === undefined ? '' : ` AND segment_id IN (${request.segmentIds.map(sqlString).join(', ')})`),
       outFields: ['segment_id', 'bucket_index', 'min_wse_m', 'max_wse_m'],
       orderByFields: ['segment_id', 'bucket_index'],
       returnGeometry: true,
@@ -86,8 +89,14 @@ export async function loadHostedWaterSurfacePolygonsForFlowline(
   // Every Creek Segment of the flowline, in vertex order like the local file; a segment
   // whose buckets are all empty keeps an empty ladder.
   const flowlineSegments = (request.network.segmentsByTncComid.get(request.tncComid) ?? []).filter(
-    (segment) => request.segmentId === undefined || segment.segmentId === request.segmentId,
+    (segment) =>
+      (request.segmentId === undefined || segment.segmentId === request.segmentId) &&
+      (request.segmentIds === undefined || request.segmentIds.includes(segment.segmentId)),
   );
+  if (request.segmentIds !== undefined) {
+    const order = new Map(request.segmentIds.map((segmentId, index) => [segmentId, index]));
+    flowlineSegments.sort((a, b) => (order.get(a.segmentId) ?? 0) - (order.get(b.segmentId) ?? 0));
+  }
   return {
     segmentNetworkVersion: request.network.segmentNetworkVersion,
     waterSurfacePolygonSets: flowlineSegments.map((segment) => ({

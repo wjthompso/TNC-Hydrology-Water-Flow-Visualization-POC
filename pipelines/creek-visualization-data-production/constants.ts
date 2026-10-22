@@ -28,6 +28,19 @@ export const OBSERVED_POLYGON_SET_SNAPSHOT_FILE = 'stage-04-junction-sloped-terr
 export const OBSERVED_POLYGON_SET_PROVENANCE_FILE =
   'stage-04-junction-sloped-terrain-fill-v1-27714637-026-polygon-set.provenance.json';
 
+/**
+ * Observed WSE propagation (UCS-300) inputs, retained by `retain-observed-wse-propagation-inputs.ts`:
+ * Stage 1 representative cross-section beds of the gauge's flowline, and Stage 4's prepared polygon
+ * sets for the gauge segment's neighbours. Publish adds the neighbours' sets after the gauge segment's
+ * and writes `observed-wse-propagation.json` from the beds.
+ */
+export const CROSS_SECTION_BEDS_SNAPSHOT_FILE = 'stage-01-cross-section-beds-27714637.json';
+export const NEIGHBOUR_POLYGON_SET_SNAPSHOT_FILE =
+  'stage-04-junction-sloped-terrain-fill-v1-27714637-gauge-neighbours-polygon-sets.json';
+export const NEIGHBOUR_POLYGON_SET_PROVENANCE_FILE =
+  'stage-04-junction-sloped-terrain-fill-v1-27714637-gauge-neighbours-polygon-sets.provenance.json';
+export const OBSERVED_WSE_PROPAGATION_PUBLISHED_FILE = 'observed-wse-propagation.json';
+
 export const TNC_FLOWLINE_QUERY =
   'https://services.arcgis.com/F7DSX1DSNSiWmOqh/arcgis/rest/services/jldp_nhd24kflowlines_streams/FeatureServer/7/query';
 export const USGS_STATION_QUERY =

@@ -1,9 +1,18 @@
+import { inferredJunctionSurfaces } from '../../../pipelines/creek-visualization-data-production/observed-wse-propagation.ts';
 import type { ElevationBucket, LoadedCreekVisualization, ObservedApprovalStatus } from './creek-data-contract';
+import type { JunctionWaterSurface } from './sloped-water-surface';
 
 export interface SegmentWaterPlacement {
   segmentId: string;
   /** Null shows no water: a gap, a null reading, an empty bucket, or no matching bucket. */
   bucket: ElevationBucket | null;
+  /**
+   * True for water inferred from the gauge by Creek Segment Observed WSE Propagation. Drawn with its own
+   * shading and never described as measured. False or absent for the gauge segment's observed water.
+   */
+  inferred?: boolean;
+  /** Inferred water only: the water-surface elevation at the segment's two ends, so neighbours meet without a step. */
+  junctionWaterSurface?: JunctionWaterSurface | null;
 }
 
 export interface SelectedTimeCreekState {
@@ -30,12 +39,13 @@ export function resolveSelectedTimeCreekState(
   const stationReading =
     timeIndex >= 0 && stationReadings ? stationReadings[timeIndex] : null;
 
-  const placements = data.polygonSetSegmentIds.map((segmentId) => ({
+  const placements: SegmentWaterPlacement[] = data.polygonSetSegmentIds.map((segmentId) => ({
     segmentId,
-    bucket: bucketAtTime(data, segmentId, timeIndex),
+    bucket: segmentId === data.station.segmentId ? bucketAtTime(data, segmentId, timeIndex) : null,
   }));
 
   const observedWaterSurfaceElevationM = typeof stationReading === 'number' ? stationReading : null;
+  addInferredPlacements(data, timeIndex, observedWaterSurfaceElevationM, placements);
 
   return {
     timeUtcMs,
@@ -44,6 +54,42 @@ export function resolveSelectedTimeCreekState(
     approvalStatus: timeIndex >= 0 ? (data.approvalStatuses?.[timeIndex] ?? null) : null,
     placements,
   };
+}
+
+/**
+ * Creek Segment Observed WSE Propagation: fills the placements of the gauge segment's neighbours
+ * with water at their inferred elevation, and gives each the elevation at its two ends. Nothing is
+ * inferred when the gauge has no reading at this exact time or no depth above its bed.
+ */
+function addInferredPlacements(
+  data: LoadedCreekVisualization,
+  timeIndex: number,
+  observedWseM: number | null,
+  placements: SegmentWaterPlacement[],
+): void {
+  const { propagation } = data;
+  if (!propagation || timeIndex < 0 || observedWseM === null) return;
+  const inferredWseBySegmentId = new Map<string, number>();
+  for (const segmentId of propagation.inferredSegmentIds) {
+    const reading = propagation.inferredWaterSurfaceElevationMBySegmentId.get(segmentId)?.[timeIndex];
+    if (typeof reading === 'number') inferredWseBySegmentId.set(segmentId, reading);
+  }
+  // The gauge segment is drawn flat at its bucket minimum, so inferred water next to it meets that height.
+  const gaugeBucket = placements.find((placement) => placement.segmentId === data.station.segmentId)?.bucket ?? null;
+  const gaugeDrawnWseM = gaugeBucket?.minWaterSurfaceElevationM ?? observedWseM;
+  const junctions = inferredJunctionSurfaces(propagation.nodesById, data.station.segmentId, gaugeDrawnWseM, inferredWseBySegmentId);
+  placements.forEach((placement, index) => {
+    const reading = inferredWseBySegmentId.get(placement.segmentId);
+    if (reading === undefined) return;
+    const buckets = data.polygonBucketsBySegmentId.get(placement.segmentId);
+    const bucket = buckets ? bucketForWaterSurfaceElevation(buckets, reading) : null;
+    placements[index] = {
+      segmentId: placement.segmentId,
+      bucket,
+      inferred: true,
+      junctionWaterSurface: bucket ? (junctions.get(placement.segmentId) ?? null) : null,
+    };
+  });
 }
 
 function bucketAtTime(

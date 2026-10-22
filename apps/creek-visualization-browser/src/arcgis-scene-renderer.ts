@@ -6,12 +6,14 @@ import PolygonSymbol3D from '@arcgis/core/symbols/PolygonSymbol3D';
 import WaterSymbol3DLayer from '@arcgis/core/symbols/WaterSymbol3DLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { ElevationBucket } from './creek-data-contract';
-import type { JunctionWaterSurface } from './sloped-water-surface';
+import { slopedRingsWgs84, type JunctionWaterSurface, type SegmentSurfaceGeometry } from './sloped-water-surface';
 
 export interface WaterGraphicGeometryIdentity {
   segmentId: string;
   /** Z written on the graphic. Null when that segment is hidden. */
   bucketMinElevationM: number | null;
+  /** True when the drawn water is inferred by Creek Segment Observed WSE Propagation, false when observed or modeled. */
+  inferred?: boolean;
 }
 
 export interface SegmentPolygonPlacement {
@@ -29,7 +31,17 @@ export interface SegmentPolygonPlacement {
    * renderer ignores it.
    */
   junctionWaterSurface?: JunctionWaterSurface | null;
+  /**
+   * True for water inferred from the gauge by Creek Segment Observed WSE Propagation. The observed
+   * renderer draws it with the inferred shading, sloped between `junctionWaterSurface` when the
+   * segment's geometry is known; the modeled renderer ignores it.
+   */
+  inferred?: boolean;
 }
+
+/** Teal for inferred water, clearly apart from observed blue and the lighter blue of Drainage-Area Ratio Transfer water; matches the legend swatch. */
+export const INFERRED_WATER_COLOR = '#5eead4';
+export const INFERRED_WATER_OUTLINE_COLOR = '#0f766e';
 
 /** Lighter blue for Drainage-Area Ratio Transfer water; matches the legend swatch. */
 export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_COLOR = '#7dd3fc';
@@ -78,6 +90,26 @@ export const drainageAreaRatioTransferWaterSymbol = new PolygonSymbol3D({
 });
 
 /**
+ * Inferred water (Creek Segment Observed WSE Propagation): teal with a thin outline, so a guess
+ * made from the gauge never reads as the measured blue. A transparent fill layer carries the
+ * outline, which the water layer cannot draw itself.
+ */
+export const inferredWaterSymbol = new PolygonSymbol3D({
+  symbolLayers: [
+    new WaterSymbol3DLayer({
+      color: INFERRED_WATER_COLOR,
+      waterbodySize: 'small',
+      waveStrength: 'slight',
+      waveDirection: 260,
+    }),
+    new FillSymbol3DLayer({
+      material: { color: [94, 234, 212, 0] },
+      outline: { color: INFERRED_WATER_OUTLINE_COLOR, size: 1 },
+    }),
+  ],
+});
+
+/**
  * One reused graphic per prepared polygon set. Neighbouring segments never
  * receive a graphic. Geometry is replaced, or the graphic is hidden, once per frame.
  */
@@ -85,6 +117,8 @@ export function createArcGISSceneRenderer(
   view: SceneView,
   polygonSetSegmentIds: readonly string[],
   onApplied: (identity: readonly WaterGraphicGeometryIdentity[]) => void,
+  /** Flowline geometry of the segments that draw inferred water; an inferred segment missing here draws flat. */
+  inferredSegmentGeometryById: ReadonlyMap<string, SegmentSurfaceGeometry> = new Map(),
 ): ArcGISSceneRenderer {
   if (!view.map) throw new Error('SceneView has no map.');
 
@@ -109,19 +143,32 @@ export function createArcGISSceneRenderer(
   let appliedKey: string | null = null;
 
   const apply = (placements: readonly SegmentPolygonPlacement[]): void => {
-    const bucketBySegmentId = new Map(
-      placements.map((placement) => [placement.segmentId, placement.bucket]),
+    const placementBySegmentId = new Map(
+      placements.map((placement) => [placement.segmentId, placement]),
     );
     for (const [segmentId, graphic] of graphicsBySegmentId) {
-      const bucket = bucketBySegmentId.get(segmentId) ?? null;
-      if (bucket) {
-        graphic.geometry = polygonForBucket(bucket);
+      const placement = placementBySegmentId.get(segmentId);
+      const bucket = placement?.bucket ?? null;
+      if (placement && bucket) {
+        const inferred = placement.inferred === true;
+        const geometry = inferredSegmentGeometryById.get(segmentId);
+        const surface = inferred && geometry ? placement.junctionWaterSurface ?? null : null;
+        graphic.symbol = inferred ? inferredWaterSymbol : waterSymbol;
+        graphic.geometry =
+          surface && geometry
+            ? new Polygon({
+                hasZ: true,
+                rings: slopedRingsWgs84(bucket.ringsWgs84, geometry, surface),
+                spatialReference: { wkid: 4326 },
+              })
+            : polygonForBucket(bucket);
         graphic.visible = true;
         // Dev HUD and feature-behavior tests read these through view.hitTest.
         graphic.attributes = {
           segmentId,
           bucketMinElevationM: bucket.minWaterSurfaceElevationM,
           bucketMaxElevationM: bucket.maxWaterSurfaceElevationM,
+          inferred,
         };
         // A graphic with no geometry logs a SceneView warning, so it joins the layer only once it has a polygon.
         if (!graphic.layer) layer.add(graphic);
@@ -171,7 +218,9 @@ function placementKey(placements: readonly SegmentPolygonPlacement[]): string {
     .map((placement) => {
       const minimum = placement.bucket?.minWaterSurfaceElevationM;
       if (typeof minimum !== 'number') return `${placement.segmentId}:`;
-      return `${placement.segmentId}:${minimum}`;
+      const surface = placement.junctionWaterSurface;
+      const inferredKey = placement.inferred ? `|i${surface?.upstreamM ?? ''}/${surface?.downstreamM ?? ''}` : '';
+      return `${placement.segmentId}:${minimum}${inferredKey}`;
     })
     .join('|');
 }
@@ -182,9 +231,16 @@ function readIdentity(
 ): WaterGraphicGeometryIdentity[] {
   const identity: WaterGraphicGeometryIdentity[] = [];
   for (const [segmentId, graphic] of graphicsBySegmentId) {
+    const inferred = graphic.visible && graphic.attributes?.inferred === true;
     identity.push({
       segmentId,
-      bucketMinElevationM: graphic.visible ? elevationOnGraphic(graphic, writtenElevationM.get(segmentId)) : null,
+      // Inferred water slopes, so its first vertex is not at the bucket minimum; report the bucket minimum.
+      bucketMinElevationM: !graphic.visible
+        ? null
+        : inferred
+          ? (writtenElevationM.get(segmentId) ?? null)
+          : elevationOnGraphic(graphic, writtenElevationM.get(segmentId)),
+      inferred,
     });
   }
   return identity;

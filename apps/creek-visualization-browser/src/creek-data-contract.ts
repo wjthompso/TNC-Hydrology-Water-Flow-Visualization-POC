@@ -1,3 +1,8 @@
+import {
+  inferredSeriesM,
+  type PropagationSegmentNode,
+} from '../../../pipelines/creek-visualization-data-production/observed-wse-propagation.ts';
+
 /** Nominal observed-source step. Gap slots stay on this grid and are not filled in. */
 export const OBSERVATION_GRID_STEP_MS = 15 * 60 * 1000;
 
@@ -45,6 +50,24 @@ export interface MonitoringStation {
   snapDistanceM: number;
 }
 
+/**
+ * Creek Segment Observed WSE Propagation (UCS-300): the Creek Segments around the gauge segment that
+ * draw inferred water, and the inferred Time Series that water follows. Absent when the published
+ * data carries no propagation file, in which case only the gauge segment draws water.
+ */
+export interface LoadedObservedWsePropagation {
+  hopsPerDirection: number;
+  /** +1 when a higher vertex index is farther downstream on the gauge's flowline, −1 otherwise. */
+  flowDirection: 1 | -1;
+  gaugeBedElevationM: number;
+  /** The gauge segment and its inferred neighbours, with beds and flow-order neighbour ids. */
+  nodesById: ReadonlyMap<string, PropagationSegmentNode>;
+  /** Neighbours that draw inferred water: upstream nearest first, then downstream nearest first. */
+  inferredSegmentIds: readonly string[];
+  /** Parallel to `LoadedCreekVisualization.timestampsUtcMs`; null where the gauge has no usable depth. */
+  inferredWaterSurfaceElevationMBySegmentId: ReadonlyMap<string, readonly (number | null)[]>;
+}
+
 export interface LoadedCreekVisualization {
   segmentNetworkVersion: string;
   segmentsById: ReadonlyMap<string, CreekSegment>;
@@ -55,6 +78,8 @@ export interface LoadedCreekVisualization {
   /** Parallel to `timestampsUtcMs`. Absent for the shipped local files, which do not carry it. */
   approvalStatuses?: readonly (ObservedApprovalStatus | null)[];
   waterSurfaceElevationMBySegmentId: ReadonlyMap<string, readonly (number | null)[]>;
+  /** Null when the published data has no observed WSE propagation file. */
+  propagation: LoadedObservedWsePropagation | null;
   clock: ObservationClock;
   openingGridIndex: number;
 }
@@ -65,6 +90,8 @@ export interface PublishedCreekFiles {
   monitoringStations: unknown;
   dataSourceMetadata: unknown;
   observedTimeSeries: unknown;
+  /** `observed-wse-propagation.json`. Optional so a data set without it draws the gauge segment only. */
+  observedWsePropagation?: unknown;
 }
 
 export function timeAtGridIndex(clock: ObservationClock, index: number): number {
@@ -161,6 +188,18 @@ export function assembleLoadedCreekVisualization(
     fail(`The observed time series has no readings for the gauge's creek segment.`);
   }
 
+  const propagation =
+    files.observedWsePropagation === undefined
+      ? null
+      : assemblePropagation({
+          file: readObservedWsePropagationFile(files.observedWsePropagation),
+          segmentNetworkVersion,
+          gaugeSegmentId: station.segmentId,
+          segmentsById,
+          polygonBucketsBySegmentId,
+          stationReadings,
+        });
+
   const clock = clockCovering(series.timestampsUtcMs);
   return {
     segmentNetworkVersion,
@@ -171,12 +210,121 @@ export function assembleLoadedCreekVisualization(
     timestampsUtcMs: series.timestampsUtcMs,
     ...(series.approvalStatuses ? { approvalStatuses: series.approvalStatuses } : {}),
     waterSurfaceElevationMBySegmentId,
+    propagation,
     clock,
     openingGridIndex: openingGridIndexFor(
       clock,
       series.timestampsUtcMs,
       stationReadings,
     ),
+  };
+}
+
+export interface ObservedWsePropagationFileNode {
+  segmentId: string;
+  role: 'gauge' | 'upstream' | 'downstream';
+  hops: number;
+  bedElevationM: number;
+  upstreamSegmentId: string | null;
+  downstreamSegmentId: string | null;
+}
+
+export interface ObservedWsePropagationFile {
+  segmentNetworkVersion: string;
+  gaugeSegmentId: string;
+  hopsPerDirection: number;
+  flowDirection: 1 | -1;
+  segments: ObservedWsePropagationFileNode[];
+}
+
+/** Reads `observed-wse-propagation.json`; the gauge segment is the single `gauge` entry. */
+export function readObservedWsePropagationFile(value: unknown): ObservedWsePropagationFile {
+  const record = readRecord(value, 'observed-wse-propagation');
+  const flowDirection = readFiniteNumber(record.flowDirection, 'observed-wse-propagation flowDirection');
+  if (flowDirection !== 1 && flowDirection !== -1) fail('observed-wse-propagation flowDirection must be 1 or -1.');
+  const segments = readArray(record.segments, 'observed-wse-propagation segments').map((item, index): ObservedWsePropagationFileNode => {
+    const label = `observed-wse-propagation segment ${index + 1}`;
+    const node = readRecord(item, label);
+    const role = node.role;
+    if (role !== 'gauge' && role !== 'upstream' && role !== 'downstream') {
+      fail(`${label} role must be gauge, upstream, or downstream.`);
+    }
+    return {
+      segmentId: readId(node.segmentId, label),
+      role,
+      hops: readFiniteNumber(node.hops, `${label} hops`),
+      bedElevationM: readFiniteNumber(node.bedElevationM, `${label} bed`),
+      upstreamSegmentId: readNeighbourId(node.upstreamSegmentId, `${label} upstream neighbour`),
+      downstreamSegmentId: readNeighbourId(node.downstreamSegmentId, `${label} downstream neighbour`),
+    };
+  });
+  if (segments.filter((segment) => segment.role === 'gauge').length !== 1) {
+    fail('observed-wse-propagation must list exactly one gauge segment.');
+  }
+  return {
+    segmentNetworkVersion: readVersion(record, 'observed-wse-propagation'),
+    gaugeSegmentId: readId(record.gaugeSegmentId, 'observed-wse-propagation gaugeSegmentId'),
+    hopsPerDirection: readFiniteNumber(record.hopsPerDirection, 'observed-wse-propagation hopsPerDirection'),
+    flowDirection,
+    segments,
+  };
+}
+
+function readNeighbourId(value: unknown, label: string): string | null {
+  return value === null ? null : readId(value, label);
+}
+
+function assemblePropagation(input: {
+  file: ObservedWsePropagationFile;
+  segmentNetworkVersion: string;
+  gaugeSegmentId: string;
+  segmentsById: ReadonlyMap<string, CreekSegment>;
+  polygonBucketsBySegmentId: ReadonlyMap<string, readonly ElevationBucket[]>;
+  stationReadings: readonly (number | null)[];
+}): LoadedObservedWsePropagation {
+  const { file } = input;
+  if (file.segmentNetworkVersion !== input.segmentNetworkVersion) {
+    fail(
+      `observed-wse-propagation segmentNetworkVersion is ${file.segmentNetworkVersion}, expected ${input.segmentNetworkVersion}.`,
+    );
+  }
+  if (file.gaugeSegmentId !== input.gaugeSegmentId) {
+    fail('observed-wse-propagation names a gauge segment other than the monitoring station\'s.');
+  }
+  const nodesById = new Map<string, PropagationSegmentNode>();
+  for (const node of file.segments) {
+    if (!input.segmentsById.has(node.segmentId)) {
+      fail(`observed-wse-propagation names ${node.segmentId}, which is not in the creek network.`);
+    }
+    if (!input.polygonBucketsBySegmentId.has(node.segmentId)) {
+      fail(`${node.segmentId} draws inferred water but has no prepared water-surface polygons.`);
+    }
+    nodesById.set(node.segmentId, {
+      segmentId: node.segmentId,
+      bedElevationM: node.bedElevationM,
+      upstreamSegmentId: node.upstreamSegmentId,
+      downstreamSegmentId: node.downstreamSegmentId,
+    });
+  }
+  const gaugeNode = file.segments.find((node) => node.role === 'gauge');
+  if (!gaugeNode || gaugeNode.segmentId !== input.gaugeSegmentId) {
+    fail('observed-wse-propagation gauge entry is not the monitoring station\'s segment.');
+  }
+  const inferredNodes = file.segments.filter((node) => node.role !== 'gauge');
+  const inferredWaterSurfaceElevationMBySegmentId = new Map<string, readonly (number | null)[]>();
+  for (const node of inferredNodes) {
+    inferredWaterSurfaceElevationMBySegmentId.set(
+      node.segmentId,
+      inferredSeriesM(input.stationReadings, gaugeNode.bedElevationM, node.bedElevationM),
+    );
+  }
+  return {
+    hopsPerDirection: file.hopsPerDirection,
+    flowDirection: file.flowDirection,
+    gaugeBedElevationM: gaugeNode.bedElevationM,
+    nodesById,
+    inferredSegmentIds: inferredNodes.map((node) => node.segmentId),
+    inferredWaterSurfaceElevationMBySegmentId,
   };
 }
 

@@ -9,6 +9,8 @@ import { HostedFeatureServiceAuthenticationError } from './hosted-feature-servic
 const DATA_ROOT = '/published-creek-visualization-data';
 const JALAMA_STATION_ID = 'USGS-11120600';
 const OBSERVED_SERIES_PATH = `${DATA_ROOT}/creek-segment-time-series/usgs-11120600-observed-wse.json`;
+/** Creek Segment Observed WSE Propagation (UCS-300): beds and neighbours of the gauge segment. Ships with the app in both data modes. */
+const OBSERVED_WSE_PROPAGATION_PATH = `${DATA_ROOT}/observed-wse-propagation.json`;
 
 /** Observed gauge data: hosted ArcGIS services in production builds, shipped local files in dev and tests. */
 export async function loadPublishedCreekVisualizationData(): Promise<LoadedCreekVisualization> {
@@ -24,7 +26,8 @@ async function loadHostedCreekVisualizationData(): Promise<LoadedCreekVisualizat
       import('./hosted-observed-gauge'),
     ]);
     await configureArcgisRequestAuthentication({ arcgisPortalUrl: creekDataSourceConfiguration.arcgisPortalUrl });
-    const { files } = await loadHostedObservedGauge(creekDataSourceConfiguration);
+    const observedWsePropagation = await fetchJson(OBSERVED_WSE_PROPAGATION_PATH);
+    const { files } = await loadHostedObservedGauge({ ...creekDataSourceConfiguration, observedWsePropagation });
     return assembleLoadedCreekVisualization(files, JALAMA_STATION_ID);
   } catch (error) {
     console.error(error);
@@ -48,12 +51,14 @@ async function loadLocalCreekVisualizationData(): Promise<LoadedCreekVisualizati
     monitoringStations,
     dataSourceMetadata,
     observedTimeSeries,
+    observedWsePropagation,
   ] = await Promise.all([
     fetchJson(`${DATA_ROOT}/creek-segments.json`),
     fetchJson(`${DATA_ROOT}/water-surface-polygon-sets.json`),
     fetchJson(`${DATA_ROOT}/monitoring-stations.json`),
     fetchJson(`${DATA_ROOT}/data-source-metadata.json`),
     fetchJson(OBSERVED_SERIES_PATH),
+    fetchJson(OBSERVED_WSE_PROPAGATION_PATH),
   ]);
 
   return assembleLoadedCreekVisualization(
@@ -63,6 +68,7 @@ async function loadLocalCreekVisualizationData(): Promise<LoadedCreekVisualizati
       monitoringStations,
       dataSourceMetadata,
       observedTimeSeries,
+      observedWsePropagation,
     },
     JALAMA_STATION_ID,
   );

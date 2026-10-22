@@ -1,0 +1,32 @@
+{
+  "file": "stage-04-junction-sloped-terrain-fill-v1-27714637-gauge-neighbours-polygon-sets.json",
+  "fileSha256": "bb03ddfffa86ea8df384d0f8fa094bc128a291549bc9096fbcce4a4e580b94b4",
+  "description": "Reviewed snapshot of the modeled pipeline's Stage 4 prepared water-surface polygon sets for the Creek Segments within 3 segments upstream and downstream of the gauge's Creek Segment 27714637-026 (observed WSE propagation, UCS-300). npm run pipeline:publish publishes them after the gauge segment's set, unchanged, so inferred water draws the same polygons modeled water does.",
+  "segmentIds": [
+    "27714637-025",
+    "27714637-024",
+    "27714637-023",
+    "27714637-027",
+    "27714637-028",
+    "27714637-029"
+  ],
+  "segmentNetworkVersion": "jalama-27714637-v1",
+  "wsePolygonGenerationMethod": {
+    "id": "junction-sloped-terrain-fill",
+    "version": 1,
+    "methodSha256": "43da00ba1f3aab664c7c3f71cef4251f28524dec960ec9d7014c8443ca80c185"
+  },
+  "source": {
+    "path": "data/pipeline-working-output/jalama-gauge-reach/04-water-surface-polygons/junction-sloped-terrain-fill/v1/water-surface-polygon-sets/27714637.json",
+    "sha256": "bc7e1036f544214f8ee414fd3b8e8523ce3fe8bb1e42adbef666fcd37f680d5e",
+    "stage4CompletedAt": "2026-10-19T20:12:59.225Z",
+    "command": "npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach"
+  },
+  "crossSectionBeds": {
+    "file": "stage-01-cross-section-beds-27714637.json",
+    "sourcePath": "data/pipeline-working-output/jalama-gauge-reach/01-cross-sections/cross-sections.json",
+    "sourceSha256": "985639fbfb68e173ae73d47b830dce301fefd174a5362ed573fd1867da7fb27d",
+    "flowDirection": 1
+  },
+  "extraction": "Kept segmentNetworkVersion and, in flow order from the gauge segment (upstream nearest first, then downstream nearest first), the waterSurfacePolygonSets entries of the listed segment ids, unchanged, then wrote them as two-space-indented JSON with a trailing newline."
+}

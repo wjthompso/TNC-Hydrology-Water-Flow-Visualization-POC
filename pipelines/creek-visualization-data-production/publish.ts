@@ -1,10 +1,13 @@
-import { copyFile, mkdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import {
   ASSIGNMENT_FILE,
+  CROSS_SECTION_BEDS_SNAPSHOT_FILE,
   ELEVATION_SNAPSHOT_FILE,
+  NEIGHBOUR_POLYGON_SET_SNAPSHOT_FILE,
+  OBSERVED_WSE_PROPAGATION_PUBLISHED_FILE,
   FLOWLINE_SNAPSHOT_FILE,
   OBSERVED_POLYGON_SET_SNAPSHOT_FILE,
   OBSERVED_SOURCE_ID,
@@ -20,6 +23,15 @@ import { adjacentSegmentsById } from './creek-segment-adjacency.ts';
 import { readJson, writeCompactJson, writePrettyJson } from './json-files.ts';
 import { assignMonitoringStation, readMonitoringStation } from './monitoring-station-assignment.ts';
 import { buildObservedTimeSeries } from './observed-time-series-publication.ts';
+import {
+  buildObservedWsePropagationDocument,
+  corridorReachBoundingBox,
+  countReadingsWithoutPropagation,
+  inferredReadingsOutsideLadders,
+  propagationNodesById,
+  readCrossSectionBedsSnapshot,
+} from './observed-wse-propagation-publication.ts';
+import { OBSERVED_WSE_PROPAGATION } from './observed-wse-propagation.ts';
 import {
   validateSegmentNetworkRelease,
   type PublishedWaterSurfacePolygonSets,
@@ -76,6 +88,31 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
   }
   const elevationBuckets = waterSurfacePolygonSets.waterSurfacePolygonSets[0]?.elevationBuckets ?? [];
 
+  // Creek Segment Observed WSE Propagation (UCS-300): the gauge segment's neighbours get inferred
+  // water. Their polygons are a reviewed Stage 4 snapshot, published after the gauge segment's set.
+  const beds = readCrossSectionBedsSnapshot(await readJson(path.join(sourceInputsDirectory, CROSS_SECTION_BEDS_SNAPSHOT_FILE)));
+  const propagationNodes = propagationNodesById(segments, beds);
+  const propagation = buildObservedWsePropagationDocument(
+    assignment.segment.segmentId,
+    propagationNodes,
+    beds.flowDirection,
+    OBSERVED_WSE_PROPAGATION.hopsPerDirection,
+  );
+  const neighbourPolygonSetsPath = path.join(sourceInputsDirectory, NEIGHBOUR_POLYGON_SET_SNAPSHOT_FILE);
+  const neighbourPolygonSets = (await readJson(neighbourPolygonSetsPath)) as PublishedWaterSurfacePolygonSets;
+  const expectedNeighbourIds = propagation.segments.filter((segment) => segment.role !== 'gauge').map((segment) => segment.segmentId);
+  const retainedNeighbourIds = neighbourPolygonSets.waterSurfacePolygonSets.map((polygonSet) => polygonSet.segmentId);
+  if (expectedNeighbourIds.join() !== retainedNeighbourIds.join()) {
+    throw new Error(
+      `${NEIGHBOUR_POLYGON_SET_SNAPSHOT_FILE} holds ${retainedNeighbourIds.join(', ') || 'none'} but ${OBSERVED_WSE_PROPAGATION.hopsPerDirection} hops each way need ${expectedNeighbourIds.join(', ')}. ` +
+        'Rerun retain-observed-wse-propagation-inputs.ts.',
+    );
+  }
+  const publishedPolygonSets: PublishedWaterSurfacePolygonSets = {
+    segmentNetworkVersion: waterSurfacePolygonSets.segmentNetworkVersion,
+    waterSurfacePolygonSets: [...waterSurfacePolygonSets.waterSurfacePolygonSets, ...neighbourPolygonSets.waterSurfacePolygonSets],
+  };
+
   // Stage 4 cuts each corridor end at the junction bisector, so the corridor bounding box the
   // release validation checks rings against must use the same neighbours. Tracing zero buckets
   // only measures that corridor on the retained USGS 3DEP window; it draws no polygon.
@@ -86,6 +123,11 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
     adjacentSegments: adjacentSegmentsById(segments).get(assignment.segment.segmentId) ?? {},
     logProgress: false,
   });
+
+  const corridorBboxBySegmentId = new Map([[assignment.segment.segmentId, corridor.corridorBboxWgs84]]);
+  for (const segment of segments) {
+    if (expectedNeighbourIds.includes(segment.segmentId)) corridorBboxBySegmentId.set(segment.segmentId, corridorReachBoundingBox(segment.pathWgs84));
+  }
 
   const creekSegments = {
     segmentNetworkVersion: SEGMENT_NETWORK_VERSION,
@@ -116,17 +158,26 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
 
   validateSegmentNetworkRelease({
     creekSegments,
-    waterSurfacePolygonSets,
+    waterSurfacePolygonSets: publishedPolygonSets,
     monitoringStations,
     dataSourceMetadata,
     timeSeries: observed.document,
     assignment: assignment.reviewed,
-    corridorBboxBySegmentId: new Map([[assignment.segment.segmentId, corridor.corridorBboxWgs84]]),
+    corridorBboxBySegmentId,
   });
+  const propagationProblems = inferredReadingsOutsideLadders(
+    propagation,
+    series.waterSurfaceElevationM,
+    new Map(publishedPolygonSets.waterSurfacePolygonSets.map((polygonSet) => [polygonSet.segmentId, polygonSet.elevationBuckets])),
+  );
+  if (propagationProblems.length > 0) {
+    throw new Error(`Observed WSE propagation validation failed:\n- ${propagationProblems.join('\n- ')}`);
+  }
 
   await writePrettyJson(path.join(outputDirectory, 'creek-segments.json'), creekSegments);
   await mkdir(outputDirectory, { recursive: true });
-  await copyFile(polygonSetSnapshotPath, path.join(outputDirectory, 'water-surface-polygon-sets.json'));
+  await writePrettyJson(path.join(outputDirectory, 'water-surface-polygon-sets.json'), publishedPolygonSets);
+  await writePrettyJson(path.join(outputDirectory, OBSERVED_WSE_PROPAGATION_PUBLISHED_FILE), propagation);
   await writePrettyJson(path.join(outputDirectory, 'monitoring-stations.json'), monitoringStations);
   await writePrettyJson(path.join(outputDirectory, 'data-source-metadata.json'), dataSourceMetadata);
   await writeCompactJson(
@@ -155,6 +206,11 @@ export async function publishCreekVisualizationData(options: PublishCreekVisuali
   );
   console.log(
     `Water-surface polygons copied from ${OBSERVED_POLYGON_SET_SNAPSHOT_FILE}: ${elevationBuckets.length} elevation buckets from ${firstBucket?.minWaterSurfaceElevationM} to ${lastBucket?.maxWaterSurfaceElevationM} m. Empty polygons: ${emptyText}.`,
+  );
+  const gaugeBedM = propagation.segments.find((segment) => segment.role === 'gauge')?.bedElevationM ?? Number.NaN;
+  console.log(
+    `Observed WSE propagation: ${OBSERVED_WSE_PROPAGATION.hopsPerDirection} Creek Segments each way (${expectedNeighbourIds.join(', ')}); ` +
+      `${countReadingsWithoutPropagation(series.waterSurfaceElevationM, gaugeBedM)} readings sit at or below the gauge segment bed (${gaugeBedM} m) and propagate nothing.`,
   );
   console.log(
     `Centerline ground elevation: ${corridor.centerlineElevationM.min.toFixed(2)}–${corridor.centerlineElevationM.max.toFixed(2)} m (${corridor.centerlineNoDataSamples} no-data samples).`,

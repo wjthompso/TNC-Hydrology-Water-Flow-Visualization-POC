@@ -1,6 +1,7 @@
 import type SceneView from '@arcgis/core/views/SceneView';
 import { createArcGISSceneRenderer, type WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { ElevationBucket, LoadedCreekVisualization } from './creek-data-contract';
+import { inferredWaterSegmentGeometry } from './inferred-water-segment-geometry';
 import {
   bindObservationTimelineControls,
   type PlaybackSpeedControl,
@@ -16,6 +17,9 @@ import {
 } from './selected-time-creek-state-resolver';
 
 const OBSERVED_CHART_SOURCE_LABEL = 'Observed at USGS gauge 11120600, Jalama Creek near Lompoc (m NAVD88)';
+/** Inferred water is a guess made from the gauge; it is never labeled as measured. */
+const INFERRED_CHART_SOURCE_LABEL =
+  'Inferred from the USGS gauge 11120600 reading, not measured here: this segment\'s bed plus the gauge segment\'s water depth (m NAVD88)';
 
 export interface AttachCreekVisualizationOptions {
   data: LoadedCreekVisualization;
@@ -84,6 +88,7 @@ export function attachCreekVisualization(
       );
       selectedCreekSegmentChart?.refresh();
     },
+    inferredWaterSegmentGeometry(options.data),
   );
 
   const applyPins = (
@@ -137,12 +142,14 @@ export function attachCreekVisualization(
       waterGraphics: renderer,
       chartElements,
       chartContentForSegment: (segmentId) => {
-        const valuesM = options.data.waterSurfaceElevationMBySegmentId.get(segmentId);
+        const observedValuesM = options.data.waterSurfaceElevationMBySegmentId.get(segmentId);
+        const inferredValuesM = options.data.propagation?.inferredWaterSurfaceElevationMBySegmentId.get(segmentId);
+        const valuesM = observedValuesM ?? inferredValuesM;
         if (!valuesM) return { emptyText: `No observed readings for Creek Segment ${segmentId}.` };
         return {
           series: {
             segmentId,
-            sourceLabel: OBSERVED_CHART_SOURCE_LABEL,
+            sourceLabel: observedValuesM ? OBSERVED_CHART_SOURCE_LABEL : INFERRED_CHART_SOURCE_LABEL,
             timestampsUtcMs: options.data.timestampsUtcMs,
             valuesM,
           },

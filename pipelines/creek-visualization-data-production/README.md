@@ -23,11 +23,14 @@ Source inputs (`data/source-inputs/`; the whole `data/` layout is in [data/READM
 - `reviewed-assignments/monitoring-station-assignment-usgs-11120600.json` — chosen Creek Segment, snap distance, and runner-up
 - `stage-04-junction-sloped-terrain-fill-v1-27714637-026-polygon-set.json` — reviewed copy of Stage 4's prepared water-surface polygon set for Creek Segment 27714637-026, WSE Polygon Generation Method `junction-sloped-terrain-fill` v1, in the published file's shape
 - `stage-04-junction-sloped-terrain-fill-v1-27714637-026-polygon-set.provenance.json` — that snapshot's Stage 4 source path, source-file SHA-256, method id, version, and fingerprint, and its own SHA-256
+- `stage-01-cross-section-beds-27714637.json` — Stage 1's representative bed (`bedElevationM`) of every Creek Segment on the flowline, plus Stage 1's flow-direction verdict (observed WSE propagation, below)
+- `stage-04-junction-sloped-terrain-fill-v1-27714637-gauge-neighbours-polygon-sets.json` — reviewed copy of Stage 4's polygon sets for the Creek Segments within the propagation hop count of the gauge segment, in the published file's shape, with a `.provenance.json` beside it
 
 Published Creek Visualization Data, fetched by the browser from `/published-creek-visualization-data/`:
 
 - `creek-segments.json` — every Creek Segment on the flowline
-- `water-surface-polygon-sets.json` — prepared polygons for the assigned segment only, a byte-for-byte copy of the retained Stage 4 snapshot
+- `water-surface-polygon-sets.json` — prepared polygons for the assigned segment first, a byte-for-byte copy of the retained Stage 4 snapshot, then the propagation neighbours' sets from their retained snapshot
+- `observed-wse-propagation.json` — the gauge segment and its propagation neighbours: role, hops from the gauge, bed elevation, and flow-order neighbour ids
 - `monitoring-stations.json`
 - `data-source-metadata.json`
 - `creek-segment-time-series/usgs-11120600-observed-wse.json`
@@ -43,6 +46,16 @@ Observed and modeled water draw one set of prepared water-surface polygons. Publ
 Segment Network Release Validation checks that the buckets ascend without gaps or overlap, that every observed reading falls in one, and that every ring vertex lies inside that bisector-cut corridor's bounding box. Publish measures the corridor on the retained USGS 3DEP window.
 
 To refresh the snapshot after a new Stage 4 method or version, rerun `npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach`, extract segment 27714637-026 from `04-water-surface-polygons/<method-id>/v<version>/water-surface-polygon-sets/27714637.json` in the same shape, rename the snapshot for the new method and version, update its provenance file and `OBSERVED_POLYGON_SET_SNAPSHOT_FILE` in `constants.ts`, review it, and run `npm run pipeline:publish`.
+
+## Observed WSE propagation
+
+Creek Segment Observed WSE Propagation (UCS-300; see the glossary) gives the Creek Segments just upstream and downstream of the gauge's segment an inferred WSE, so observed water does not stop at one segment. Each neighbour keeps the gauge segment's observed depth: `inferred WSE = neighbour bed + (observed WSE − gauge segment bed)`, with beds from Stage 1's representative cross-sections (USGS 3DEP). The rule is the same in both directions, so the surface follows the bed slope and never forms a level pool. A reading with no depth above the gauge bed, or no reading at all, propagates nothing.
+
+- **Hop count.** One constant, `OBSERVED_WSE_PROPAGATION.hopsPerDirection` in [observed-wse-propagation.ts](observed-wse-propagation.ts), currently 3, applies to both directions. The published `observed-wse-propagation.json` records it and the browser draws exactly the segments listed there.
+- **Changing it.** Edit the constant, run `node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/retain-observed-wse-propagation-inputs.ts` (it reads the git-ignored `jalama-gauge-reach` Stage 1 and Stage 4 output; rerun `npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach` first if it is missing), review the two retained files, then `npm run pipeline:publish`. Publish refuses to run when the retained neighbour polygons do not match the hop count.
+- **Polygons.** Inferred water draws the same Stage 4 prepared polygons modeled water does, picked from each neighbour's own ladder by the inferred WSE, and slopes between junction heights (the gauge segment's drawn height where they meet, the higher of two inferred values elsewhere) so neighbours join without a step.
+- **Presentation.** Inferred water is teal with an outline, apart from the observed blue, and the legend and the Water-Surface Elevation Chart name it as inferred, not measured.
+- **Validation.** Publish checks that every inferred reading falls inside its segment's prepared ladder, so no inferred water silently disappears.
 
 ## Modeled water-surface elevation
 

@@ -174,6 +174,7 @@ async function startExperience(): Promise<boolean> {
     }
 
     const data = await loadPublishedCreekVisualizationData();
+    showInferredWaterLegend(data.propagation?.hopsPerDirection ?? 0);
     const segment = data.segmentsById.get(data.station.segmentId);
     if (!segment) throw new Error('The gauge segment is missing from the creek network.');
 
@@ -201,6 +202,19 @@ async function startExperience(): Promise<boolean> {
     showExperienceError(error instanceof Error ? error.message : 'The scene could not be started.');
     return false;
   }
+}
+
+/**
+ * Creek Segment Observed WSE Propagation (UCS-300): names the teal water in the legend as inferred,
+ * never as measured. Hidden when the data propagates nothing.
+ */
+function showInferredWaterLegend(hopsPerDirection: number): void {
+  const row = document.getElementById('legend-inferred-row');
+  const label = document.getElementById('legend-inferred-label');
+  if (!row || !label || hopsPerDirection < 1) return;
+  label.textContent = `Inferred water on up to ${hopsPerDirection} creek segments each way. Estimated from the gauge's water depth, not measured.`;
+  row.classList.remove('hidden');
+  row.classList.add('flex');
 }
 
 /**
