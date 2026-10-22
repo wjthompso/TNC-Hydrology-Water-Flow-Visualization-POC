@@ -15,15 +15,17 @@ import {
 import { formatUtcDate, writeInspectionSvg } from './inspection-svg.ts';
 import {
   CALIFORNIA_NATURAL_FLOWS,
-  DRAINAGE_AREA_RATIO_TRANSFER,
   INSPECTION_SEGMENT_ID,
-  MAXIMUM_TRANSFER_DISTANCE_M,
   MODELED_EXTENT,
   NATIONAL_WATER_MODEL,
   NHDPLUSV2_CROSSWALK_PATH,
   WATER_SURFACE_ELEVATION_VARIABLE_ID,
   stageDirectory,
 } from './pipeline-configuration.ts';
+import {
+  DRAINAGE_AREA_RATIO_TRANSFER,
+  MAXIMUM_TRANSFER_DISTANCE_M,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { invertRatingCurve, type InversionOutcome } from './rating-curve-inversion.ts';
 import {
   CROSS_SECTIONS_FILE,

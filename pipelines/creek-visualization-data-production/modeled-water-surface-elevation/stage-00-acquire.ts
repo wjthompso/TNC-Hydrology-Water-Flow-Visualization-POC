@@ -24,8 +24,6 @@ import { buildNhdplusV2ReachCrosswalk, type TncFlowlineIdentity } from './nhdplu
 import {
   CALIFORNIA_NATURAL_FLOWS,
   CUBIC_FEET_TO_CUBIC_METERS,
-  DRAINAGE_AREA_RATIO_TRANSFER,
-  MAXIMUM_TRANSFER_DISTANCE_M,
   MODELED_EXTENT,
   NATIONAL_WATER_MODEL,
   NATIONAL_WATER_MODEL_CHUNK_CACHE_DIRECTORY,
@@ -36,6 +34,10 @@ import {
   TERRAIN_TILE_STEP_M,
   stageDirectory,
 } from './pipeline-configuration.ts';
+import {
+  DRAINAGE_AREA_RATIO_TRANSFER,
+  MAXIMUM_TRANSFER_DISTANCE_M,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { formatBytes, runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
 import { acquireTerrainTiles } from './terrain-acquisition.ts';
 import { requestedWaterYears, waterYearStartMs } from './water-years.ts';

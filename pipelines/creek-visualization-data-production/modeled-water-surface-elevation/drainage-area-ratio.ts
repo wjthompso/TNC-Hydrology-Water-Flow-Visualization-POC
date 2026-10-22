@@ -8,7 +8,11 @@ import {
   type NhdplusV2ReachCrosswalk,
 } from './discharge-records.ts';
 import { fetchJson, mapWithConcurrency, urlWithParams } from './http-download.ts';
-import { DRAINAGE_AREA_RATIO, DRAINAGE_AREA_RATIO_TRANSFER, MAXIMUM_TRANSFER_DISTANCE_M } from './pipeline-configuration.ts';
+import {
+  DRAINAGE_AREA_RATIO,
+  DRAINAGE_AREA_RATIO_TRANSFER,
+  MAXIMUM_TRANSFER_DISTANCE_M,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 
 /**
  * USGS drainage-area ratio method (see DRAINAGE_AREA_RATIO in pipeline-configuration.ts):

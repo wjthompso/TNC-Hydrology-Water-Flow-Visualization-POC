@@ -6,10 +6,8 @@ import {
   MODELED_WSE_VALIDATION_CHECKS,
   validateModeledWaterSurfaceElevationOutputs,
 } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-water-surface-elevation-validation.ts';
-import {
-  CROSS_SECTION,
-  WATER_SURFACE_ELEVATION_VARIABLE_ID,
-} from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/pipeline-configuration.ts';
+import { WATER_SURFACE_ELEVATION_VARIABLE_ID } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/pipeline-configuration.ts';
+import { CROSS_SECTION } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import type {
   CrossSectionRecord,
   CrossSectionsFile,

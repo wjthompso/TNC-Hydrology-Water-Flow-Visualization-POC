@@ -1,7 +1,12 @@
 import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import type { WaterSurfacePolygonBucket } from '../water-surface-polygon-generation.ts';
-import { DRAINAGE_AREA_RATIO_TRANSFER, type CROSS_SECTION, type RATING_CURVE, type WATER_SURFACE_ELEVATION_VARIABLE_ID } from './pipeline-configuration.ts';
+import { type WATER_SURFACE_ELEVATION_VARIABLE_ID } from './pipeline-configuration.ts';
+import {
+  DRAINAGE_AREA_RATIO_TRANSFER,
+  type CROSS_SECTION,
+  type RATING_CURVE,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 
 /**
  * File shapes passed between stages. Stage entry files run on import, so the

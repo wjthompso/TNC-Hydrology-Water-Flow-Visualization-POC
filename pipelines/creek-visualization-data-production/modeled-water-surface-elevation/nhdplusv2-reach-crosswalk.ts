@@ -6,16 +6,18 @@ import { exceedsMaximumTransferDistance, type NhdplusV2ReachAssignmentFile, type
 import { fetchJson, mapWithConcurrency, urlWithParams } from './http-download.ts';
 import { distanceToReachM, loadReachGeometries } from './nhdplusv2-reach-geometry.ts';
 import {
-  DRAINAGE_AREA_RATIO_TRANSFER,
   EPA_NHDPLUSV2_FLOWLINE_QUERY,
   EXPECTED_GAUGE_REACH_NHDPLUSV2_COMID,
-  MAXIMUM_TRANSFER_DISTANCE_M,
   MODELED_EXTENT,
   NHDPLUSV2_CROSSWALK_PATH,
   NHDPLUSV2_REACH_ATTRIBUTES_CACHE_FILE,
   NLDI_POSITION_CACHE_FILE,
   NLDI_POSITION_URL,
 } from './pipeline-configuration.ts';
+import {
+  DRAINAGE_AREA_RATIO_TRANSFER,
+  MAXIMUM_TRANSFER_DISTANCE_M,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 
 export const CROSSWALK_NOTE =
   'Two COMID numbering systems are in use. Creek Segment ids carry an NHD 1:24K COMID (27714637 is the Jalama TNC flowline). ' +

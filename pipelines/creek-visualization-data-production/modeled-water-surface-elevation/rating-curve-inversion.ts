@@ -1,6 +1,9 @@
 import { roundToDecimals } from '../utm-geometry.ts';
 import { bankTopIndices, wettedGeometryAt, type ProfileSample, type WettedGeometry } from './cross-section-geometry.ts';
-import { CROSS_SECTION, RATING_CURVE } from './pipeline-configuration.ts';
+import {
+  CROSS_SECTION,
+  RATING_CURVE,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import type { CrossSectionRecord, RatingCurveRecord } from './stage-file-formats.ts';
 
 /**

@@ -118,6 +118,9 @@ CHANGE_TYPE = "new method"
 STATUS = "active"  # same value the wse-polygons registry entry uses; retiring sets "superseded"
 MODELED_WSE_CODE_FOLDER = REPOSITORY_ROOT / "pipelines" / "creek-visualization-data-production" / "modeled-water-surface-elevation"
 STAGE_0_TO_3_CODE_FILES = [
+    MODELED_WSE_CODE_FOLDER / "modeled-wse-derivation-methods" / METHOD_ID / file_name
+    for file_name in ["method-config.ts", "time-series-derivation.ts"]
+] + [
     MODELED_WSE_CODE_FOLDER / file_name
     for file_name in [
         "stage-00-acquire.ts",

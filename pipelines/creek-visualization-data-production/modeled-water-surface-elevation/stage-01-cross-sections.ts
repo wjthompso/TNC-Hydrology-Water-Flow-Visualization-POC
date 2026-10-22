@@ -6,15 +6,12 @@ import { bankTopIndices, valleyEdgeIndices, wettedGeometryAt, type ProfileSample
 import { REACH_ASSIGNMENTS_FILE, exceedsMaximumTransferDistance, readNhdplusV2ReachAssignments } from './discharge-records.ts';
 import { buildCrosswalkWithDrainageAreaRatios, sampleSegmentDrainageAreas, summarizeRatios } from './drainage-area-ratio.ts';
 import { writeInspectionSvg } from './inspection-svg.ts';
+import { INSPECTION_SEGMENT_ID, MODELED_EXTENT, NHDPLUSV2_CROSSWALK_PATH, stageDirectory } from './pipeline-configuration.ts';
 import {
   CROSS_SECTION,
   DRAINAGE_AREA_RATIO,
   DRAINAGE_AREA_RATIO_TRANSFER,
-  INSPECTION_SEGMENT_ID,
-  MODELED_EXTENT,
-  NHDPLUSV2_CROSSWALK_PATH,
-  stageDirectory,
-} from './pipeline-configuration.ts';
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { writeReadableJson } from './readable-json.ts';
 import {
   CROSS_SECTIONS_FILE,

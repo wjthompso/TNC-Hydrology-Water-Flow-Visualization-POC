@@ -8,15 +8,12 @@ import {
   type ModeledWaterSurfaceElevationValidationResult,
   type ValidationCheck,
 } from './modeled-water-surface-elevation-validation.ts';
+import { CATALOG, MODELED_EXTENT, WATER_SURFACE_ELEVATION_VARIABLE_ID, stageDirectory } from './pipeline-configuration.ts';
 import {
-  CATALOG,
   DRAINAGE_AREA_RATIO_TRANSFER,
   MAXIMUM_TRANSFER_DISTANCE_M,
-  MODELED_EXTENT,
-  WATER_SURFACE_ELEVATION_VARIABLE_ID,
-  stageDirectory,
-  timeSeriesDerivation,
-} from './pipeline-configuration.ts';
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
+import { timeSeriesDerivation } from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/time-series-derivation.ts';
 import { writeReadableJson } from './readable-json.ts';
 import {
   CROSS_SECTIONS_FILE,
@@ -213,7 +210,7 @@ async function buildCatalogAndValidate(): Promise<StageResult> {
       variableId: WATER_SURFACE_ELEVATION_VARIABLE_ID,
       paths: validated?.paths ?? [],
       drainageAreaRatioTransferSegments: validated?.drainageAreaRatioTransferSegments ?? 0,
-      derivation: timeSeriesDerivation(publisherNameOf(dataset.publisherId)),
+      derivation: timeSeriesDerivation(publisherNameOf(dataset.publisherId), CATALOG.derivedBy),
     });
   }
 
@@ -301,7 +298,7 @@ await runStageEntryPoint(async () => {
       segmentNetworkVersion: MODELED_EXTENT.segmentNetworkVersion,
       catalog: CATALOG,
       drainageAreaRatioTransfer: { ...DRAINAGE_AREA_RATIO_TRANSFER, maximumTransferDistanceM: MAXIMUM_TRANSFER_DISTANCE_M },
-      derivations: CATALOG.datasets.map((dataset) => timeSeriesDerivation(publisherNameOf(dataset.publisherId))),
+      derivations: CATALOG.datasets.map((dataset) => timeSeriesDerivation(publisherNameOf(dataset.publisherId), CATALOG.derivedBy)),
       checks: MODELED_WSE_VALIDATION_CHECKS,
       defaultWsePolygonGenerationMethodId: DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
     },

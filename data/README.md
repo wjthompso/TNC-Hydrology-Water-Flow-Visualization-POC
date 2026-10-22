@@ -46,6 +46,17 @@ Published items live in the portal folder **Creek Water Visualization** (the two
 
 Dependency chain: TNC flowlines → Creek Segments (cut at the flowline's original vertices) → modeled WSE versions → WSE polygon versions. A new modeled WSE version needs new WSE polygon versions built from it; a new WSE polygon version can reuse an existing modeled WSE version.
 
+## Where each method is described
+
+A frozen `version.json` records what a version is. Each method's folder holds its config and a description for people and LLMs:
+
+| Product | Method folder | Config | Description |
+| --- | --- | --- | --- |
+| `modeled-wse` | `pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/<method-id>/` | `method-config.ts` | [`METHOD.md`](../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/METHOD.md) |
+| `wse-polygons` | `pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/<pipeline-method-id>/` | `method-config.ts` | [`METHOD.md`](../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/junction-sloped-terrain-fill/METHOD.md) |
+
+The modeled WSE method folder name is its Data-Product Version `method_id`. The WSE polygon `method_id` adds the `m<N>-` prefix to the pipeline method id (`junction-sloped-terrain-fill` → `m1-junction-sloped-terrain-fill`).
+
 ## Versioning
 
 - **Method number `m<N>`** changes when the idea changes: a different approach, not a fix or a new setting.
