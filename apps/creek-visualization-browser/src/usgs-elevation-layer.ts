@@ -9,8 +9,14 @@ import { createAbortError } from '@arcgis/core/core/promiseUtils';
 export const USGS_3DEP_ELEVATION_URL =
   'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer';
 
-/** Dev-server proxy path (see vite.config.ts) — avoids CORS from localhost. */
-const EXPORT_IMAGE_PATH = '/api/usgs-elevation/exportImage';
+/**
+ * Dev and tests go through the Vite proxy (see vite.config.ts), which the live
+ * test response cache keys on. A production build has no proxy, so it calls
+ * USGS directly; the ImageServer answers with `Access-Control-Allow-Origin: *`.
+ */
+const EXPORT_IMAGE_PATH = import.meta.env.DEV
+  ? '/api/usgs-elevation/exportImage'
+  : `${USGS_3DEP_ELEVATION_URL}/exportImage`;
 
 /** Terrain tiles have 256 cells, requiring a 257 × 257 sample grid. */
 const TILE_SIZE = 256;

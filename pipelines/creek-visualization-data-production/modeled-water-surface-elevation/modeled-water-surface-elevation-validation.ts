@@ -1,7 +1,8 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { readJson } from '../json-files.ts';
-import { DRAINAGE_AREA_RATIO_TRANSFER, WATER_SURFACE_ELEVATION_VARIABLE_ID } from './pipeline-configuration.ts';
+import { WATER_SURFACE_ELEVATION_VARIABLE_ID } from './pipeline-configuration.ts';
+import { DRAINAGE_AREA_RATIO_TRANSFER } from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import {
   CROSS_SECTIONS_FILE,
   POLYGON_LADDERS_FILE,

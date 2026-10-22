@@ -12,6 +12,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { modeledWseVersionRelativePath } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
+import { CURRENT_MODELED_WSE_DERIVATION_METHOD } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
 import { utm10nToWgs84 } from '../../../../../pipelines/creek-visualization-data-production/utm-geometry.ts';
 
 export const JALAMA_EXTENT_ID = 'jalama-gauge-reach';
@@ -37,8 +39,14 @@ export function waterYearOf(timeUtcMs: number): number {
   return date.getUTCMonth() >= 9 ? date.getUTCFullYear() + 1 : date.getUTCFullYear();
 }
 
+/** Stage 3 writes the current Modeled WSE Derivation Method version to `03-time-series/<method-id>/v<version>/`. */
+const CURRENT_MODELED_WSE_VERSION_PATH = modeledWseVersionRelativePath(
+  CURRENT_MODELED_WSE_DERIVATION_METHOD.id,
+  CURRENT_MODELED_WSE_DERIVATION_METHOD.version,
+);
+
 function hourlyTimeSeriesRelativePath(datasetId: string, comid: string, timeUtcMs: number): string {
-  return `03-time-series/time-series/${datasetId}/water-surface-elevation/${comid}/WY${waterYearOf(timeUtcMs)}.json`;
+  return `03-time-series/${CURRENT_MODELED_WSE_VERSION_PATH}/time-series/${datasetId}/water-surface-elevation/${comid}/WY${waterYearOf(timeUtcMs)}.json`;
 }
 
 /**

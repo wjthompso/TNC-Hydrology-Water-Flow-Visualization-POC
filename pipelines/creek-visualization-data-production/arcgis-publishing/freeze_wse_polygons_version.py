@@ -68,11 +68,8 @@ INITIAL_STATUS = "active"
 EXTENT_ID = "dangermond-preserve"
 PIPELINE_METHOD_ID = "junction-sloped-terrain-fill"
 PIPELINE_METHOD_VERSION = 1
-BUILT_FROM_MODELED_WSE = {
-    "product": "modeled-wse",
-    "method_id": "m1-drainage-area-ratio-manning-rating-curve",
-    "version_label": "m1-v1",
-}
+# The modeled WSE version a polygon version was built from is read from the Stage 4 manifest
+# (parameters.builtFromModeledWseVersion), which Stage 4 wrote from the Time Series it read (UCS-296).
 
 SERVICE_TITLE = "Creek Water Visualization — WSE Polygons"
 SERVICE_NAME = "creek_water_visualization_wse_polygons"
@@ -88,7 +85,7 @@ LONG_TEXT_WIDTH = 32000
 # ---------------------------------------------------------------------------
 
 EXTENT_WORKING_OUTPUT_FOLDER = versions.PIPELINE_WORKING_OUTPUT_FOLDER / EXTENT_ID
-STAGE_3_MANIFEST_PATH = EXTENT_WORKING_OUTPUT_FOLDER / "03-time-series" / "manifest.json"
+STAGE_3_FOLDER = EXTENT_WORKING_OUTPUT_FOLDER / "03-time-series"
 STAGE_4_METHOD_VERSION_FOLDER = (
     EXTENT_WORKING_OUTPUT_FOLDER / "04-water-surface-polygons" / PIPELINE_METHOD_ID / f"v{PIPELINE_METHOD_VERSION}"
 )
@@ -241,9 +238,38 @@ def verify_polygon_set_files_match_stage_4_manifest(stage_4_manifest: dict) -> i
     return len(polygon_set_paths)
 
 
+def built_from_modeled_wse_version(stage_4_manifest: dict) -> dict:
+    """The modeled WSE version Stage 4 recorded as its source, in the registry's snake_case field names."""
+    recorded = stage_4_manifest.get("parameters", {}).get("builtFromModeledWseVersion")
+    if not recorded:
+        raise RuntimeError(
+            "The Stage 4 manifest has no builtFromModeledWseVersion record. Run Stage 4 (or the UCS-296 migration "
+            "migrate-modeled-wse-version-folders.ts) first."
+        )
+    return {
+        "product": recorded["product"],
+        "method_id": recorded["methodId"],
+        "version_label": recorded["versionLabel"],
+        "method_sha256": recorded["methodSha256"],
+    }
+
+
+def stage_3_manifest_path(built_from: dict) -> Path:
+    version_number = int(built_from["version_label"].rsplit("-v", 1)[1])
+    return STAGE_3_FOLDER / built_from["method_id"] / f"v{version_number}" / "manifest.json"
+
+
 def verify_stage_4_time_series_inputs_match_stage_3_outputs(stage_4_manifest: dict) -> int:
-    """Shows Stage 4 was built from the Stage 3 output frozen as modeled-wse m1-v1."""
-    stage_3_outputs = read_json(STAGE_3_MANIFEST_PATH)["outputs"]
+    """Shows Stage 4 was built from the Stage 3 output of the modeled WSE version it recorded."""
+    built_from = built_from_modeled_wse_version(stage_4_manifest)
+    stage_3_manifest = read_json(stage_3_manifest_path(built_from))
+    recorded_method = stage_3_manifest["parameters"]["modeledWseDerivationMethod"]
+    if recorded_method["methodSha256"] != built_from["method_sha256"]:
+        raise RuntimeError(
+            f"Stage 4 recorded modeled WSE fingerprint {built_from['method_sha256'][:12]}…, "
+            f"but its Stage 3 manifest holds {recorded_method['methodSha256'][:12]}…."
+        )
+    stage_3_outputs = stage_3_manifest["outputs"]
     time_series_inputs = {key: value for key, value in stage_4_manifest["inputs"].items() if "/03-time-series/" in key}
     mismatched = [key for key, sha256 in time_series_inputs.items() if stage_3_outputs.get(key, {}).get("sha256") != sha256]
     if mismatched:
@@ -448,7 +474,8 @@ def build_version_record(stage_4_manifest: dict, counts: dict, extra: dict) -> d
     method_code_paths = [versions.REPOSITORY_ROOT / path for path in method_record["codeSha256ByFile"]]
     fingerprint = versions.code_fingerprint(method_code_paths)
     dataset_ids, water_years = input_dataset_ids_and_water_years(stage_4_manifest)
-    built_from_label = f"{BUILT_FROM_MODELED_WSE['product']} {BUILT_FROM_MODELED_WSE['version_label']}"
+    built_from = built_from_modeled_wse_version(stage_4_manifest)
+    built_from_label = f"{built_from['product']} {built_from['version_label']}"
 
     return {
         "product": PRODUCT,
@@ -485,7 +512,8 @@ def build_version_record(stage_4_manifest: dict, counts: dict, extra: dict) -> d
             "Service A publishes national-water-model-hourly WY2021–WY2023 only."
         ),
         "derivation_summary": f"{method_record['description']} Built from {built_from_label}.",
-        "built_from_modeled_wse_version": BUILT_FROM_MODELED_WSE,
+        "built_from_modeled_wse_version": {key: built_from[key] for key in ("product", "method_id", "version_label")},
+        "built_from_modeled_wse_method_sha256": built_from["method_sha256"],
         "pipeline_method_id": method_record["id"],
         "pipeline_method_version": method_record["version"],
         "pipeline_method_label": method_record["label"],
@@ -655,8 +683,15 @@ def main() -> None:
             f"describe this output: {changed_code_files}"
         )
     registry = versions.read_registry()
-    modeled_wse_versions = registry.get("products", {}).get(BUILT_FROM_MODELED_WSE["product"], {}).get("versions", [])
-    built_from_is_registered = any(v.get("version_label") == BUILT_FROM_MODELED_WSE["version_label"] for v in modeled_wse_versions)
+    built_from = built_from_modeled_wse_version(stage_4_manifest)
+    modeled_wse_versions = registry.get("products", {}).get(built_from["product"], {}).get("versions", [])
+    built_from_registry_entry = next((v for v in modeled_wse_versions if v.get("version_label") == built_from["version_label"]), None)
+    built_from_is_registered = built_from_registry_entry is not None
+    if built_from_is_registered and built_from_registry_entry.get("method_sha256") not in (None, built_from["method_sha256"]):
+        raise RuntimeError(
+            f"{built_from['product']} {built_from['version_label']} is registered with a different fingerprint than the one "
+            "Stage 4 recorded; the polygons were not built from the frozen modeled WSE version."
+        )
     source_checks = {
         "polygon_set_files_match_stage_4_manifest_sha256": polygon_set_file_count,
         "stage_4_time_series_inputs_match_stage_3_output_sha256": time_series_input_count,
@@ -665,7 +700,7 @@ def main() -> None:
     }
     log(f"  {polygon_set_file_count} polygon-set files and {time_series_input_count} time-series inputs verified.")
     if not built_from_is_registered:
-        log("  note: modeled-wse m1-v1 is not in the registry yet (the freeze still records the dependency).")
+        log(f"  note: {built_from['product']} {built_from['version_label']} is not in the registry yet (the freeze still records the dependency).")
 
     log("Assembling Prepared water-surface polygons by ring orientation …")
     attribute_rows, geometries, counts = build_polygon_features()

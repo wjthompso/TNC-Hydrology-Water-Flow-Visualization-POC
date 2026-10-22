@@ -7,7 +7,7 @@ import { repositoryRoot } from '../../constants.ts';
 import type { RecordedWsePolygonGenerationMethod, WsePolygonGenerationMethodConfig } from './wse-polygon-generation-method.ts';
 
 /**
- * The version rule's fingerprint: SHA-256 of every file in the method's folder, of each shared code
+ * The version rule's fingerprint: SHA-256 of every non-Markdown file in the method's folder, of each shared code
  * file the method lists, and of its parameters and browser drawing rule. Any change to those means a
  * different method version, so Stage 4 compares this against the version folder's manifest.
  */
@@ -30,8 +30,9 @@ function canonicalJson(value: unknown): string {
 
 async function methodCodeFiles(method: WsePolygonGenerationMethodConfig): Promise<string[]> {
   const methodFolder = path.join(methodsDirectory, method.id);
+  // METHOD.md and other Markdown describe the method; editing prose never changes output.
   const ownFiles = (await readdir(methodFolder, { recursive: true, withFileTypes: true }))
-    .filter((entry) => entry.isFile())
+    .filter((entry) => entry.isFile() && !entry.name.endsWith('.md'))
     .map((entry) => path.join(entry.parentPath, entry.name));
   if (ownFiles.length === 0) throw new Error(`WSE Polygon Generation Method ${method.id} has no files in ${methodFolder}.`);
   const sharedFiles = method.sharedCodeFiles.map((relativePath) => path.join(repositoryRoot, relativePath));

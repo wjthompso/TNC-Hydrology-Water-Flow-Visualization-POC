@@ -1,5 +1,8 @@
 import { expectRecord, readJson } from '../json-files.ts';
-import { DRAINAGE_AREA_RATIO_TRANSFER, MAXIMUM_TRANSFER_DISTANCE_M } from './pipeline-configuration.ts';
+import {
+  DRAINAGE_AREA_RATIO_TRANSFER,
+  MAXIMUM_TRANSFER_DISTANCE_M,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 
 /**
  * Normalized discharge as received from a Publisher, keyed by NHDPlusV2 COMID (reach),

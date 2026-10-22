@@ -1,7 +1,11 @@
 import path from 'node:path';
 import { readJson } from '../json-files.ts';
 import { writeInspectionSvg } from './inspection-svg.ts';
-import { CROSS_SECTION, INSPECTION_SEGMENT_ID, MODELED_EXTENT, RATING_CURVE, stageDirectory } from './pipeline-configuration.ts';
+import { INSPECTION_SEGMENT_ID, MODELED_EXTENT, stageDirectory } from './pipeline-configuration.ts';
+import {
+  CROSS_SECTION,
+  RATING_CURVE,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { buildRatingCurveRecord } from './rating-curve-inversion.ts';
 import { writeReadableJson } from './readable-json.ts';
 import {
@@ -12,6 +16,7 @@ import {
   type RatingCurvesFile,
 } from './stage-file-formats.ts';
 import { runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
+import { refuseToOverwriteADifferentModeledWseVersion } from './modeled-wse-version.ts';
 
 /**
  * Stage 2 — rating curves. Manning's equation normal depth on each Creek Segment's
@@ -142,6 +147,7 @@ async function buildRatingCurves(): Promise<StageResult> {
 }
 
 await runStageEntryPoint(async () => {
+  await refuseToOverwriteADifferentModeledWseVersion('02-rating-curves');
   await runStage({
     stage: '02-rating-curves',
     outputDirectory,

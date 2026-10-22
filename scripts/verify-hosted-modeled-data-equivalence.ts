@@ -45,7 +45,11 @@ import { loadHostedWaterSurfacePolygonsForFlowline } from '../apps/creek-visuali
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EXTENT_ROOT = path.join(REPOSITORY_ROOT, 'data/pipeline-working-output/dangermond-preserve');
-const TIME_SERIES_ROOT = path.join(EXTENT_ROOT, '03-time-series/time-series');
+// The local Time Series come from the modeled WSE version the hosted service was published from (m1-v1).
+const TIME_SERIES_ROOT = path.join(
+  EXTENT_ROOT,
+  '03-time-series/m1-drainage-area-ratio-manning-rating-curve/v1/time-series',
+);
 const POLYGON_METHOD_FOLDER = path.join(EXTENT_ROOT, '04-water-surface-polygons/junction-sloped-terrain-fill/v1');
 const POLYGON_METHOD_KEY = 'junction-sloped-terrain-fill@v1';
 const REACH_CROSSWALK_PATH = path.join(

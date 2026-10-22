@@ -15,15 +15,17 @@ import {
 import { formatUtcDate, writeInspectionSvg } from './inspection-svg.ts';
 import {
   CALIFORNIA_NATURAL_FLOWS,
-  DRAINAGE_AREA_RATIO_TRANSFER,
   INSPECTION_SEGMENT_ID,
-  MAXIMUM_TRANSFER_DISTANCE_M,
   MODELED_EXTENT,
   NATIONAL_WATER_MODEL,
   NHDPLUSV2_CROSSWALK_PATH,
   WATER_SURFACE_ELEVATION_VARIABLE_ID,
   stageDirectory,
 } from './pipeline-configuration.ts';
+import {
+  DRAINAGE_AREA_RATIO_TRANSFER,
+  MAXIMUM_TRANSFER_DISTANCE_M,
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { invertRatingCurve, type InversionOutcome } from './rating-curve-inversion.ts';
 import {
   CROSS_SECTIONS_FILE,
@@ -38,6 +40,7 @@ import {
   type WaterSurfaceElevationTimeSeriesSegment,
 } from './stage-file-formats.ts';
 import { runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
+import { currentModeledWseVersionDirectory, refuseToOverwriteADifferentModeledWseVersion } from './modeled-wse-version.ts';
 import { waterYearOf } from './water-years.ts';
 
 /**
@@ -47,12 +50,17 @@ import { waterYearOf } from './water-years.ts';
  * drainage-area ratio method; see drainage-area-ratio.ts). Each segment also gets a junction
  * WSE at its upstream and downstream vertex: the higher of its own value and its neighbour's,
  * so the two segments meeting at a vertex share one height there (see `withJunctionWse`).
+ *
+ * Version rule: the output goes to `03-time-series/<method-id>/v<version>/` and the manifest records the
+ * Modeled WSE Derivation Method's fingerprint. When that folder already holds output with a different
+ * fingerprint, Stages 0–3 stop and ask for a version bump, even with `--force` (see `modeled-wse-version.ts`).
  */
 
 const acquireDirectory = stageDirectory('acquire');
 const crossSectionsDirectory = stageDirectory('crossSections');
 const ratingCurvesDirectory = stageDirectory('ratingCurves');
-const outputDirectory = stageDirectory('timeSeries');
+/** Stage 3 writes the current Modeled WSE Derivation Method version to `03-time-series/<method-id>/v<version>/`. */
+const outputDirectory = currentModeledWseVersionDirectory();
 
 type OutcomeCounts = Record<InversionOutcome, number>;
 
@@ -201,7 +209,7 @@ async function buildTimeSeries(): Promise<StageResult> {
   const summaryLines: string[] = [];
   const counts: Record<string, number> = {};
   const inspectionStats: Record<string, unknown> = {};
-  // Remove every earlier Time Series file, including the former single-file layout, so no stale file is listed.
+  // Same version and fingerprint (the guard in the entry point passed): remove this version's earlier Time Series files so no stale file is listed.
   await rm(path.join(outputDirectory, TIME_SERIES_DIRECTORY_NAME), { recursive: true, force: true });
   for (const segment of crosswalk.segments) {
     const { segmentId, nhdplusV2Comid } = segment;
@@ -399,6 +407,7 @@ async function buildTimeSeries(): Promise<StageResult> {
 }
 
 await runStageEntryPoint(async () => {
+  const version = await refuseToOverwriteADifferentModeledWseVersion('03-time-series');
   await runStage({
     stage: '03-time-series',
     outputDirectory,
@@ -411,6 +420,7 @@ await runStageEntryPoint(async () => {
       path.join(acquireDirectory, NWM_DISCHARGE_FILE),
     ],
     parameters: {
+      modeledWseDerivationMethod: version.method,
       segmentNetworkVersion: MODELED_EXTENT.segmentNetworkVersion,
       variableId: WATER_SURFACE_ELEVATION_VARIABLE_ID,
       fileLayout: 'one compact JSON file per TNC flowline: <datasetId>/<variableId>/<tncComid>.json, hourly <tncComid>/WY<year>.json',

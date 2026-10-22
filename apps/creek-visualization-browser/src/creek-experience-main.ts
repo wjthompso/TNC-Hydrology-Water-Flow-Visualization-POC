@@ -188,6 +188,8 @@ async function startExperience(): Promise<boolean> {
       status,
       speedButtons: readPlaybackSpeedButtons(),
       openingTimeUtcMs: readOpeningTimeQuery(location.search),
+      // The gauge's creek segment opens selected, so the chart is visible before anyone discovers clicking.
+      initialSelectedSegmentId: data.station.segmentId,
     });
     await attachment.flush();
     // UCS-261: a stream gauge mast where the Jalama Near Lompoc gauge is installed.

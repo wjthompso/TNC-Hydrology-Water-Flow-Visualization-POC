@@ -8,15 +8,12 @@ import {
   type ModeledWaterSurfaceElevationValidationResult,
   type ValidationCheck,
 } from './modeled-water-surface-elevation-validation.ts';
+import { CATALOG, MODELED_EXTENT, WATER_SURFACE_ELEVATION_VARIABLE_ID, stageDirectory } from './pipeline-configuration.ts';
 import {
-  CATALOG,
   DRAINAGE_AREA_RATIO_TRANSFER,
   MAXIMUM_TRANSFER_DISTANCE_M,
-  MODELED_EXTENT,
-  WATER_SURFACE_ELEVATION_VARIABLE_ID,
-  stageDirectory,
-  timeSeriesDerivation,
-} from './pipeline-configuration.ts';
+} from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
+import { timeSeriesDerivation } from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/time-series-derivation.ts';
 import { writeReadableJson } from './readable-json.ts';
 import {
   CROSS_SECTIONS_FILE,
@@ -29,6 +26,7 @@ import {
   type WaterSurfacePolygonSetsFile,
 } from './stage-file-formats.ts';
 import { runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
+import { requireSavedCurrentModeledWseVersion, type CurrentModeledWseVersion } from './modeled-wse-version.ts';
 import type { WsePolygonBrowserDrawing } from './wse-polygon-generation-methods/wse-polygon-generation-method.ts';
 import {
   listSavedWsePolygonMethodVersions,
@@ -43,11 +41,11 @@ import { DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID } from './wse-polygon-generati
  * `modeled-water-surface-elevation-validation.ts` and run once per saved method version. A violation
  * in the default method's newest version (the one the browser opens) fails the stage; a violation in
  * any other version is a warning, and the catalog marks that version `validationPassed: false`.
- * Time Series paths are relative to `03-time-series/`; each file holds one TNC flowline.
+ * Time Series paths are relative to `03-time-series/` and start with the current modeled WSE version folder
+ * (`<method-id>/v<version>/time-series/…`); each file holds one TNC flowline.
  */
 
 const crossSectionsDirectory = stageDirectory('crossSections');
-const timeSeriesDirectory = stageDirectory('timeSeries');
 const waterSurfacePolygonsDirectory = stageDirectory('waterSurfacePolygons');
 const outputDirectory = stageDirectory('catalog');
 
@@ -84,6 +82,15 @@ async function polygonSetFilesOf(versionDirectory: string): Promise<string[]> {
 
 interface Catalog {
   segmentNetworkVersion: string;
+  /** The Modeled WSE Derivation Method version every Time Series path points into. */
+  modeledWseVersion: {
+    methodId: string;
+    version: number;
+    versionLabel: string;
+    /** Relative to `03-time-series/`, e.g. `m1-drainage-area-ratio-manning-rating-curve/v1`. */
+    path: string;
+    methodSha256: string;
+  };
   publishers: { publisherId: string; name: string }[];
   datasets: {
     datasetId: string;
@@ -134,6 +141,7 @@ function isoUtcOrEmpty(timestampMs: number | null): string {
 /** Runs every check against one saved method version's polygon sets and ladder. */
 async function validateMethodVersion(
   saved: SavedWsePolygonMethodVersion,
+  timeSeriesDirectory: string,
   segmentIds: string[],
   crossSections: CrossSectionsFile,
 ): Promise<{ validation: ModeledWaterSurfaceElevationValidationResult; polygonSetFileCount: number }> {
@@ -155,7 +163,8 @@ async function validateMethodVersion(
   return { validation, polygonSetFileCount: polygonSetFiles.length };
 }
 
-async function buildCatalogAndValidate(): Promise<StageResult> {
+async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Promise<StageResult> {
+  const timeSeriesDirectory = modeledWse.outputDirectory;
   const expectedVersion = MODELED_EXTENT.segmentNetworkVersion;
   const segmentIds = (await loadCreekSegmentNetwork()).map((segment) => segment.segmentId);
   const crossSections = (await readJson(path.join(crossSectionsDirectory, CROSS_SECTIONS_FILE))) as CrossSectionsFile;
@@ -168,7 +177,7 @@ async function buildCatalogAndValidate(): Promise<StageResult> {
   let defaultValidation: ModeledWaterSurfaceElevationValidationResult | null = null;
   let polygonSetFileCount = 0;
   for (const saved of savedVersions) {
-    const checked = await validateMethodVersion(saved, segmentIds, crossSections);
+    const checked = await validateMethodVersion(saved, timeSeriesDirectory, segmentIds, crossSections);
     if (saved === defaultVersion) {
       defaultValidation = checked.validation;
       polygonSetFileCount = checked.polygonSetFileCount;
@@ -211,14 +220,21 @@ async function buildCatalogAndValidate(): Promise<StageResult> {
     timeSeries.push({
       datasetId: dataset.datasetId,
       variableId: WATER_SURFACE_ELEVATION_VARIABLE_ID,
-      paths: validated?.paths ?? [],
+      paths: (validated?.paths ?? []).map((relativePath) => `${modeledWse.relativePath}/${relativePath}`),
       drainageAreaRatioTransferSegments: validated?.drainageAreaRatioTransferSegments ?? 0,
-      derivation: timeSeriesDerivation(publisherNameOf(dataset.publisherId)),
+      derivation: timeSeriesDerivation(publisherNameOf(dataset.publisherId), CATALOG.derivedBy),
     });
   }
 
   const catalog: Catalog = {
     segmentNetworkVersion: expectedVersion,
+    modeledWseVersion: {
+      methodId: modeledWse.method.id,
+      version: modeledWse.method.version,
+      versionLabel: modeledWse.versionLabel,
+      path: modeledWse.relativePath,
+      methodSha256: modeledWse.method.methodSha256,
+    },
     publishers: CATALOG.publishers.map((publisher) => ({ ...publisher })),
     datasets,
     variables: CATALOG.variables.map((variable) => ({ ...variable })),
@@ -277,6 +293,8 @@ async function buildCatalogAndValidate(): Promise<StageResult> {
 }
 
 await runStageEntryPoint(async () => {
+  const modeledWse = await requireSavedCurrentModeledWseVersion('05-catalog');
+  const timeSeriesDirectory = modeledWse.outputDirectory;
   const timeSeriesPaths = [...(await listTimeSeriesFiles(timeSeriesDirectory)).values()].flat();
   // Every saved method version is an input, so a new version or a rerun of one reruns this stage.
   const methodVersionFiles: string[] = [];
@@ -299,12 +317,13 @@ await runStageEntryPoint(async () => {
     ],
     parameters: {
       segmentNetworkVersion: MODELED_EXTENT.segmentNetworkVersion,
+      modeledWseVersion: { methodId: modeledWse.method.id, version: modeledWse.method.version, methodSha256: modeledWse.method.methodSha256 },
       catalog: CATALOG,
       drainageAreaRatioTransfer: { ...DRAINAGE_AREA_RATIO_TRANSFER, maximumTransferDistanceM: MAXIMUM_TRANSFER_DISTANCE_M },
-      derivations: CATALOG.datasets.map((dataset) => timeSeriesDerivation(publisherNameOf(dataset.publisherId))),
+      derivations: CATALOG.datasets.map((dataset) => timeSeriesDerivation(publisherNameOf(dataset.publisherId), CATALOG.derivedBy)),
       checks: MODELED_WSE_VALIDATION_CHECKS,
       defaultWsePolygonGenerationMethodId: DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
     },
-    run: buildCatalogAndValidate,
+    run: () => buildCatalogAndValidate(modeledWse),
   });
 });
