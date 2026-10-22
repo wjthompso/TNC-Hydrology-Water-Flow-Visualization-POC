@@ -16,7 +16,7 @@ A controlled test run against a safely restored bug-producing environment. The t
 
 ## California Natural Flows Database
 
-A database of modeled California stream flow rates, also called the Flow Modeler. It gives a flow rate on a coarse NHDPlusV2 stream line, not a water level at a gauge. It is a Publisher; the modeled water-surface elevation pipeline uses its monthly Dataset (monthly mean discharge, 1950–2024) to derive modeled water-surface elevation. The browser does not show it yet.
+A database of modeled California stream flow rates, also called the Flow Modeler. It gives a flow rate on a coarse NHDPlusV2 stream line, not a water level at a gauge. It is a Publisher; the modeled water-surface elevation pipeline uses its monthly Dataset (monthly mean discharge, 1950–2024) to derive modeled water-surface elevation. The monthly derived Dataset is published to hosted ArcGIS feature services (UCS-285), but the browser hides it behind the feature flag `VITE_SHOW_CALIFORNIA_NATURAL_FLOWS_MONTHLY` (default off).
 
 ## COMID
 
@@ -24,19 +24,27 @@ COMID (common identifier) is the identifier of one source hydrography line. Two 
 
 ## Creek Segment
 
-The stretch of creek between two adjacent original vertices on a TNC (The Nature Conservancy) flowline. This definition may change later so the shown water reads more clearly on the map.
+The stretch of creek between two adjacent original vertices on a TNC (The Nature Conservancy) flowline. Each Creek Segment records its upstream and downstream neighbour, the Creek Segments that share its end vertices; modeled water-surface elevations are matched where neighbours meet so their water joins without a gap. This definition may change later so the shown water reads more clearly on the map.
+
+## Data-Product Version
+
+One frozen, append-only copy of a published data product (modeled water-surface elevations or WSE polygons), labeled `m<method number>-v<version number>`, such as `m1-v1`. A new method (a different approach) increments the method number; any output-changing fix or parameter change increments the version number. A Data-Product Version is never overwritten or deleted; retiring one marks it superseded. Each is recorded in `data/data-product-version-registry.json` with its ArcGIS layers and tables. The Modeled WSE Derivation Method and the WSE Polygon Generation Method are published as Data-Product Versions.
 
 ## Dataset
 
-One product from a Publisher with one time step and one date range, such as California Natural Flows monthly, NOAA National Water Model hourly retrospective, or the Jalama Near Lompoc gauge 15-minute readings. A Dataset is either observed or modeled (`kind`) and can hold several Variables. Spelled as one word to match the TNC-DigitalTwin Data Catalog.
+One product from a Publisher with one time step and one date range, such as California Natural Flows monthly, NOAA National Water Model hourly retrospective, or the Jalama Near Lompoc gauge 15-minute readings. A Dataset is either observed or modeled (`kind`) and can hold several Variables. Spelled as one word to match the TNC-DigitalTwin Data Catalog. A derived Dataset's Publisher is the organization that derived it (the UCSB Spatial Center for the Inferred Creek WSE Datasets), not the Publisher of its Discharge (Flow Rate) Source.
 
 ## Derivation
 
-A note on a Time Series whose values were calculated rather than received from the Publisher. It records the Variable it came from, the method, and who calculated it; for example, water-surface elevation derived from California Natural Flows discharge with Manning's equation by the UCSB Spatial Center. A Time Series without a Derivation comes straight from the Publisher. Derivation is independent of observed versus modeled.
+A note on a Time Series whose values were calculated rather than received from the Publisher. It records the Variable it came from, the method, and who calculated it; for example, water-surface elevation derived from California Natural Flows discharge with Manning's equation by the UCSB Spatial Center. A Time Series without a Derivation comes straight from the Publisher. Derivation is independent of observed versus modeled. The Dataset a Derivation reads is its Discharge (Flow Rate) Source.
 
 ## Digital Twin
 
 The larger product an Experience belongs to.
+
+## Discharge (Flow Rate) Source
+
+The modeled-flow Dataset a Derivation reads, such as NOAA National Water Model v3.0 hourly or California Natural Flows monthly. Discharge and flow rate are two names for the same quantity: the volume of water passing a point per unit of time. A Discharge (Flow Rate) Source is an input, not the Publisher of the Dataset people see.
 
 ## Distinct Population Segment (DPS)
 
@@ -66,9 +74,13 @@ The published elevation of a gauge's zero reading. For the Jalama Near Lompoc ga
 
 The gauge's relative water reading in feet. Adding the gauge datum, the published gauge elevation (for example, 83.34 ft NAVD88), turns it into a water-surface elevation.
 
+## Held WSE Interval
+
+One stored row of modeled water-surface elevation: one Creek Segment's (or one segment junction's) water-surface elevation that stays constant from a start time until the next change. A Time Series is stored as consecutive Held WSE Intervals instead of one row per time step, so long flat periods take one row; every time step's value can be rebuilt exactly. It is a storage form only and does not change the Hold rule the browser applies.
+
 ## Hold rule
 
-How the browser picks a Time Series value for the selected time: the latest value at or before that time, held for at most one time step of that Time Series. Beyond one time step, the value is missing. This lets Time Series with different time steps play together.
+How the browser picks a Time Series value for the selected time: the latest value at or before that time, held for at most one time step of that Time Series. Beyond one time step, the value is missing. This lets Time Series with different time steps play together. Modeled water applies it; the observed map currently matches the selected time exactly and does not hold.
 
 ## Jalama Near Lompoc gauge
 
@@ -76,11 +88,19 @@ USGS (United States Geological Survey) site 11120600. It is the real observation
 
 ## Manning's equation
 
-A standard open-channel equation that relates flow velocity to the channel's slope, roughness, and hydraulic radius (the wet area divided by the wetted edge). The modeled water-surface elevation pipeline uses it, assuming steady uniform flow (normal depth), to turn modeled discharge into a water-surface elevation for each Creek Segment from USGS 3DEP cross-sections. The browser does not show modeled water yet.
+A standard open-channel equation that relates flow velocity to the channel's slope, roughness, and hydraulic radius (the wet area divided by the wetted edge). The modeled water-surface elevation pipeline uses it, assuming steady uniform flow (normal depth), to turn modeled discharge into a water-surface elevation for each Creek Segment from USGS 3DEP cross-sections. The browser shows the result as modeled water (UCS-271).
+
+## Modeled WSE Derivation Method
+
+A named, versioned way to turn modeled discharge into modeled water-surface elevation for each Creek Segment: Reach discharge, drainage-area ratio scaling (including any Drainage-Area Ratio Transfer), USGS 3DEP cross-sections, and Manning's equation rating curves. Each version keeps its own published table, so versions can be compared; publishing a new version adds a table and never overwrites an earlier one. It pairs with the WSE Polygon Generation Method, which turns these elevations into polygons.
 
 ## Modeled water
 
-An estimated water height, kept separate from observed water. The modeled water-surface elevation pipeline produces it from modeled discharge; the browser does not show it yet.
+An estimated water height, kept separate from observed water. The public wording is "inferred water-surface elevation" (the Dataset labels read "Inferred Creek WSE"); both phrases name the same thing. The modeled water-surface elevation pipeline produces it from modeled discharge; the browser shows it (UCS-271) from hosted ArcGIS feature services (UCS-285), and the Dataset picker always offers the hourly National Water Model Dataset.
+
+## Monitoring station
+
+A real instrument site, such as the Jalama Near Lompoc gauge, whose readings are assigned to one Creek Segment. A Monitoring station's readings apply to its associated Creek Segment only.
 
 ## Observed water
 
@@ -96,7 +116,7 @@ A polygon built ahead of time for one Creek Segment at one water-surface elevati
 
 ## Publisher
 
-The organization or model product that publishes one or more Datasets, such as USGS (United States Geological Survey), California Natural Flows, or the NOAA (National Oceanic and Atmospheric Administration) National Water Model. It is not the TNC-DigitalTwin `dataSource` adapter key and not a cloud storage host.
+The organization or model product that publishes one or more Datasets, such as USGS (United States Geological Survey), California Natural Flows, the NOAA (National Oceanic and Atmospheric Administration) National Water Model, or the UCSB Spatial Center (which publishes the derived Inferred Creek WSE Datasets). It is not the TNC-DigitalTwin `dataSource` adapter key and not a cloud storage host.
 
 ## Reach
 
@@ -117,6 +137,10 @@ A creek centerline published by TNC (The Nature Conservancy). Creek Segments are
 ## USGS 3DEP
 
 The USGS (United States Geological Survey) 3D Elevation Program (3DEP) bare-earth terrain model. It is the terrain used to build prepared water-surface polygons, and (UCS-275) the surface the live 3D scene draws near the creek, composited over Esri World Elevation for far zoom.
+
+## USGS Gauge Reading Approval Status
+
+USGS's review state for a reading from a Monitoring station, such as the Jalama Near Lompoc gauge. **Provisional** readings have not received final USGS approval and are subject to revision; they can be inaccurate because of instrument problems or changes at the site. **Approved** readings have completed USGS processing and review and are approved for publication, though USGS may still revise them after later audits. Applies to observed water only; modeled water has no approval status. Stored as `approval_status` in the Dangermond Creek Gauges service. The observed Experience marks Provisional readings "Provisional USGS data, subject to revision" (UCS-285).
 
 ## Variable
 
