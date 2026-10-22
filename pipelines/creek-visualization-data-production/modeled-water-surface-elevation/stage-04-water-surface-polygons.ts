@@ -17,6 +17,11 @@ import {
   type WaterSurfacePolygonSetsFile,
 } from './stage-file-formats.ts';
 import { formatBytes, runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
+import { CURRENT_MODELED_WSE_VERSION_LABEL, requireSavedCurrentModeledWseVersion } from './modeled-wse-version.ts';
+import {
+  builtFromModeledWseVersion,
+  type RecordedBuiltFromModeledWseVersion,
+} from './modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
 import { TERRAIN_TILE_INDEX_FILE, readTerrainTileIndex } from './terrain-tiles.ts';
 import type { RecordedWsePolygonGenerationMethod } from './wse-polygon-generation-methods/wse-polygon-generation-method.ts';
 import {
@@ -25,6 +30,7 @@ import {
 } from './wse-polygon-generation-methods/wse-polygon-generation-method-fingerprint.ts';
 import { wsePolygonMethodGenerator } from './wse-polygon-generation-methods/wse-polygon-generation-method-generators.ts';
 import {
+  readSavedBuiltFromModeledWseVersion,
   readSavedWsePolygonMethodVersion,
   wsePolygonVersionRelativePath,
 } from './wse-polygon-generation-methods/wse-polygon-generation-method-outputs.ts';
@@ -40,12 +46,16 @@ import { requestedWsePolygonGenerationMethod } from './wse-polygon-generation-me
  * Version rule: the version's manifest records a SHA-256 fingerprint of the method's code files and
  * parameters. When that version folder already holds output with a different fingerprint, the stage
  * stops and asks for a version bump, even with `--force`, so an old version is never overwritten.
- * Other method and version folders are never touched.
+ * Other method and version folders are never touched. A version folder is also never rewritten from a different
+ * modeled WSE version than the one it was built from; that needs a polygon method version bump too.
+ *
+ * Source: the Time Series of the current Modeled WSE Derivation Method version
+ * (`03-time-series/<method-id>/v<version>/`). The manifest records that version under
+ * `parameters.builtFromModeledWseVersion`, so a polygon version always names the modeled WSE version it came from.
  */
 
 const acquireDirectory = stageDirectory('acquire');
 const crossSectionsDirectory = stageDirectory('crossSections');
-const timeSeriesDirectory = stageDirectory('timeSeries');
 const waterSurfacePolygonsDirectory = stageDirectory('waterSurfacePolygons');
 
 async function terrainTilePaths(): Promise<string[]> {
@@ -53,7 +63,8 @@ async function terrainTilePaths(): Promise<string[]> {
   return index.tiles.map((tile) => path.join(acquireDirectory, tile.file));
 }
 
-async function timeSeriesFilePaths(): Promise<string[]> {
+/** The Time Series files of the current Modeled WSE Derivation Method version, which this stage builds polygons from. */
+async function timeSeriesFilePaths(timeSeriesDirectory: string): Promise<string[]> {
   const files = [...(await listTimeSeriesFiles(timeSeriesDirectory)).values()].flat();
   return files.map((relativePath) => path.join(timeSeriesDirectory, relativePath));
 }
@@ -75,14 +86,39 @@ async function refuseToOverwriteADifferentVersion(method: RecordedWsePolygonGene
   );
 }
 
-async function buildWaterSurfacePolygons(method: RecordedWsePolygonGenerationMethod, outputDirectory: string): Promise<StageResult> {
+/**
+ * Throws when this polygon version folder was built from a different modeled WSE version than the one being read now.
+ * Rewriting it would replace polygons that belong to an older modeled WSE version, so the fix is a polygon method version bump.
+ */
+async function refuseToOverwritePolygonsBuiltFromAnotherModeledWseVersion(
+  method: RecordedWsePolygonGenerationMethod,
+  outputDirectory: string,
+  current: RecordedBuiltFromModeledWseVersion,
+): Promise<void> {
+  const saved = await readSavedBuiltFromModeledWseVersion(waterSurfacePolygonsDirectory, method.id, method.version);
+  if (!saved || saved.methodSha256 === current.methodSha256) return;
+  throw new Error(
+    [
+      `[04-water-surface-polygons] WSE Polygon Generation Method ${method.id} v${method.version} already has saved output ` +
+        `in ${path.relative(repositoryRoot, outputDirectory)}/ built from modeled WSE ${saved.versionLabel}; the Time Series now read are ${current.versionLabel}.`,
+      `  Bump \`version\` to ${method.version + 1} in wse-polygon-generation-methods/${method.id}/method-config.ts and rerun, ` +
+        `so the polygons for ${saved.versionLabel} are kept next to the ones for ${current.versionLabel}. This stage never overwrites a polygon version built from another modeled WSE version.`,
+    ].join('\n'),
+  );
+}
+
+async function buildWaterSurfacePolygons(
+  method: RecordedWsePolygonGenerationMethod,
+  outputDirectory: string,
+  timeSeriesDirectory: string,
+): Promise<StageResult> {
   const tiles: ElevationGrid[] = [];
   for (const tilePath of await terrainTilePaths()) tiles.push(await readElevationGrid(tilePath));
   const result = await wsePolygonMethodGenerator(method.id)({
     segmentNetworkVersion: MODELED_EXTENT.segmentNetworkVersion,
     segments: await loadCreekSegmentNetwork(),
     crossSections: (await readJson(path.join(crossSectionsDirectory, CROSS_SECTIONS_FILE))) as CrossSectionsFile,
-    timeSeriesFilePaths: await timeSeriesFilePaths(),
+    timeSeriesFilePaths: await timeSeriesFilePaths(timeSeriesDirectory),
     terrainTiles: tiles,
   });
 
@@ -117,7 +153,7 @@ async function buildWaterSurfacePolygons(method: RecordedWsePolygonGenerationMet
     warnings: result.warnings,
     measurements: { waterSurfacePolygonSetsBytes: polygonSetBytes, largestWaterSurfacePolygonSetFileBytes: largestPolygonSetBytes },
     summaryLines: [
-      `WSE Polygon Generation Method ${method.id} v${method.version} (${method.label}).`,
+      `WSE Polygon Generation Method ${method.id} v${method.version} (${method.label}), built from modeled WSE ${CURRENT_MODELED_WSE_VERSION_LABEL}.`,
       ...result.summaryLines,
       `${polygonSetPaths.length} polygon set file(s) in ${WATER_SURFACE_POLYGON_SETS_DIRECTORY_NAME}/: ${formatBytes(polygonSetBytes)} total, largest ${formatBytes(largestPolygonSetBytes)}.`,
     ],
@@ -125,9 +161,13 @@ async function buildWaterSurfacePolygons(method: RecordedWsePolygonGenerationMet
 }
 
 await runStageEntryPoint(async () => {
+  // The Time Series must exist and match the code, or the polygons would record a version they were not built from.
+  const modeledWse = await requireSavedCurrentModeledWseVersion('04-water-surface-polygons');
+  const timeSeriesDirectory = modeledWse.outputDirectory;
   const method = await fingerprintWsePolygonGenerationMethod(requestedWsePolygonGenerationMethod(process.argv));
   const outputDirectory = path.join(waterSurfacePolygonsDirectory, wsePolygonVersionRelativePath(method.id, method.version));
   await refuseToOverwriteADifferentVersion(method, outputDirectory);
+  await refuseToOverwritePolygonsBuiltFromAnotherModeledWseVersion(method, outputDirectory, builtFromModeledWseVersion(modeledWse.method));
   await runStage({
     stage: '04-water-surface-polygons',
     outputDirectory,
@@ -136,12 +176,13 @@ await runStageEntryPoint(async () => {
       path.join(crossSectionsDirectory, CROSS_SECTIONS_FILE),
       path.join(acquireDirectory, TERRAIN_TILE_INDEX_FILE),
       ...(await terrainTilePaths()),
-      ...(await timeSeriesFilePaths()),
+      ...(await timeSeriesFilePaths(timeSeriesDirectory)),
     ],
     parameters: {
       segmentNetworkVersion: MODELED_EXTENT.segmentNetworkVersion,
       wsePolygonGenerationMethod: method,
+      builtFromModeledWseVersion: builtFromModeledWseVersion(modeledWse.method),
     },
-    run: () => buildWaterSurfacePolygons(method, outputDirectory),
+    run: () => buildWaterSurfacePolygons(method, outputDirectory, timeSeriesDirectory),
   });
 });

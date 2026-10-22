@@ -39,6 +39,7 @@ import {
   MAXIMUM_TRANSFER_DISTANCE_M,
 } from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { formatBytes, runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
+import { refuseToOverwriteADifferentModeledWseVersion } from './modeled-wse-version.ts';
 import { acquireTerrainTiles } from './terrain-acquisition.ts';
 import { requestedWaterYears, waterYearStartMs } from './water-years.ts';
 
@@ -365,6 +366,7 @@ async function acquire(): Promise<StageResult> {
 }
 
 await runStageEntryPoint(async () => {
+  await refuseToOverwriteADifferentModeledWseVersion('00-acquire');
   const { first, last } = requestedWaterYears();
   await runStage({
     stage: '00-acquire',

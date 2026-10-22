@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { RecordedBuiltFromModeledWseVersion } from '../modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
 import type { RecordedWsePolygonGenerationMethod } from './wse-polygon-generation-method.ts';
 
 /**
@@ -53,6 +54,25 @@ export async function readSavedWsePolygonMethodVersion(
     completedAt: typeof manifest.completedAt === 'string' ? manifest.completedAt : null,
     method,
   };
+}
+
+/**
+ * The modeled WSE version a saved polygon version was built from, as its Stage 4 manifest recorded it.
+ * Null when the folder has no manifest or the manifest predates UCS-296.
+ */
+export async function readSavedBuiltFromModeledWseVersion(
+  stageDirectory: string,
+  methodId: string,
+  version: number,
+): Promise<RecordedBuiltFromModeledWseVersion | null> {
+  try {
+    const manifest = JSON.parse(
+      await readFile(path.join(stageDirectory, wsePolygonVersionRelativePath(methodId, version), 'manifest.json'), 'utf8'),
+    ) as { parameters?: { builtFromModeledWseVersion?: RecordedBuiltFromModeledWseVersion } };
+    return manifest.parameters?.builtFromModeledWseVersion ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

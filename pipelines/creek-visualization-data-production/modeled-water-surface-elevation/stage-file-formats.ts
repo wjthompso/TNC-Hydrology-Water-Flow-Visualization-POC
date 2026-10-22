@@ -16,7 +16,7 @@ import {
 export const CROSS_SECTIONS_FILE = 'cross-sections.json';
 export const RATING_CURVES_FILE = 'rating-curves.json';
 /**
- * Stage 3 writes every Time Series under `03-time-series/time-series/<datasetId>/<variableId>/`,
+ * Stage 3 writes every Time Series under `03-time-series/<method-id>/v<version>/time-series/<datasetId>/<variableId>/`,
  * one compact file per TNC flowline: `<tncComid>.json`, or `<tncComid>/WY<year>.json` for an hourly Dataset.
  */
 export const TIME_SERIES_DIRECTORY_NAME = 'time-series';
@@ -243,7 +243,10 @@ export interface PolygonLaddersFile {
   }[];
 }
 
-/** Every Time Series file Stage 3 wrote, as paths relative to the Stage 3 directory, grouped by datasetId. */
+/**
+ * Every Time Series file one modeled WSE version wrote, as paths relative to that version's folder
+ * (`03-time-series/<method-id>/v<version>/`), grouped by datasetId.
+ */
 export async function listTimeSeriesFiles(timeSeriesStageDirectory: string): Promise<Map<string, string[]>> {
   const root = path.join(timeSeriesStageDirectory, TIME_SERIES_DIRECTORY_NAME);
   const entries = await readdir(root, { recursive: true });

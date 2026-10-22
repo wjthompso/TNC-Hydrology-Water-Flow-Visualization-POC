@@ -20,6 +20,7 @@ import {
   type CrossSectionsFile,
 } from './stage-file-formats.ts';
 import { runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
+import { refuseToOverwriteADifferentModeledWseVersion } from './modeled-wse-version.ts';
 import { TERRAIN_TILE_INDEX_FILE, TerrainSampler, readTerrainTileIndex } from './terrain-tiles.ts';
 
 /**
@@ -422,6 +423,7 @@ async function buildCrossSections(): Promise<StageResult> {
 }
 
 await runStageEntryPoint(async () => {
+  await refuseToOverwriteADifferentModeledWseVersion('01-cross-sections');
   await runStage({
     stage: '01-cross-sections',
     outputDirectory,

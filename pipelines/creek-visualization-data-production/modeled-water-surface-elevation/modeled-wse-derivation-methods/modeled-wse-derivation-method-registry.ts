@@ -9,7 +9,11 @@ export const MODELED_WSE_DERIVATION_METHODS: readonly ModeledWseDerivationMethod
   M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD,
 ];
 
-/** The method Stages 0–3 run today. Its folder's constants are what the stage code imports. */
+/**
+ * The method and version Stages 0–5 run. Its folder's constants are what the stage code imports, so
+ * this is the version the working tree's code produces. Stage 3 writes it to
+ * `03-time-series/<method-id>/v<version>/`.
+ */
 export const CURRENT_MODELED_WSE_DERIVATION_METHOD: ModeledWseDerivationMethodConfig =
   M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD;
 

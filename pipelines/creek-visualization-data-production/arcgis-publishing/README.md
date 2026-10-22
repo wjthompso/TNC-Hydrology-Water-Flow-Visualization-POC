@@ -202,9 +202,9 @@ Rules from [data/README.md](../../../data/README.md):
 
 ### Steps
 
-1. **Change the code or parameters.** For a WSE Polygon Generation Method, raise `version` in that method's `method-config.ts`; Stage 4 stops and asks for the bump when the method fingerprint changed ([METHODOLOGY.md](../modeled-water-surface-elevation/METHODOLOGY.md), "Version bump rule").
-2. **Rerun the pipeline stages** (section 3, step 1). The pipeline does not write versioned output yet (UCS-296): a rerun changes the files in `data/pipeline-working-output/` in place (Stage 4 does keep one folder per WSE Polygon Generation Method version). The frozen `m1-v1` copy under `data/data-product-versions/` is not touched. That folder is git-ignored, so it exists only on the machine that froze it.
-3. **Point the freeze scripts at the new label.** They are **not parameterized**; the label is written in the code (next section). Edit those places, then run the freeze commands. A freeze refuses to write over an existing label.
+1. **Change the code or parameters.** Raise `version` in the method's `method-config.ts` (for a Modeled WSE Derivation Method, also set `changeType` and `changeNote`, and add a row to its METHOD.md version history). Stages 0–5 stop and ask for the bump when the method fingerprint changed ([METHODOLOGY.md](../modeled-water-surface-elevation/METHODOLOGY.md), "Version bump rule").
+2. **Rerun the pipeline stages** (section 3, step 1), with `--force` for Stages 0–2 if you changed their code. Stage 3 writes the new version to its own `03-time-series/<method-id>/v<N>/` folder; the older version stays beside it. A new modeled WSE version also needs a polygon method version bump, so Stage 4 keeps the old polygons beside the new ones. The frozen `m1-v1` copy under `data/data-product-versions/` is not touched. That folder is git-ignored, so it exists only on the machine that froze it.
+3. **Point the freeze scripts at the new label.** The freeze reads the method's identity, change type, change note, fingerprint, and (for polygons) the modeled WSE version it was built from out of the stage manifests (UCS-296). The label and the ArcGIS names are still written in the code (next section), and parameterizing them is [UCS-298](https://linear.app/ucsb-spatial-center/issue/UCS-298/add-a-new-data-product-version-to-an-existing-hosted-service-without). Edit those places, then run the freeze commands. A freeze refuses to write over an existing label, and refuses when the method code changed since the stage ran.
 4. **Validate** (section 3, steps 3 and 5). The validators import the same constants, so they follow the edit.
 5. **Dry-run the publish** with the new `--version`.
 6. **Publish.** The script **refuses** (next but one section). Do not run `--publish` for a new version against the existing service.
@@ -214,12 +214,12 @@ Rules from [data/README.md](../../../data/README.md):
 | File | Hard-coded |
 | --- | --- |
 | `modeled_wse_version_layout.py` | `METHOD_ID`, `METHOD_NUMBER`, `VERSION_NUMBER`, `VERSION_LABEL`, `ARCGIS_PREFIX` (`modeled_wse_m1_v1`, which names every layer and table), the literal `UPLOAD_GDB_ZIP_NAME` (`modeled-wse-m1-v1.gdb.zip`), and `SERVICE_TITLE` / `SERVICE_NAME`. Version folder and table names derive from these. |
-| `freeze_modeled_wse_version.py` | `METHOD_COMMIT` (`54618bbb`), `OUTPUT_NEUTRAL_LATER_COMMITS`, `CHANGE_TYPE`, `STATUS`, the text of `change_note()`, `DERIVATION_SUMMARY`, the code-file list `STAGE_0_TO_3_CODE_FILES`, and the docstring. |
-| `freeze_wse_polygons_version.py` | `PRODUCT`, `METHOD_ID`, `METHOD_NUMBER`, `VERSION_NUMBER`, `VERSION_LABEL`, `ARCGIS_PREFIX`, `CHANGE_NOTE`, `CHANGE_TYPE`, `PIPELINE_METHOD_ID`, `PIPELINE_METHOD_VERSION`, `BUILT_FROM_MODELED_WSE` (points at modeled WSE `m1-v1`), `SERVICE_TITLE` / `SERVICE_NAME`, `UPLOAD_ZIP_NAME`. |
+| `freeze_modeled_wse_version.py` | `STATUS`, `DERIVATION_SUMMARY`, and the docstring. The change type, change note, fingerprint, and code-file list come from the Stage 3 manifest. |
+| `freeze_wse_polygons_version.py` | `PRODUCT`, `METHOD_ID`, `METHOD_NUMBER`, `VERSION_NUMBER`, `VERSION_LABEL`, `ARCGIS_PREFIX`, `CHANGE_NOTE`, `CHANGE_TYPE`, `PIPELINE_METHOD_ID`, `PIPELINE_METHOD_VERSION`, `SERVICE_TITLE` / `SERVICE_NAME`, `UPLOAD_ZIP_NAME`. The modeled WSE version it was built from comes from the Stage 4 manifest. |
 | `validate_wse_polygons_version.py` | `EXPECTED_NON_EMPTY_BUCKETS` (`102_607 - 1_483`) and `GAUGE_CREEK_SEGMENT_EXPECTED_BUCKETS` (137): counts that change when the output changes. |
 | `validate_modeled_wse_version.py` | `EXPECTED_SEGMENT_COUNT` (3,338) through the layout file. |
 | `publish_data_products_to_arcgis.py` | The `PRODUCTS` table fixes each product's `method_id` to the `m1-…` method. Another `v` of the same method works with `--version`; a new method number (`m2`) needs this table edited. |
-| Browser and checks | `creek-data-source-configuration.ts` holds `m1_v1` table names and fallback layer ids. `scripts/verify-hosted-modeled-data-equivalence.ts` reads the `junction-sloped-terrain-fill/v1` Stage 4 folder. |
+| Browser and checks | `creek-data-source-configuration.ts` holds `m1_v1` table names and fallback layer ids. `scripts/verify-hosted-modeled-data-equivalence.ts` reads the `m1-…/v1` Stage 3 folder and the `junction-sloped-terrain-fill/v1` Stage 4 folder. |
 
 ### What the publish script does when the service already exists
 

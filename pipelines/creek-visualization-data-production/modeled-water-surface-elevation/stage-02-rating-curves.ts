@@ -16,6 +16,7 @@ import {
   type RatingCurvesFile,
 } from './stage-file-formats.ts';
 import { runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
+import { refuseToOverwriteADifferentModeledWseVersion } from './modeled-wse-version.ts';
 
 /**
  * Stage 2 — rating curves. Manning's equation normal depth on each Creek Segment's
@@ -146,6 +147,7 @@ async function buildRatingCurves(): Promise<StageResult> {
 }
 
 await runStageEntryPoint(async () => {
+  await refuseToOverwriteADifferentModeledWseVersion('02-rating-curves');
   await runStage({
     stage: '02-rating-curves',
     outputDirectory,

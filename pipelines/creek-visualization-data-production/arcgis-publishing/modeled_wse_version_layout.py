@@ -68,8 +68,15 @@ def raw_hourly_csv_zip_name(water_year: int) -> str:
 
 # Pipeline working output (sources)
 EXTENT_WORKING_OUTPUT_FOLDER = PIPELINE_WORKING_OUTPUT_FOLDER / EXTENT_ID
-TIME_SERIES_FOLDER = EXTENT_WORKING_OUTPUT_FOLDER / "03-time-series" / "time-series"
-STAGE_3_MANIFEST_PATH = EXTENT_WORKING_OUTPUT_FOLDER / "03-time-series" / "manifest.json"
+# Stage 3 writes each Modeled WSE Derivation Method version to 03-time-series/<method-id>/v<version>/ (UCS-296).
+STAGE_3_VERSION_FOLDER = EXTENT_WORKING_OUTPUT_FOLDER / "03-time-series" / METHOD_ID / f"v{VERSION_NUMBER}"
+TIME_SERIES_FOLDER = STAGE_3_VERSION_FOLDER / "time-series"
+STAGE_3_MANIFEST_PATH = STAGE_3_VERSION_FOLDER / "manifest.json"
+MODELED_WSE_METHOD_CODE_FOLDER = (
+    REPOSITORY_ROOT
+    / "pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods"
+    / METHOD_ID
+)
 CATALOG_PATH = EXTENT_WORKING_OUTPUT_FOLDER / "05-catalog" / "catalog.json"
 SOURCE_MANIFEST_COPIES = {
     "01-cross-sections-manifest.json": EXTENT_WORKING_OUTPUT_FOLDER / "01-cross-sections" / "manifest.json",

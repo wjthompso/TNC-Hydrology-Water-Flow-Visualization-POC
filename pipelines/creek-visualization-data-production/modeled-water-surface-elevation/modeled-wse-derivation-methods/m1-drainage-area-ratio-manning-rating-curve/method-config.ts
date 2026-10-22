@@ -159,7 +159,8 @@ export const MANNING_ROUGHNESS_BASIS = {
 
 // ---- The method --------------------------------------------------------------
 
-const MODELED_WSE_CODE_FOLDER = 'pipelines/creek-visualization-data-production/modeled-water-surface-elevation';
+const PIPELINE_CODE_FOLDER = 'pipelines/creek-visualization-data-production';
+const MODELED_WSE_CODE_FOLDER = `${PIPELINE_CODE_FOLDER}/modeled-water-surface-elevation`;
 
 export const M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD = {
   id: 'm1-drainage-area-ratio-manning-rating-curve',
@@ -172,6 +173,11 @@ export const M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD = {
     'USGS 3DEP 1 m cross-sections.',
   changeType: 'new method',
   changeNote: 'First version of method m1: the Stage 0–3 method as of commit 54618bbb, frozen as m1-v1 from ed267d61.',
+  /**
+   * Every Stage 0–3 file whose change can change the output. Left out on purpose: `stage-manifest.ts`
+   * (skip logic) and `inspection-svg.ts` (draws the inspection hydrograph, not data).
+   * A new import in Stages 0–3 that affects output belongs here; METHODOLOGY.md "Version bump rule".
+   */
   sharedCodeFiles: [
     ...[
       'stage-00-acquire.ts',
@@ -186,10 +192,21 @@ export const M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD = {
       'creek-segment-network.ts',
       'national-water-model-zarr.ts',
       'nhdplusv2-reach-crosswalk.ts',
+      'nhdplusv2-reach-geometry.ts',
       'water-years.ts',
+      'http-download.ts',
+      'terrain-acquisition.ts',
+      'terrain-tiles.ts',
+      'stage-file-formats.ts',
+      'readable-json.ts',
     ].map((fileName) => `${MODELED_WSE_CODE_FOLDER}/${fileName}`),
-    'pipelines/creek-visualization-data-production/tnc-flowline-segmentation.ts',
-    'pipelines/creek-visualization-data-production/creek-segment-adjacency.ts',
+    ...[
+      'constants.ts',
+      'json-files.ts',
+      'utm-geometry.ts',
+      'tnc-flowline-segmentation.ts',
+      'creek-segment-adjacency.ts',
+    ].map((fileName) => `${PIPELINE_CODE_FOLDER}/${fileName}`),
   ],
   parameters: {
     drainageAreaRatioTransfer: { ...DRAINAGE_AREA_RATIO_TRANSFER, maximumTransferDistanceM: MAXIMUM_TRANSFER_DISTANCE_M },
