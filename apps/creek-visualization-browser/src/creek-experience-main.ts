@@ -12,7 +12,7 @@ import type { WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { HitTestCapture, HitTestCaptureHit } from './dev-tools-capture-schema';
 import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
 import {
-  DATASET_PICKER_OPTIONS,
+  availableDatasetPickerOptions,
   OBSERVED_DATASET_OPTION_ID,
   CAMERA_QUERY_PARAM,
   SEGMENT_QUERY_PARAM,
@@ -21,6 +21,9 @@ import {
   readDatasetSelection,
   readOpeningTimeQuery,
 } from './modeled-water-catalog';
+import { creekDataSourceConfiguration } from './creek-data-source-configuration';
+import { showModeledDatasetAccuracyNotice } from './modeled-dataset-accuracy-notices';
+import { showLoadingMessage } from './loading-spinner';
 import { installMonitoringStationLocator } from './monitoring-station-locator';
 import { addMonitoringStationMarkers } from './monitoring-station-marker-layer';
 import { readPlaybackSpeedButtons } from './observation-timeline-controls';
@@ -145,7 +148,11 @@ async function startExperience(): Promise<boolean> {
 
     if (selection.kind === 'modeled') {
       // Modeled water (UCS-271). The observed path below stays unchanged.
-      setLoadingOverlayText('Loading modeled water…');
+      setLoadingOverlayText(
+        creekDataSourceConfiguration.dataSource === 'hosted'
+          ? 'Loading modeled water from the Dangermond Preserve ArcGIS portal… (sign in if asked)'
+          : 'Loading modeled water…',
+      );
       const { startModeledCreekExperience } = await import('./modeled-creek-experience');
       const started = await startModeledCreekExperience(selection, {
         container,
@@ -162,6 +169,7 @@ async function startExperience(): Promise<boolean> {
       await restoreCarriedCamera(sceneView);
       hideLoadingOverlay();
       await installDevToolsIfRequested();
+      openAccuracyNoticeUnlessTestMode(selection.datasetId);
       return true;
     }
 
@@ -193,6 +201,19 @@ async function startExperience(): Promise<boolean> {
     showExperienceError(error instanceof Error ? error.message : 'The scene could not be started.');
     return false;
   }
+}
+
+/**
+ * Opens the modeled Dataset's accuracy notice (UCS-285), returning focus to the
+ * Dataset picker. Not awaited, so the experience is ready while the notice is
+ * open. Test mode skips it: an open modal would block the map clicks of live
+ * browser tests.
+ */
+function openAccuracyNoticeUnlessTestMode(datasetId: string): void {
+  if (import.meta.env.VITE_TEST_MODE === 'true') return;
+  const picker = document.getElementById('dataset-picker');
+  if (!(picker instanceof HTMLElement)) return;
+  void showModeledDatasetAccuracyNotice(datasetId, picker);
 }
 
 /**
@@ -237,7 +258,7 @@ function bindDatasetPicker(selectedOptionId: string): void {
   const picker = document.getElementById('dataset-picker');
   if (!(picker instanceof HTMLSelectElement)) return;
   picker.replaceChildren(
-    ...DATASET_PICKER_OPTIONS.map((option) => {
+    ...availableDatasetPickerOptions().map((option) => {
       const node = document.createElement('option');
       node.value = option.id;
       node.textContent = option.label;
@@ -294,7 +315,7 @@ function readModeledPanelElements(): {
 
 function setLoadingOverlayText(text: string): void {
   const overlay = document.getElementById('loading-overlay');
-  if (overlay) overlay.textContent = text;
+  if (overlay) showLoadingMessage(overlay, text);
 }
 
 function installTestSeam(readyPromise: Promise<boolean>): void {

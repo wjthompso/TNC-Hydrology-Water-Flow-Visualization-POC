@@ -79,7 +79,8 @@
               Play
             </button>
           </div>
-          <p id="timeline-readout" class="mb-2 text-sm font-medium text-cyan-100">Loading time…</p>
+          <!-- The spinner is replaced with the first selected time (observation-timeline-controls.ts). -->
+          <p id="timeline-readout" class="mb-2 text-sm font-medium text-cyan-100"><span class="loading-spinner" aria-hidden="true"></span>Loading time…</p>
           <label for="timeline-slider" class="sr-only">Observation time</label>
           <input
             id="timeline-slider"
@@ -306,10 +307,35 @@
 
       <div
         id="loading-overlay"
+        role="status"
         class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 text-sm text-slate-300"
+      ><span class="loading-spinner" aria-hidden="true"></span>Loading observed water…</div>
+
+      <!--
+        Accuracy notice for a modeled Dataset (UCS-285). Text is filled from
+        modeled-dataset-accuracy-notices.ts; showModal() puts it in the top layer.
+      -->
+      <dialog
+        id="dataset-accuracy-dialog"
+        aria-labelledby="dataset-accuracy-dialog-title"
+        aria-describedby="dataset-accuracy-dialog-body"
+        class="pointer-events-auto m-auto w-[min(26rem,calc(100vw-2rem))] rounded-xl border border-amber-400/40 bg-slate-900/95 p-5 text-slate-100 shadow-xl shadow-black/40 backdrop:bg-slate-950/70 backdrop:backdrop-blur-sm"
       >
-        Loading observed water…
-      </div>
+        <h2 id="dataset-accuracy-dialog-title" class="flex items-start gap-2 text-base font-semibold leading-snug text-amber-100">
+          <svg class="mt-0.5 h-4 w-4 shrink-0 text-amber-300" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 1.75 14.75 13.75H1.25L8 1.75ZM8 6v3.5M8 11.5v.25" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="dataset-accuracy-dialog-title-text"></span>
+        </h2>
+        <p id="dataset-accuracy-dialog-body" class="mt-2 text-sm leading-relaxed text-slate-300"></p>
+        <form method="dialog" class="mt-4 flex justify-end">
+          <button
+            id="dataset-accuracy-dialog-acknowledge"
+            type="submit"
+            class="cursor-pointer rounded-md border border-cyan-200 bg-cyan-400 px-3 py-1.5 text-sm font-semibold text-slate-950 hover:bg-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+          ></button>
+        </form>
+      </dialog>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

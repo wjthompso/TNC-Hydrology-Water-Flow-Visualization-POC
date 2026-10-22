@@ -2,6 +2,7 @@
 // Terms follow docs/architecture/glossary.md: Publisher, Dataset, Variable,
 // Time Series, Derivation, Hold rule, Creek Segment, Prepared water-surface polygon.
 
+import { creekDataSourceConfiguration } from './creek-data-source-configuration';
 import { PublishedCreekDataError } from './creek-data-contract';
 
 export const DATASET_QUERY_PARAM = 'dataset';
@@ -17,9 +18,28 @@ export const MODELED_EXTENT_IDS = ['jalama-gauge-reach', 'dangermond-preserve'] 
 /** Picker entries. The observed gauge keeps the existing experience and is the default. */
 export const DATASET_PICKER_OPTIONS = [
   { id: OBSERVED_DATASET_OPTION_ID, label: 'Observed gauge', kind: 'observed' },
-  { id: 'california-natural-flows-monthly', label: 'California Natural Flows monthly', kind: 'modeled' },
-  { id: 'national-water-model-hourly', label: 'National Water Model hourly', kind: 'modeled' },
+  {
+    id: 'california-natural-flows-monthly',
+    label: 'Inferred Creek WSE — monthly (from California Natural Flows)',
+    kind: 'modeled',
+  },
+  {
+    id: 'national-water-model-hourly',
+    label: 'Inferred Creek WSE — hourly (from NOAA National Water Model v3.0 flows)',
+    kind: 'modeled',
+  },
 ] as const;
+
+/**
+ * Picker entries this build offers: the California Natural Flows monthly
+ * Dataset only when `VITE_SHOW_CALIFORNIA_NATURAL_FLOWS_MONTHLY` is true.
+ */
+export function availableDatasetPickerOptions(): readonly (typeof DATASET_PICKER_OPTIONS)[number][] {
+  return DATASET_PICKER_OPTIONS.filter(
+    (option) =>
+      option.id !== 'california-natural-flows-monthly' || creekDataSourceConfiguration.showCaliforniaNaturalFlowsMonthly,
+  );
+}
 
 export type ModeledDatasetId = Extract<
   (typeof DATASET_PICKER_OPTIONS)[number],
@@ -42,7 +62,7 @@ export type DatasetSelection =
 export function readDatasetSelection(locationSearch: string): DatasetSelection {
   const params = new URLSearchParams(locationSearch);
   const datasetId = params.get(DATASET_QUERY_PARAM);
-  const option = DATASET_PICKER_OPTIONS.find((item) => item.id === datasetId);
+  const option = availableDatasetPickerOptions().find((item) => item.id === datasetId);
   if (!option || option.kind !== 'modeled') return { kind: 'observed' };
   const extentParam = params.get(MODELED_EXTENT_QUERY_PARAM);
   const extentId = extentParam && extentParam.trim().length > 0 ? extentParam.trim() : DEFAULT_MODELED_EXTENT_ID;
