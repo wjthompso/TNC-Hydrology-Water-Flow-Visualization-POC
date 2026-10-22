@@ -6,7 +6,8 @@ import {
 import { creekDataSourceConfiguration } from './creek-data-source-configuration';
 import { HostedFeatureServiceAuthenticationError } from './hosted-feature-service-query';
 
-const DATA_ROOT = '/published-creek-visualization-data';
+/** `BASE_URL` keeps the shipped files reachable when the app is built under a sub-path, e.g. inside the Digital Twin. */
+const DATA_ROOT = `${import.meta.env.BASE_URL}published-creek-visualization-data`;
 const JALAMA_STATION_ID = 'USGS-11120600';
 const OBSERVED_SERIES_PATH = `${DATA_ROOT}/creek-segment-time-series/usgs-11120600-observed-wse.json`;
 

@@ -25,7 +25,8 @@ export interface StationMarkerModel {
   credit: string;
 }
 
-const MODELS = '/station-marker-models';
+/** `BASE_URL` keeps the models reachable when the app is built under a sub-path, e.g. inside the Digital Twin. */
+const MODELS = `${import.meta.env.BASE_URL}station-marker-models`;
 const DOWNLOADED = `${MODELS}/downloaded`;
 
 /** Chosen marker for a stream gauge. Its radar arm points along heading + 90°. */
