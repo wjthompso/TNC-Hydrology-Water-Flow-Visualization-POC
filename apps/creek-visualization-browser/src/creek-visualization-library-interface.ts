@@ -50,6 +50,7 @@ export interface CreekVisualizationAttachment {
 }
 
 const NO_OBSERVATION_STATUS = 'No observation at this time';
+const PROVISIONAL_STATUS = 'Provisional USGS data, subject to revision';
 
 /** Attaches observed-water playback to a SceneView the shell already created. */
 export function attachCreekVisualization(
@@ -105,7 +106,14 @@ export function attachCreekVisualization(
     state.selectedTimeUtcMs = timeUtcMs;
     const resolved = resolveSelectedTimeCreekState(options.data, timeUtcMs);
     state.observedWaterSurfaceElevationM = resolved.observedWaterSurfaceElevationM;
-    options.status.textContent = resolved.hasObservation ? '' : NO_OBSERVATION_STATUS;
+    const provisional = resolved.hasObservation && resolved.approvalStatus === 'Provisional';
+    options.status.textContent = resolved.hasObservation
+      ? provisional
+        ? PROVISIONAL_STATUS
+        : ''
+      : NO_OBSERVATION_STATUS;
+    options.status.classList.toggle('text-amber-300', provisional);
+    options.status.classList.toggle('text-slate-300', !provisional);
     renderer.schedule(applyPins(resolved.placements));
     selectedCreekSegmentChart?.setSelectedTime(timeUtcMs);
   };

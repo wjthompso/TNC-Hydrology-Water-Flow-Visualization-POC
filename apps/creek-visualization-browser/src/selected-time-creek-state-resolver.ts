@@ -1,4 +1,4 @@
-import type { ElevationBucket, LoadedCreekVisualization } from './creek-data-contract';
+import type { ElevationBucket, LoadedCreekVisualization, ObservedApprovalStatus } from './creek-data-contract';
 
 export interface SegmentWaterPlacement {
   segmentId: string;
@@ -12,6 +12,8 @@ export interface SelectedTimeCreekState {
   hasObservation: boolean;
   /** The gauge segment's observed water-surface elevation at this exact timestamp, in meters NAVD88. */
   observedWaterSurfaceElevationM: number | null;
+  /** USGS review status of the reading at this timestamp; null when unknown (local files carry none). */
+  approvalStatus: ObservedApprovalStatus | null;
   placements: readonly SegmentWaterPlacement[];
 }
 
@@ -39,6 +41,7 @@ export function resolveSelectedTimeCreekState(
     timeUtcMs,
     hasObservation: observedWaterSurfaceElevationM !== null,
     observedWaterSurfaceElevationM,
+    approvalStatus: timeIndex >= 0 ? (data.approvalStatuses?.[timeIndex] ?? null) : null,
     placements,
   };
 }

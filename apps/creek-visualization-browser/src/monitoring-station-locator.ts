@@ -51,8 +51,12 @@ const LOCATOR_ICON_HREF = `data:image/svg+xml;charset=utf-8,${encodeURIComponent
 
 interface StationOnMap {
   readonly attributes: StationMarkerAttributes;
-  /** Ground height in meters at the station, from the drawn terrain. */
-  readonly groundElevationM: number;
+  /**
+   * Ground height in meters at the station, from the drawn terrain. Starts at
+   * 0 m and is filled in when the terrain answers, so a slow elevation service
+   * never holds the loading overlay (UCS-285).
+   */
+  groundElevationM: number;
   readonly locator: Graphic;
 }
 
@@ -83,7 +87,7 @@ export async function installMonitoringStationLocator(
       visible: false,
     });
     locatorLayer.add(locator);
-    stations.push({ attributes, groundElevationM: await groundElevationM(view, attributes), locator });
+    stations.push({ attributes, groundElevationM: 0, locator });
   }
 
   let openStation: StationOnMap | null = null;
@@ -168,6 +172,17 @@ export async function installMonitoringStationLocator(
     () => [view.width, view.height],
     () => placeCard(),
   );
+
+  // Not awaited: the ground height only refines the card anchor and the pin's
+  // camera distance, and `queryElevation` can wait a minute on a stalled
+  // elevation service.
+  for (const station of stations) {
+    void groundElevationM(view, station.attributes).then((elevationM) => {
+      station.groundElevationM = elevationM;
+      updateLocators();
+      placeCard();
+    });
+  }
 }
 
 function locatorSymbol(): PointSymbol3D {

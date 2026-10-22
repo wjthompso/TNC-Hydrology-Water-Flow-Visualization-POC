@@ -33,6 +33,9 @@ export interface ElevationBucket {
   ringsWgs84: readonly LonLatRing[];
 }
 
+/** USGS review status of one gauge reading. */
+export type ObservedApprovalStatus = 'Provisional' | 'Approved';
+
 export interface MonitoringStation {
   stationId: string;
   name: string;
@@ -49,6 +52,8 @@ export interface LoadedCreekVisualization {
   polygonSetSegmentIds: readonly string[];
   station: MonitoringStation;
   timestampsUtcMs: readonly number[];
+  /** Parallel to `timestampsUtcMs`. Absent for the shipped local files, which do not carry it. */
+  approvalStatuses?: readonly (ObservedApprovalStatus | null)[];
   waterSurfaceElevationMBySegmentId: ReadonlyMap<string, readonly (number | null)[]>;
   clock: ObservationClock;
   openingGridIndex: number;
@@ -164,6 +169,7 @@ export function assembleLoadedCreekVisualization(
     polygonSetSegmentIds,
     station,
     timestampsUtcMs: series.timestampsUtcMs,
+    ...(series.approvalStatuses ? { approvalStatuses: series.approvalStatuses } : {}),
     waterSurfaceElevationMBySegmentId,
     clock,
     openingGridIndex: openingGridIndexFor(
@@ -343,6 +349,7 @@ function readObservedTimeSeries(value: unknown): {
   segmentNetworkVersion: string;
   sourceId: string;
   timestampsUtcMs: number[];
+  approvalStatuses: (ObservedApprovalStatus | null)[] | null;
   segments: { segmentId: string; waterSurfaceElevationM: (number | null)[] }[];
 } {
   const record = readRecord(value, 'observed time series');
@@ -372,8 +379,25 @@ function readObservedTimeSeries(value: unknown): {
     segmentNetworkVersion: readVersion(record, 'observed time series'),
     sourceId: readId(record.sourceId, 'observed time series source'),
     timestampsUtcMs,
+    approvalStatuses: readApprovalStatuses(record.approvalStatuses, timestampsUtcMs.length),
     segments,
   };
+}
+
+/** Optional list parallel to the timestamps; the shipped local file has none. */
+function readApprovalStatuses(
+  value: unknown,
+  timestampCount: number,
+): (ObservedApprovalStatus | null)[] | null {
+  if (value === undefined) return null;
+  const statuses = readArray(value, 'observed approval statuses').map((status) => {
+    if (status === null || status === 'Provisional' || status === 'Approved') return status;
+    return fail('An observed approval status must be Provisional, Approved, or null.');
+  });
+  if (statuses.length !== timestampCount) {
+    fail('Observed approval statuses do not line up with the observed timestamps.');
+  }
+  return statuses;
 }
 
 function readReading(value: unknown): number | null {

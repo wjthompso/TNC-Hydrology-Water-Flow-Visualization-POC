@@ -5,6 +5,7 @@ import Extent from '@arcgis/core/geometry/Extent';
 import Point from '@arcgis/core/geometry/Point';
 import esriConfig from '@arcgis/core/config.js';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
+import { waitAtMost } from './bounded-startup-wait';
 import Usgs3DepElevationLayer, { preflightElevationAtPoint } from './usgs-elevation-layer';
 import { readSceneImageryId } from './scene-imagery-options';
 import { showSceneImagery } from './scene-imagery';
@@ -15,6 +16,10 @@ const CAMERA_SLANT_RANGE_M = 180;
 const CAMERA_TILT_DEGREES = 58;
 /** Pads the 3DEP request window around the segment so zoom-in never hits its edge. */
 const TERRAIN_BUFFER_M = 25000;
+/** A warm 3DEP preflight answers in under 0.5 s and a cold one in 1–4 s; startup stops waiting after this. */
+const USGS_TERRAIN_PREFLIGHT_WAIT_LIMIT_MS = 3000;
+/** Fallback framing height from Esri World Elevation; 0 m is used after this. */
+const WORLD_ELEVATION_SAMPLE_WAIT_LIMIT_MS = 1000;
 
 /** A developer key raises tile quota. World Imagery and World Elevation load without one. */
 function configureApiKey(): void {
@@ -102,9 +107,21 @@ export async function createStandaloneExperienceShell(
 
   // Attach USGS 3DEP 1 m terrain over Esri World Elevation near the creek. A
   // preflight validates one real 3DEP tile first; if USGS is unreachable the
-  // scene still renders on World Elevation alone.
+  // scene still renders on World Elevation alone. A slow preflight no longer
+  // holds the loading overlay (UCS-285): after the wait limit the camera frames
+  // without it, and the layer is still attached when the tile arrives.
   const center = pathCenter(segmentPathWgs84);
-  const groundElevationM = await attachUsgsTerrain(map, segmentPathWgs84, center);
+  const usgsTerrain = await waitAtMost(
+    attachUsgsTerrain(map, segmentPathWgs84, center),
+    USGS_TERRAIN_PREFLIGHT_WAIT_LIMIT_MS,
+  );
+  if (!usgsTerrain.settled) {
+    console.warn(
+      `USGS 3DEP terrain did not answer within ${USGS_TERRAIN_PREFLIGHT_WAIT_LIMIT_MS / 1000} s; ` +
+        'framing the camera without it. The terrain is added when it arrives.',
+    );
+  }
+  const groundElevationM = usgsTerrain.settled ? usgsTerrain.value : null;
 
   await view.when();
 
@@ -116,9 +133,9 @@ export async function createStandaloneExperienceShell(
 
 /**
  * Builds the USGS 3DEP layer, preflights one tile at the creek, and adds it to
- * the ground when that tile is valid. Returns the sampled 3DEP ground height so
- * the opening camera frames against the real terrain, or null when the layer
- * was not attached.
+ * the ground when that tile is valid, even if the caller stopped waiting.
+ * Returns the sampled 3DEP ground height so the opening camera frames against
+ * the real terrain, or null when the layer was not attached.
  */
 async function attachUsgsTerrain(
   map: EsriMap,
@@ -144,13 +161,19 @@ async function sampleWorldElevation(
   center: { lon: number; lat: number },
 ): Promise<number | null> {
   try {
-    const result = await map.ground.queryElevation(
-      new Point({
-        longitude: center.lon,
-        latitude: center.lat,
-        spatialReference: { wkid: 4326 },
-      }),
+    // World Elevation can hang for a minute when elevation3d.arcgis.com is unreachable.
+    const answer = await waitAtMost(
+      map.ground.queryElevation(
+        new Point({
+          longitude: center.lon,
+          latitude: center.lat,
+          spatialReference: { wkid: 4326 },
+        }),
+      ),
+      WORLD_ELEVATION_SAMPLE_WAIT_LIMIT_MS,
     );
+    if (!answer.settled) return null;
+    const result = answer.value;
     if (result.geometry.type !== 'point') return null;
     const elevationM = result.geometry.z;
     return typeof elevationM === 'number' && Number.isFinite(elevationM) ? elevationM : null;
