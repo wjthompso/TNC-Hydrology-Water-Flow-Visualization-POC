@@ -62,6 +62,13 @@
       "lifecycleChange": null
     },
     {
+      "id": "F-180",
+      "featureSetId": "FS-100",
+      "name": "Control panel layout",
+      "lifecycle": "active",
+      "lifecycleChange": null
+    },
+    {
       "id": "F-900",
       "featureSetId": "FS-900",
       "name": "Account sign-in",
@@ -425,6 +432,25 @@
       "durationBudgetMs": 20000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-170-dev-tools-click-marker/behavior/FBT-018.live.spec.ts"
+    },
+    {
+      "id": "FBT-020",
+      "name": "Zooming the browser in makes the control panel scroll to its last line, and a thin scrollbar shows only while the pointer is over the panel.",
+      "methodology": "Opens the timeline fixture page with the real control panel markup and stylesheet. The ArcGIS scene and published gauge series are not loaded, and the test fails if the page requests ArcGIS. A 1280×300 window stands in for a zoomed-in browser, which shrinks the page's CSS viewport. There, the panel's last line (the imagery credit) starts below the window edge, the panel stays inside the window, and the panel's own scroll area is taller than it is visible. The test then moves the real mouse over the panel and turns the real wheel, and checks that the scroll offset moves and the credit comes inside the window. For the scrollbar, it reads the panel's computed scrollbar color with the pointer away (thumb transparent), over the panel (thumb visible), and away again (transparent). At a 1280×1600 window the panel has no scroll overflow. It does not check the scrollbar's pixels, its look in Firefox or Safari, touch scrolling, or the map.",
+      "category": "feature-behavior",
+      "owner": "F-180",
+      "additionalFeatureAssociations": [],
+      "scope": "component",
+      "environment": "browser",
+      "browserMode": "deterministic",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 5000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-180-control-panel-layout/behavior/FBT-020.deterministic.spec.ts"
     },
     {
       "id": "FBT-131",
