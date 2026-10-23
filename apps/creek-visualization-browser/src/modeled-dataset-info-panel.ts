@@ -10,12 +10,12 @@ import {
 } from './drainage-area-ratio-transfer-labels';
 import type { DerivationParameter, SelectedModeledDataset } from './modeled-water-catalog';
 
-const SUMMARY_CLASS = 'space-y-2 pb-2 text-[11px] leading-snug text-slate-300';
+const SUMMARY_CLASS = 'space-y-2 pb-2 text-sm leading-snug text-slate-300';
 const LINK_CLASS =
   'text-cyan-300 underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300';
 const BODY_CLASS =
-  'space-y-2 border-t border-slate-700 px-2 pb-2 pt-2 text-[11px] leading-snug text-slate-300';
-const HEADING_CLASS = 'text-[10px] font-semibold uppercase tracking-wide text-slate-400';
+  'space-y-2 border-t border-slate-700 px-2 pb-2 pt-2 text-sm leading-snug text-slate-300';
+const HEADING_CLASS = 'text-xs font-semibold uppercase tracking-wide text-slate-400';
 const LIST_CLASS = 'mt-0.5 list-outside space-y-0.5 pl-4';
 
 interface SourceLink {
@@ -86,7 +86,7 @@ function summaryBlock(selected: SelectedModeledDataset): HTMLElement {
 
 /** Collapsed details: summary first, then catalog facts and the full Derivation. */
 function detailsBlock(selected: SelectedModeledDataset): HTMLElement {
-  const details = element('details', 'rounded-md border border-slate-700 bg-slate-950/60 text-xs');
+  const details = element('details', 'rounded-md border border-slate-700 bg-slate-950/60 text-sm');
   details.id = 'modeled-dataset-details';
   const summary = element(
     'summary',
