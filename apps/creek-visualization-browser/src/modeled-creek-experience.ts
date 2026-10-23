@@ -128,7 +128,7 @@ export interface DrainageAreaRatioTransferSegment {
 
 export interface ModeledExperienceSeam {
   readonly datasetId: string;
-  /** Picker label of the Dataset, e.g. "Inferred Creek WSE — monthly (from California Natural Flows)". */
+  /** Picker label of the Dataset, e.g. "Modeled Creek Water Levels — monthly (from California Natural Flows)". */
   readonly datasetLabel: string;
   readonly extentId: string;
   readonly selectedTimeUtcMs: number;

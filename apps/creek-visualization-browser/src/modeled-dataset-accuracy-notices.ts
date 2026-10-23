@@ -18,7 +18,7 @@ export interface ModeledDatasetAccuracyNotice {
 export const MODELED_DATASET_ACCURACY_NOTICES: Readonly<Partial<Record<ModeledDatasetId, ModeledDatasetAccuracyNotice>>> = {
   'national-water-model-hourly': {
     title: 'Estimated values, not measurements',
-    body: "These water surface elevations are inferred from modeled flow rates (NOAA National Water Model v3.0) and USGS 3DEP terrain using Manning's equation. The modeled flows are not corrected against gauge readings and can be off by a factor of 2 to 5 on small creeks like these, so the timing of rises and falls is more reliable than the exact heights.",
+    body: "These modeled water levels (water-surface elevation, WSE: the water's height above sea level, NAVD88) are calculated from modeled flow rates (NOAA National Water Model v3.0) and USGS 3DEP terrain using Manning's equation. The modeled flows are not corrected against gauge readings and can be off by a factor of 2 to 5 on small creeks like these, so the timing of rises and falls is more reliable than the exact heights.",
     acknowledgeLabel: 'I understand',
   },
 };
