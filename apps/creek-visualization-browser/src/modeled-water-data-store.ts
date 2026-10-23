@@ -12,7 +12,12 @@ import {
 } from './creek-data-contract';
 import { waterYearOf, type CatalogTimeSeries } from './modeled-water-catalog';
 import type { ModeledDataSource } from './modeled-data-source';
-import type { JunctionWaterSurface, SegmentFlowlinePath, SegmentSurfaceGeometry } from './sloped-water-surface';
+import type {
+  BedParallelWaterDepth,
+  JunctionWaterSurface,
+  SegmentFlowlinePath,
+  SegmentSurfaceGeometry,
+} from './sloped-water-surface';
 
 /** Flowlines kept in memory before least-recently-needed ones are dropped. */
 const MAX_CACHED_FLOWLINES = 24;
@@ -49,6 +54,22 @@ export interface LoadedTimeSeries {
   transferSegmentIds: ReadonlySet<string>;
   /** Per-segment drainage-area ratio, when the pipeline writes it on the segment (optional field). */
   drainageAreaRatioBySegmentId: ReadonlyMap<string, number>;
+  /**
+   * Creek-bed elevation under the segment's anchor cross-section, m NAVD88
+   * (optional field `anchorBedElevationM`; written by depth-based modeled WSE
+   * methods such as `m2-multi-section-manning-depth`).
+   */
+  anchorBedElevationMBySegmentId: ReadonlyMap<string, number>;
+  /**
+   * Water depth above the bed at each segment end, parallel to `values`
+   * (optional fields `junctionDepthUpstreamM` / `junctionDepthDownstreamM`).
+   * A segment is absent when its file lacks them.
+   */
+  junctionDepthUpstreamBySegmentId: ReadonlyMap<string, readonly (number | null)[]>;
+  junctionDepthDownstreamBySegmentId: ReadonlyMap<string, readonly (number | null)[]>;
+  /** Creek-bed elevation at each segment end, m NAVD88 (optional fields `junctionBedUpstreamM` / `junctionBedDownstreamM`). */
+  junctionBedUpstreamMBySegmentId: ReadonlyMap<string, number>;
+  junctionBedDownstreamMBySegmentId: ReadonlyMap<string, number>;
 }
 
 export interface LoadedFlowline {
@@ -67,6 +88,13 @@ export interface ModeledWaterDataStoreOptions {
    * relative to the extent, e.g. `04-water-surface-polygons/junction-sloped-terrain-fill/v1`.
    */
   wsePolygonMethodPath: string;
+  /**
+   * Modeled WSE version folder the selected method's polygons were built from,
+   * relative to `03-time-series/`, e.g. `m2-multi-section-manning-depth/v1`.
+   * Local data only: Time Series load from this folder instead of the one the
+   * catalog paths name. Null or absent keeps the catalog paths.
+   */
+  modeledWseVersionPath?: string | null;
   timeSeries: CatalogTimeSeries;
   /** `hourly` Datasets split each flowline into WY<year>.json files. */
   timeStep: string;
@@ -87,17 +115,27 @@ export interface ModeledWaterDataStore {
   /** Last fetch failure message, or null. Shown in the status line. */
   readonly lastError: string | null;
   /**
-   * Switches to another WSE Polygon Generation Method version folder: drops
-   * every cached flowline so the next `setNeeded` loads that version's polygons.
-   * A fetch still in flight for the previous folder is discarded when it lands.
+   * Switches to another WSE Polygon Generation Method version folder and the
+   * modeled WSE version folder its polygons were built from: drops every
+   * cached flowline (polygons and Time Series) so the next `setNeeded` loads
+   * that version's files. A fetch still in flight for the previous folders is
+   * discarded when it lands.
    */
-  setWsePolygonMethodPath(wsePolygonMethodPath: string): void;
+  setWsePolygonMethodPath(wsePolygonMethodPath: string, modeledWseVersionPath?: string | null): void;
 }
 
 export function createModeledWaterDataStore(
   options: ModeledWaterDataStoreOptions,
 ): ModeledWaterDataStore {
-  const pathByKey = timeSeriesPathsByKey(options.timeSeries, options.timeStep);
+  let modeledWseVersionPath = options.modeledWseVersionPath ?? null;
+  const pathsByKeyFor = (versionPath: string | null): Map<string, string> =>
+    timeSeriesPathsByKey(
+      options.timeSeries,
+      options.timeStep,
+      // Hosted data has one modeled WSE version and its own path rules, so only local paths are rewritten.
+      options.dataSource.kind === 'local' ? versionPath : null,
+    );
+  let pathByKey = pathsByKeyFor(modeledWseVersionPath);
   const cache = new Map<string, LoadedFlowline>();
   const lastNeededAt = new Map<string, number>();
   const inFlight = new Set<string>();
@@ -153,7 +191,8 @@ export function createModeledWaterDataStore(
     if (flowline.seriesByKey.has(seriesKey)) return;
     const relative = pathByKey.get(`${flowline.tncComid}/${seriesKey}`);
     if (!relative) return; // No Time Series for this flowline and time; nothing to show.
-    enqueue(`series:${flowline.tncComid}/${seriesKey}`, async () => {
+    // The generation keeps a fetch for the previous method's Time Series folder from blocking this one.
+    enqueue(`series:${cacheGeneration}:${flowline.tncComid}/${seriesKey}`, async () => {
       const file = await options.dataSource.loadTimeSeries(options.extentId, relative);
       flowline.seriesByKey.set(seriesKey, readTimeSeriesFile(file));
       // Keep only the current water year plus one neighbour per flowline.
@@ -224,9 +263,13 @@ export function createModeledWaterDataStore(
     get lastError() {
       return lastError;
     },
-    setWsePolygonMethodPath(nextPath) {
-      if (nextPath === wsePolygonMethodPath) return;
+    setWsePolygonMethodPath(nextPath, nextModeledWseVersionPath = null) {
+      if (nextPath === wsePolygonMethodPath && nextModeledWseVersionPath === modeledWseVersionPath) return;
       wsePolygonMethodPath = nextPath;
+      if (nextModeledWseVersionPath !== modeledWseVersionPath) {
+        modeledWseVersionPath = nextModeledWseVersionPath;
+        pathByKey = pathsByKeyFor(modeledWseVersionPath);
+      }
       cacheGeneration += 1;
       cache.clear();
       lastNeededAt.clear();
@@ -236,11 +279,17 @@ export function createModeledWaterDataStore(
 
 /**
  * Maps `<tncComid>/<seriesKey>` to a catalog path. Hourly paths end in
- * `<comid>/WY<year>.json`; one-file Datasets end in `<comid>.json`.
+ * `<comid>/WY<year>.json`; one-file Datasets end in `<comid>.json`. With a
+ * `modeledWseVersionPath`, each path's version folder is swapped for it.
  */
-function timeSeriesPathsByKey(timeSeries: CatalogTimeSeries, timeStep: string): Map<string, string> {
+function timeSeriesPathsByKey(
+  timeSeries: CatalogTimeSeries,
+  timeStep: string,
+  modeledWseVersionPath: string | null,
+): Map<string, string> {
   const byKey = new Map<string, string>();
-  for (const path of timeSeries.paths) {
+  for (const catalogPath of timeSeries.paths) {
+    const path = modeledWseVersionPath ? inModeledWseVersionFolder(catalogPath, modeledWseVersionPath) : catalogPath;
     const hourly = /\/(\d+)\/WY(\d{4})\.json$/.exec(path);
     if (hourly && timeStep === 'hourly') {
       byKey.set(`${hourly[1]}/WY${hourly[2]}`, path);
@@ -250,6 +299,22 @@ function timeSeriesPathsByKey(timeSeries: CatalogTimeSeries, timeStep: string): 
     if (single) byKey.set(`${single[1]}/all`, path);
   }
   return byKey;
+}
+
+/**
+ * Catalog paths start with the modeled WSE version folder:
+ * `<method-id>/v<version>/time-series/…`. Swaps those two segments for
+ * `modeledWseVersionPath` (e.g. `m2-multi-section-manning-depth/v1`). A path
+ * already in that folder, or one without a version folder (an older flat
+ * `time-series/…` layout), stays as it is.
+ */
+function inModeledWseVersionFolder(catalogPath: string, modeledWseVersionPath: string): string {
+  const segments = catalogPath.split('/');
+  const hasVersionFolder = segments.length > 2 && /^v\d+$/.test(segments[1]);
+  if (!hasVersionFolder) return catalogPath;
+  const currentFolder = `${segments[0]}/${segments[1]}`;
+  if (currentFolder === modeledWseVersionPath) return catalogPath;
+  return [modeledWseVersionPath, ...segments.slice(2)].join('/');
 }
 
 export async function fetchJson(url: string): Promise<unknown> {
@@ -335,6 +400,11 @@ function readTimeSeriesFile(value: unknown): LoadedTimeSeries {
   const junctionDownstreamBySegmentId = new Map<string, readonly (number | null)[]>();
   const transferSegmentIds = new Set<string>();
   const drainageAreaRatioBySegmentId = new Map<string, number>();
+  const anchorBedElevationMBySegmentId = new Map<string, number>();
+  const junctionDepthUpstreamBySegmentId = new Map<string, readonly (number | null)[]>();
+  const junctionDepthDownstreamBySegmentId = new Map<string, readonly (number | null)[]>();
+  const junctionBedUpstreamMBySegmentId = new Map<string, number>();
+  const junctionBedDownstreamMBySegmentId = new Map<string, number>();
   for (const item of asArray(record.segments, 'time series segments')) {
     const segment = asRecord(item, 'time series segment');
     const segmentId = String(segment.segmentId);
@@ -359,6 +429,24 @@ function readTimeSeriesFile(value: unknown): LoadedTimeSeries {
     if (typeof segment.drainageAreaRatio === 'number' && Number.isFinite(segment.drainageAreaRatio)) {
       drainageAreaRatioBySegmentId.set(segmentId, segment.drainageAreaRatio);
     }
+    // Depth fields are optional (depth-based modeled WSE methods only).
+    const anchorBedM = finiteOrNull(segment.anchorBedElevationM);
+    if (anchorBedM !== null) anchorBedElevationMBySegmentId.set(segmentId, anchorBedM);
+    const bedUpstreamM = finiteOrNull(segment.junctionBedUpstreamM);
+    if (bedUpstreamM !== null) junctionBedUpstreamMBySegmentId.set(segmentId, bedUpstreamM);
+    const bedDownstreamM = finiteOrNull(segment.junctionBedDownstreamM);
+    if (bedDownstreamM !== null) junctionBedDownstreamMBySegmentId.set(segmentId, bedDownstreamM);
+    const depthUpstream = segment.junctionDepthUpstreamM;
+    const depthDownstream = segment.junctionDepthDownstreamM;
+    if (
+      Array.isArray(depthUpstream) &&
+      Array.isArray(depthDownstream) &&
+      depthUpstream.length === values.length &&
+      depthDownstream.length === values.length
+    ) {
+      junctionDepthUpstreamBySegmentId.set(segmentId, depthUpstream as (number | null)[]);
+      junctionDepthDownstreamBySegmentId.set(segmentId, depthDownstream as (number | null)[]);
+    }
   }
   return {
     timestampsUtcMs,
@@ -367,6 +455,11 @@ function readTimeSeriesFile(value: unknown): LoadedTimeSeries {
     junctionDownstreamBySegmentId,
     transferSegmentIds,
     drainageAreaRatioBySegmentId,
+    anchorBedElevationMBySegmentId,
+    junctionDepthUpstreamBySegmentId,
+    junctionDepthDownstreamBySegmentId,
+    junctionBedUpstreamMBySegmentId,
+    junctionBedDownstreamMBySegmentId,
   };
 }
 
@@ -461,6 +554,36 @@ export function heldJunctionWaterSurfaceAt(
   const downstreamM = finiteOrNull(series.junctionDownstreamBySegmentId.get(segmentId)?.[index]);
   if (upstreamM === null || downstreamM === null) return null;
   return { upstreamM, downstreamM };
+}
+
+/**
+ * Water depth held at the selected time, under the same hold rule as
+ * `heldValueAt`: held value − `anchorBedElevationM`, clamped at 0, plus the
+ * junction depths when the file has them. Null when there is no held value or
+ * the file has no anchor bed for the segment.
+ */
+export function heldWaterDepthAt(
+  series: LoadedTimeSeries,
+  segmentId: string,
+  timeUtcMs: number,
+  holdMs: number,
+): BedParallelWaterDepth | null {
+  const index = heldIndexAt(series, timeUtcMs, holdMs);
+  if (index < 0) return null;
+  const waterSurfaceElevationM = finiteOrNull(series.valuesBySegmentId.get(segmentId)?.[index]);
+  const anchorBedElevationM = series.anchorBedElevationMBySegmentId.get(segmentId);
+  if (waterSurfaceElevationM === null || anchorBedElevationM === undefined) return null;
+  const upstreamM = finiteOrNull(series.junctionDepthUpstreamBySegmentId.get(segmentId)?.[index]);
+  const downstreamM = finiteOrNull(series.junctionDepthDownstreamBySegmentId.get(segmentId)?.[index]);
+  return {
+    waterSurfaceElevationM,
+    anchorBedElevationM,
+    anchorDepthM: Math.max(0, waterSurfaceElevationM - anchorBedElevationM),
+    junctionDepth:
+      upstreamM === null || downstreamM === null
+        ? null
+        : { upstreamM: Math.max(0, upstreamM), downstreamM: Math.max(0, downstreamM) },
+  };
 }
 
 /** Index of the value held at the selected time, or -1 beyond the hold or before the first value. */

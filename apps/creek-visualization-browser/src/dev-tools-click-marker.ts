@@ -8,6 +8,7 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import SimpleLineSymbol from '@arcgis/core/symbols/SimpleLineSymbol';
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol';
 import type SceneView from '@arcgis/core/views/SceneView';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 
 /** Signal yellow, the same yellow as the dev tools hazard stripe. */
 const MARKER_YELLOW = '#f3ef2a';
@@ -19,13 +20,20 @@ export interface DevToolsClickMarker {
   noteClick(mapPoint: Point | null | undefined): void;
 }
 
-export function createDevToolsClickMarker(view: SceneView): DevToolsClickMarker {
+export function createDevToolsClickMarker(
+  view: SceneView,
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
+): DevToolsClickMarker {
   const layer = new GraphicsLayer({
     id: 'dev-hud-click-marker',
     listMode: 'hide',
     visible: false,
   });
   view.map?.add(layer);
+  lifetime.onEnd(() => {
+    view.map?.remove(layer);
+    layer.destroy();
+  });
 
   const ringSymbol = new SimpleMarkerSymbol({
     style: 'circle',

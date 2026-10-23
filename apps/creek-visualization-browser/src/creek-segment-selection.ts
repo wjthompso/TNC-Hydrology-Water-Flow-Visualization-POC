@@ -9,6 +9,7 @@ import type GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import type GraphicsLayerView from '@arcgis/core/views/layers/GraphicsLayerView';
 import HighlightOptions from '@arcgis/core/views/support/HighlightOptions';
 import type SceneView from '@arcgis/core/views/SceneView';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 
 const SELECTED_CREEK_SEGMENT_HIGHLIGHT_NAME = 'selected-creek-segment';
 /** Amber stands apart from the blue water and matches the chart's time cursor. */
@@ -37,16 +38,16 @@ export function bindCreekSegmentSelection(
   view: SceneView,
   waterGraphics: WaterGraphicSource,
   onSelectedSegmentChange: (segmentId: string | null) => void,
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): CreekSegmentSelection {
-  view.highlights.add(
-    new HighlightOptions({
-      name: SELECTED_CREEK_SEGMENT_HIGHLIGHT_NAME,
-      color: SELECTED_CREEK_SEGMENT_HIGHLIGHT_COLOR,
-      haloColor: SELECTED_CREEK_SEGMENT_HIGHLIGHT_COLOR,
-      haloOpacity: 0.9,
-      fillOpacity: 0.25,
-    }),
-  );
+  const highlightOptions = new HighlightOptions({
+    name: SELECTED_CREEK_SEGMENT_HIGHLIGHT_NAME,
+    color: SELECTED_CREEK_SEGMENT_HIGHLIGHT_COLOR,
+    haloColor: SELECTED_CREEK_SEGMENT_HIGHLIGHT_COLOR,
+    haloOpacity: 0.9,
+    fillOpacity: 0.25,
+  });
+  view.highlights.add(highlightOptions);
 
   let selectedSegmentId: string | null = null;
   let layerView: GraphicsLayerView | null = null;
@@ -72,15 +73,23 @@ export function bindCreekSegmentSelection(
   };
 
   void view.whenLayerView(waterGraphics.layer).then((resolved) => {
+    if (lifetime.signal.aborted) return;
     layerView = resolved as GraphicsLayerView;
     refresh();
   });
 
-  view.on('click', (event) => {
+  const clickHandle = view.on('click', (event) => {
     void view
       .hitTest(event, { include: [waterGraphics.layer] })
       .then((result) => select(segmentIdOfFirstWaterHit(result)))
       .catch((error: unknown) => console.error('[creek-segment-selection] hit test failed', error));
+  });
+
+  lifetime.onEnd(() => {
+    clickHandle.remove();
+    selectedSegmentId = null;
+    refresh();
+    view.highlights.remove(highlightOptions);
   });
 
   return {

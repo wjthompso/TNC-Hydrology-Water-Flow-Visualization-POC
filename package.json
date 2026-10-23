@@ -9,8 +9,8 @@
   "scriptDescriptions": {
     "usage": "Run a command with `npm run <name>`. Arguments after `--` pass through to that command.",
     "testSelectors": "Run one Feature Behavior Test (FBT) with `npm run test:id -- FBT-018`; run one Feature with `npm run test:feature -- F-170`; run one Feature Set with `npm run test:feature-set -- FS-100`.",
-    "testViewingFlags": "Add `--headed` to show browser windows or `--ui` for interactive Playwright UI mode. UI-mode results are not recorded; `test:gate` rejects `--ui`.",
-    "modeledWseFlags": "Modeled water-surface elevation (WSE) commands accept `--extent=<id>` (default: `dangermond-preserve`; fast development extent: `jalama-gauge-reach`), `--water-years=2020-2022`, and `--force`. Stage 4 also accepts `--wse-polygon-method=<id>`.",
+    "testViewingFlags":"Add `--headed` to show browser windows or `--ui` for interactive Playwright UI mode. UI-mode results are not recorded; `test:gate` rejects `--ui`.",
+    "modeledWseFlags": "Modeled water-surface elevation (WSE) commands accept `--extent=<id>` (default: `dangermond-preserve`; fast development extent: `jalama-gauge-reach`), `--water-years=2020-2022`, and `--force`. Stage 4 also accepts `--wse-polygon-method=<id>`. Stages 4 and 5 accept `--modeled-wse-method=<id>` to read another saved modeled WSE method; `pipeline:modeled-wse:m2-time-series` requires it.",
     "commands": {
       "help": "Prints this command reference with descriptions, selectors, and supported flags; it does not run another command.",
       "dev": "Starts the creek visualization browser's Vite development server.",
@@ -21,6 +21,7 @@
       "pipeline:modeled-wse:cross-sections": "Runs Stage 1: derives terrain-based creek cross-sections, bed elevations, slopes, banks, and reviewed reach assignments.",
       "pipeline:modeled-wse:rating-curves": "Runs Stage 2: converts cross-sections into per-segment WSE-to-discharge rating curves.",
       "pipeline:modeled-wse:time-series": "Runs Stage 3: combines rating curves and modeled discharge into per-segment WSE time series.",
+      "pipeline:modeled-wse:m2-time-series": "Runs Stage 3 for Modeled WSE Derivation Method m2-multi-section-manning-depth (requires `--modeled-wse-method=m2-multi-section-manning-depth`): reuses the saved Stage 0–1 output and writes per-segment anchor WSE, junction depths, and junction beds under 03-time-series/m2-multi-section-manning-depth/; never touches m1 output.",
       "pipeline:modeled-wse:water-surface-polygons": "Runs Stage 4: generates prepared water-surface polygon sets from terrain and WSE inputs.",
       "pipeline:modeled-wse:catalog-and-validate": "Runs Stage 5: builds the modeled-WSE catalog and validation report; exits nonzero for default-method validation failures.",
       "pipeline:modeled-wse:all": "Runs modeled-WSE Stages 0–5 in order and forwards all arguments to every stage; writes git-ignored pipeline working output under data/pipeline-working-output/ and does not publish browser-ready data.",
@@ -58,6 +59,7 @@
     "pipeline:modeled-wse:cross-sections": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-01-cross-sections.ts",
     "pipeline:modeled-wse:rating-curves": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-02-rating-curves.ts",
     "pipeline:modeled-wse:time-series": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-03-time-series.ts",
+    "pipeline:modeled-wse:m2-time-series": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/m2-multi-section-manning-depth/stage-03-multi-section-time-series.ts",
     "pipeline:modeled-wse:water-surface-polygons": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-04-water-surface-polygons.ts",
     "pipeline:modeled-wse:catalog-and-validate": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/stage-05-catalog-and-validate.ts",
     "pipeline:modeled-wse:all": "node --experimental-strip-types --disable-warning=ExperimentalWarning pipelines/creek-visualization-data-production/modeled-water-surface-elevation/run-all-stages.ts",

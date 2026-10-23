@@ -1,4 +1,5 @@
 import { M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD } from './m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
+import { M2_MULTI_SECTION_MANNING_DEPTH_METHOD } from './m2-multi-section-manning-depth/method-config.ts';
 import type { ModeledWseDerivationMethodConfig } from './modeled-wse-derivation-method.ts';
 
 /**
@@ -7,6 +8,7 @@ import type { ModeledWseDerivationMethodConfig } from './modeled-wse-derivation-
  */
 export const MODELED_WSE_DERIVATION_METHODS: readonly ModeledWseDerivationMethodConfig[] = [
   M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD,
+  M2_MULTI_SECTION_MANNING_DEPTH_METHOD,
 ];
 
 /**
@@ -16,6 +18,26 @@ export const MODELED_WSE_DERIVATION_METHODS: readonly ModeledWseDerivationMethod
  */
 export const CURRENT_MODELED_WSE_DERIVATION_METHOD: ModeledWseDerivationMethodConfig =
   M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD;
+
+export function modeledWseDerivationMethodById(methodId: string): ModeledWseDerivationMethodConfig {
+  const method = MODELED_WSE_DERIVATION_METHODS.find((candidate) => candidate.id === methodId);
+  if (!method) {
+    throw new Error(
+      `Unknown Modeled WSE Derivation Method "${methodId}". Use one of: ${MODELED_WSE_DERIVATION_METHODS.map((candidate) => candidate.id).join(', ')}.`,
+    );
+  }
+  return method;
+}
+
+/**
+ * `--modeled-wse-method=<id>` selects which saved modeled WSE method Stages 4 and 5 read (and which one a
+ * method's own Stage 3 entry writes). Without it, the current method. Stages 0–3 of m1 ignore the flag.
+ */
+export function requestedModeledWseDerivationMethod(argv: readonly string[]): ModeledWseDerivationMethodConfig {
+  const prefix = '--modeled-wse-method=';
+  const flag = argv.find((argument) => argument.startsWith(prefix));
+  return flag ? modeledWseDerivationMethodById(flag.slice(prefix.length)) : CURRENT_MODELED_WSE_DERIVATION_METHOD;
+}
 
 for (const method of MODELED_WSE_DERIVATION_METHODS) {
   if (!method.id.startsWith(`m${method.methodNumber}-`)) {

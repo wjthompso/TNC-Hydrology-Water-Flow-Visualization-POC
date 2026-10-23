@@ -6,12 +6,23 @@ import PolygonSymbol3D from '@arcgis/core/symbols/PolygonSymbol3D';
 import WaterSymbol3DLayer from '@arcgis/core/symbols/WaterSymbol3DLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { ElevationBucket } from './creek-data-contract';
-import { slopedRingsWgs84, type JunctionWaterSurface, type SegmentSurfaceGeometry } from './sloped-water-surface';
+import {
+  slopedRingsWgs84,
+  type BedParallelWaterDepth,
+  type JunctionWaterSurface,
+  type SegmentSurfaceGeometry,
+} from './sloped-water-surface';
 
 export interface WaterGraphicGeometryIdentity {
   segmentId: string;
-  /** Z written on the graphic. Null when that segment is hidden. */
+  /**
+   * Z written on the graphic. Null when that segment is hidden. For a
+   * `bed-parallel-depth` method the drawn water follows the bed, so this is the
+   * modeled water-surface elevation at the anchor instead, never a depth.
+   */
   bucketMinElevationM: number | null;
+  /** `bed-parallel-depth` methods only: the drawn bucket's minimum water depth, m. */
+  bucketMinDepthM?: number | null;
   /** True when the drawn water is inferred by Creek Segment Observed WSE Propagation, false when observed or modeled. */
   inferred?: boolean;
 }
@@ -31,6 +42,12 @@ export interface SegmentPolygonPlacement {
    * renderer ignores it.
    */
   junctionWaterSurface?: JunctionWaterSurface | null;
+  /**
+   * Modeled water only, for a method drawn `bed-parallel-depth`: the bucket's
+   * bounds are water depths, and the modeled renderer lifts each ring vertex to
+   * its bed reference plus this depth. The observed renderer ignores it.
+   */
+  bedParallelWaterDepth?: BedParallelWaterDepth | null;
   /**
    * True for water inferred from the gauge by Creek Segment Observed WSE Propagation. The observed
    * renderer draws it with the inferred shading, sloped between `junctionWaterSurface` when the
@@ -54,6 +71,8 @@ export interface ArcGISSceneRenderer {
   readonly layer: GraphicsLayer;
   /** The drawn water graphic of one Creek Segment, or null when it has never been drawn. */
   graphicForSegment(segmentId: string): Graphic | null;
+  /** Cancels the pending frame and takes the water layer off the map. The view itself stays. */
+  dispose(): void;
 }
 
 /** Shared by the observed renderer and the modeled renderer so both waters look the same. */
@@ -140,6 +159,7 @@ export function createArcGISSceneRenderer(
 
   let pending: readonly SegmentPolygonPlacement[] | null = null;
   let frameHandle: number | null = null;
+  let disposed = false;
   let appliedKey: string | null = null;
 
   const apply = (placements: readonly SegmentPolygonPlacement[]): void => {
@@ -184,6 +204,7 @@ export function createArcGISSceneRenderer(
 
   return {
     schedule(placements) {
+      if (disposed) return;
       const key = placementKey(placements);
       if (frameHandle == null && key === appliedKey) return;
       pending = placements;
@@ -209,6 +230,14 @@ export function createArcGISSceneRenderer(
     graphicForSegment(segmentId) {
       const graphic = graphicsBySegmentId.get(segmentId);
       return graphic?.layer ? graphic : null;
+    },
+    dispose() {
+      disposed = true;
+      if (frameHandle != null) cancelAnimationFrame(frameHandle);
+      frameHandle = null;
+      pending = null;
+      view.map?.remove(layer);
+      layer.destroy();
     },
   };
 }

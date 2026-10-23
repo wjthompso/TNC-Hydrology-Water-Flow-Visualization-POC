@@ -11,6 +11,7 @@ import type SceneView from '@arcgis/core/views/SceneView';
 import type { CreekVisualizationAttachment } from './creek-visualization-library-interface';
 import { createDevToolsClickMarker } from './dev-tools-click-marker';
 import type { DevToolsHudHandle } from './dev-tools-hud';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 
 const DEV_TOOLS_OPEN_STORAGE_KEY = 'tnc-dev-tools-open';
 
@@ -20,9 +21,12 @@ interface DevToolsToggleOptions {
   container: HTMLElement;
   /** Open the HUD on mount regardless of the remembered state (`?devtools`). */
   openOnLoad: boolean;
+  /** Ending it removes the button, the HUD, the click marker, and the click listener. The view stays. */
+  lifetime?: ExperienceLifetime;
 }
 
 export function installDevToolsToggle(options: DevToolsToggleOptions): void {
+  const lifetime = options.lifetime ?? createExperienceLifetime();
   const button = document.createElement('button');
   button.type = 'button';
   button.id = 'dev-tools-toggle';
@@ -75,20 +79,22 @@ export function installDevToolsToggle(options: DevToolsToggleOptions): void {
   chevron.className = 'text-[9px] leading-none';
   button.append(glyph, label, chevron);
   options.container.appendChild(button);
+  lifetime.onEnd(() => button.remove());
 
   let hud: DevToolsHudHandle | null = null;
   let open = false;
   let mounting: Promise<void> | null = null;
   // The latest click that landed before the HUD panel finished loading.
   let pendingScreen: { x: number; y: number } | null = null;
-  const clickMarker = createDevToolsClickMarker(options.view);
+  const clickMarker = createDevToolsClickMarker(options.view, lifetime);
 
-  options.view.on('click', (event) => {
+  const clickHandle = options.view.on('click', (event) => {
     clickMarker.noteClick(event.mapPoint);
     const screen = { x: event.x, y: event.y };
     if (hud) hud.captureScreenClick(screen);
     else pendingScreen = screen;
   });
+  lifetime.onEnd(() => clickHandle.remove());
 
   const render = (): void => {
     button.setAttribute('aria-expanded', String(open));
@@ -104,7 +110,12 @@ export function installDevToolsToggle(options: DevToolsToggleOptions): void {
         container: options.container,
         placement: 'below-dev-tools-toggle',
         clickMarker,
+        lifetime,
       });
+      if (lifetime.signal.aborted) {
+        hud = null;
+        return;
+      }
       const queued = pendingScreen;
       pendingScreen = null;
       if (queued && hud) hud.captureScreenClick(queued);

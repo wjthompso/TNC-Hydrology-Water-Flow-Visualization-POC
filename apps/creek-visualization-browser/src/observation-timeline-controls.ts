@@ -2,6 +2,7 @@ import {
   timeAtGridIndex,
   type ObservationClock,
 } from './creek-data-contract';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 
 /** One slot per 100 ms. 1× uses this delay. 2× halves it. */
 const BASE_PLAYBACK_STEP_INTERVAL_MS = 100;
@@ -71,17 +72,24 @@ export interface ObservationTimelineController {
  * Scrubbing while playback is running keeps playing from the new slot.
  * Play on the last slot restarts at the first slot.
  * Reaching the last slot stops playback and returns the button to Play.
+ * Ending the `lifetime` stops playback and unbinds every control.
  */
 export function bindObservationTimelineControls(
   elements: ObservationTimelineElements,
   clock: ObservationClock,
   openingGridIndex: number,
   onSelectedTime: (timeUtcMs: number) => void,
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): ObservationTimelineController {
   const { playButton, slider, timeReadout, speedButtons = [] } = elements;
   let currentIndex = 0;
   let selectedSpeed = 1;
   let playbackTimer: number | null = null;
+  const listening = { signal: lifetime.signal };
+  lifetime.onEnd(() => {
+    if (playbackTimer != null) window.clearInterval(playbackTimer);
+    playbackTimer = null;
+  });
 
   slider.min = '0';
   slider.max = String(Math.max(0, clock.count - 1));
@@ -144,14 +152,14 @@ export function bindObservationTimelineControls(
     if (currentIndex >= clock.count - 1) selectIndex(0);
     if (currentIndex >= clock.count - 1) return;
     startPlayback();
-  });
+  }, listening);
 
   for (const { speed, button } of speedButtons) {
     button.addEventListener('click', () => {
       selectedSpeed = speed;
       updateSpeedButtons();
       if (playbackTimer != null) startPlayback();
-    });
+    }, listening);
   }
 
   updateSpeedButtons();
@@ -165,7 +173,7 @@ export function bindObservationTimelineControls(
     const index = Number.parseInt(slider.value, 10);
     if (!Number.isFinite(index)) return;
     scrubToIndex(index);
-  });
+  }, listening);
 
   selectIndex(openingGridIndex);
 

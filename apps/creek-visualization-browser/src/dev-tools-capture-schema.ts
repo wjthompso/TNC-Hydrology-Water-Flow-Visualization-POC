@@ -7,8 +7,18 @@ export interface HitTestCaptureHit {
   layerId: string | null;
   graphicType: 'water-surface' | 'other';
   segmentId: string | null;
+  /**
+   * Bucket minimum, m NAVD88. For a `bed-parallel-depth` method, whose buckets
+   * are water depths, the modeled water-surface elevation at the anchor instead
+   * (and `bucketMaxElevationM` is null); the depth bounds are in the fields below.
+   */
   bucketMinElevationM: number | null;
   bucketMaxElevationM: number | null;
+  /** `bed-parallel-depth` water only: modeled water-surface elevation at the anchor, m NAVD88. */
+  waterSurfaceElevationM?: number | null;
+  /** `bed-parallel-depth` water only: the drawn bucket's water-depth bounds, m. */
+  bucketMinDepthM?: number | null;
+  bucketMaxDepthM?: number | null;
   mapPointWgs84: { longitude: number; latitude: number; z: number | null } | null;
   distanceM: number | null;
 }

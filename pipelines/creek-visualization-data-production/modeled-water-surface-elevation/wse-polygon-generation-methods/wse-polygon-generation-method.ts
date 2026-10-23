@@ -11,8 +11,12 @@
  * - `sloped-between-junctions`: each ring vertex is lifted to the height interpolated between the
  *   Creek Segment's upstream and downstream junction WSEs (`sloped-water-surface.ts`).
  * - `flat-at-bucket-minimum`: the polygon is drawn flat at its elevation bucket's minimum.
+ * - `bed-parallel-depth`: bucket bounds are water depths above the local creek bed, not elevations.
+ *   Each ring vertex is `[lon, lat, bedReferenceM]`; the browser draws it at `bedReferenceM` plus the
+ *   depth interpolated between the segment's junction depths (`junctionDepthUpstreamM` /
+ *   `junctionDepthDownstreamM`), so the water surface runs parallel to the bed.
  */
-export type WsePolygonBrowserDrawing = 'sloped-between-junctions' | 'flat-at-bucket-minimum';
+export type WsePolygonBrowserDrawing = 'sloped-between-junctions' | 'flat-at-bucket-minimum' | 'bed-parallel-depth';
 
 export interface WsePolygonGenerationMethodConfig {
   /** Plain descriptive kebab-case id; also the output folder name. Never reused for a different method. */

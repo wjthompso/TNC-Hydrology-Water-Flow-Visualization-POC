@@ -53,7 +53,7 @@ export interface StationMarkerGallery {
   /** Recolors every marker. */
   setStatusTint(tintId: StationMarkerStatusTintId): Promise<void>;
   /** Removes the gallery and flies back to the camera it opened from. */
-  close(): Promise<void>;
+  close(options?: { restoreCamera?: boolean }): Promise<void>;
 }
 
 export async function openStationMarkerGallery(view: SceneView): Promise<StationMarkerGallery> {
@@ -119,9 +119,10 @@ export async function openStationMarkerGallery(view: SceneView): Promise<Station
         });
       }
     },
-    async close() {
+    async close(options) {
       view.map?.remove(layer);
       layer.destroy();
+      if (options?.restoreCamera === false) return;
       // Not awaited: a user grabbing the camera mid-flight would otherwise leave
       // the gallery panel stuck in its busy state.
       view.goTo(returnCamera, { duration: 900 }).catch(() => undefined);

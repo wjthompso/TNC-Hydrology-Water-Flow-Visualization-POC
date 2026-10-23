@@ -7,6 +7,8 @@ declare global {
       readonly waterGraphicGeometryIdentity: readonly {
         segmentId: string;
         bucketMinElevationM: number | null;
+        /** True when the drawn water is inferred by Creek Segment Observed WSE Propagation. */
+        inferred?: boolean;
       }[];
       /** SceneView center as longitude, latitude. Null before the view exists. */
       readonly cameraTargetWgs84: readonly [number, number] | null;

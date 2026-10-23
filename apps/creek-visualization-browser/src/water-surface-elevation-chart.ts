@@ -11,6 +11,7 @@
 // short outlier fills the chart. Double-click the chart or press Reset zoom to
 // show the whole record again.
 
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { formatObservationTime } from './observation-timeline-controls';
 import { formatWaterLevel, type WaterLevelUnit } from './water-level-units';
 
@@ -168,7 +169,9 @@ export function createWaterSurfaceElevationChart(
   elements: WaterSurfaceElevationChartElements,
   onSelectTime: (timeUtcMs: number) => void,
   initialUnit: WaterLevelUnit = 'wse-navd88-m',
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): WaterSurfaceElevationChart {
+  const listening = { signal: lifetime.signal };
   let unit: WaterLevelUnit = initialUnit;
   let series: PreparedSeries | null = null;
   let view: TimeWindow = { startUtcMs: 0, endUtcMs: 1 };
@@ -497,18 +500,18 @@ export function createWaterSurfaceElevationChart(
     const reading = readingAtPointer(event);
     if (reading) drawHover(reading);
     else clearHover();
-  });
-  elements.plot.addEventListener('pointerleave', clearHover);
+  }, listening);
+  elements.plot.addEventListener('pointerleave', clearHover, listening);
   elements.plot.addEventListener('click', (event) => {
     // Select the reading the hover readout shows. Chrome reports whole-pixel
     // click coordinates but fractional pointer coordinates, and one pixel spans
     // many readings, so recomputing here could pick a different reading.
     const timeUtcMs = hoverTimeUtcMs ?? readingAtPointer(event)?.timeUtcMs ?? null;
     if (timeUtcMs !== null) onSelectTime(timeUtcMs);
-  });
+  }, listening);
   // Plotly convention: double-click resets the zoom.
-  elements.plot.addEventListener('dblclick', resetView);
-  elements.resetZoomButton.addEventListener('click', resetView);
+  elements.plot.addEventListener('dblclick', resetView, listening);
+  elements.resetZoomButton.addEventListener('click', resetView, listening);
 
   // --- Range slider input ------------------------------------------------------
   const overviewLocalX = (event: PointerEvent): number =>
@@ -538,7 +541,7 @@ export function createWaterSurfaceElevationChart(
     }
     elements.overview.setPointerCapture(event.pointerId);
     elements.overview.classList.add('cursor-grabbing');
-  });
+  }, listening);
 
   elements.overview.addEventListener('pointermove', (event) => {
     if (!drag || !series) return;
@@ -569,7 +572,7 @@ export function createWaterSurfaceElevationChart(
         );
         break;
     }
-  });
+  }, listening);
 
   const endDrag = (event: PointerEvent): void => {
     if (!drag) return;
@@ -579,9 +582,9 @@ export function createWaterSurfaceElevationChart(
     }
     elements.overview.classList.remove('cursor-grabbing');
   };
-  elements.overview.addEventListener('pointerup', endDrag);
-  elements.overview.addEventListener('pointercancel', endDrag);
-  elements.overview.addEventListener('dblclick', resetView);
+  elements.overview.addEventListener('pointerup', endDrag, listening);
+  elements.overview.addEventListener('pointercancel', endDrag, listening);
+  elements.overview.addEventListener('dblclick', resetView, listening);
 
   const onHandleKey = (edge: 'start' | 'end') => (event: KeyboardEvent): void => {
     if (!series) return;
@@ -602,11 +605,29 @@ export function createWaterSurfaceElevationChart(
     if (edge === 'start') setView(clampWindow({ startUtcMs: target, endUtcMs: view.endUtcMs }, 'start'));
     else setView(clampWindow({ startUtcMs: view.startUtcMs, endUtcMs: target }, 'end'));
   };
-  startHandle.addEventListener('keydown', onHandleKey('start'));
-  endHandle.addEventListener('keydown', onHandleKey('end'));
+  startHandle.addEventListener('keydown', onHandleKey('start'), listening);
+  endHandle.addEventListener('keydown', onHandleKey('end'), listening);
 
-  new ResizeObserver(render).observe(elements.plot);
-  new ResizeObserver(render).observe(elements.overview);
+  const resizeObserver = new ResizeObserver(render);
+  resizeObserver.observe(elements.plot);
+  resizeObserver.observe(elements.overview);
+  lifetime.onEnd(() => {
+    resizeObserver.disconnect();
+    if (renderHandle !== null) cancelAnimationFrame(renderHandle);
+    renderHandle = null;
+    svg.remove();
+    overviewSvg.remove();
+    elements.segmentLabel.textContent = '';
+    elements.sourceLabel.textContent = '';
+    elements.hoverReadout.textContent = '';
+    elements.emptyMessage.textContent = '';
+    elements.zoomReadout.textContent = '';
+    elements.currentTime.textContent = '';
+    elements.currentValue.textContent = '';
+    elements.overview.classList.remove('cursor-grabbing');
+    for (const element of [elements.plot, elements.overview, elements.zoomRow]) element.classList.add('hidden');
+    elements.emptyMessage.classList.remove('hidden');
+  });
 
   // --- Public API --------------------------------------------------------------
   const setSeries = (next: WaterSurfaceElevationSeries | null, emptyText = NO_SELECTION_TEXT): void => {
