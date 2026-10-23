@@ -1,8 +1,7 @@
-// Description of the selected modeled Dataset, all inside one collapsed
-// "Details and derivation" disclosure so the sidebar stays short. Opened, it
-// shows a plain-language summary with links to the Publisher, a plain-language
-// note on Drainage-Area Ratio Transfer water, then the compact catalog facts
-// and the Time Series Derivation.
+// Description of the selected modeled Dataset for the "About this data"
+// dialog: a plain-language summary with links to the Publisher and a note on
+// Drainage-Area Ratio Transfer water, then the compact catalog facts and the
+// Time Series Derivation inside a collapsed "Technical details" disclosure.
 
 import {
   DRAINAGE_AREA_RATIO_TRANSFER_EXPLANATION,
@@ -46,11 +45,27 @@ const DATASET_SUMMARIES: Readonly<Record<string, DatasetSummary>> = {
   },
 };
 
-export function renderModeledDatasetInfoPanel(
-  container: HTMLElement,
-  selected: SelectedModeledDataset,
-): void {
-  container.replaceChildren(detailsBlock(selected));
+/**
+ * The same content for the "About this data" dialog: the plain-language
+ * summary open, the technical catalog facts and Derivation in a collapsed
+ * "Technical details" disclosure.
+ */
+export function renderModeledDatasetAbout(container: HTMLElement, selected: SelectedModeledDataset): void {
+  const details = detailsBlock(selected);
+  const body = details.lastElementChild;
+  const summary = body?.firstElementChild;
+  if (!(body instanceof HTMLElement) || !(summary instanceof HTMLElement)) {
+    container.replaceChildren(details);
+    return;
+  }
+  summary.remove();
+  summary.removeAttribute('id');
+  summary.className = 'space-y-2 text-sm leading-relaxed text-slate-300';
+  details.removeAttribute('id');
+  details.className = 'mt-3 rounded-md border border-slate-700 bg-slate-950/60 text-xs';
+  const label = details.querySelector('summary');
+  if (label) label.textContent = 'Technical details';
+  container.replaceChildren(summary, details);
 }
 
 /** Plain-language summary, source links, and the borrowed-flow note. Sits at the top of the details. */

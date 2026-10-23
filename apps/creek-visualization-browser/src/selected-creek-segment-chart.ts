@@ -48,7 +48,6 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
   const currentTime = document.getElementById('wse-chart-current-time');
   const currentValue = document.getElementById('wse-chart-current-value');
   if (
-    !currentTime ||
     !currentValue ||
     !segmentLabel ||
     !sourceLabel ||

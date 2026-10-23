@@ -484,6 +484,25 @@
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-133.deterministic.spec.ts"
     },
     {
+      "id": "FBT-134",
+      "name": "Pressing the pause icon itself at 10× speed pauses playback, the same as pressing the button edge.",
+      "methodology": "Opens the timeline fixture page, picks 10× speed, and starts playback. It then moves the real mouse to the centre of the play/pause icon, confirms the point sits on the icon itself and not the button's padding, presses, holds 100 ms like a person's click, and releases. After 100 ms it reads, once and without retrying, that the button is named Play, and checks that the slider index does not change over the next 300 ms. It does not wait for the button to become Play, because playback also ends by itself at the last slot and would hide a lost click. The page and the production timeline control are real. The ArcGIS scene and published gauge series are not loaded, and nothing is mocked. The test runs in the Chromium browser channel, because the default headless shell delivers the click even when the bug is present. It does not check the icon's look, the hover tooltip, keyboard use, or speeds other than 10×.",
+      "category": "feature-behavior",
+      "owner": "F-130",
+      "additionalFeatureAssociations": [],
+      "scope": "component",
+      "environment": "browser",
+      "browserMode": "deterministic",
+      "regression": true,
+      "bugReference": "Pause icon press ignored while playing",
+      "rootCauseAnalysis": "Symptom: pressing the pause icon while playback runs does not pause; pressing the button's edge does. Root cause: the timeline control rewrote the button's contents on every playback slot, so the icon under the pointer was replaced between press and release and the browser dropped the click. At 10× a slot ticks every 10 ms, so a normal press almost always lost the click. Red evidence: in the Chromium channel the press logged mousedown and mouseup on the icon but no click, with 57 icon replacements in one press. Fix: replace the icon only when playback starts or stops. Future triage: if a control click is lost while a per-tick update runs, check whether that update replaces the pressed element.",
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 5000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-130-observation-playback-speed-buttons/behavior/FBT-134.deterministic.spec.ts"
+    },
+    {
       "id": "FST-001",
       "name": "Modeled water-surface elevation validation rejects a value below its Creek Segment's bed.",
       "methodology": "Why it matters: modeled water below a Creek Segment's bed is physically impossible, and if it reached the browser it would draw water under the ground or no water where some is expected. The final validation step of the modeled water-surface elevation pipeline (Stage 5) is the last guard before that data is used, so this test makes sure the guard actually trips. How it checks: the test builds a tiny synthetic fixture in a temporary directory: two made-up Creek Segments with bed elevations of 100 m and 50 m, matching cross-section and polygon-ladder records, and one Time Series file of three monthly values per segment listed in a one-Dataset catalog. It calls the real Stage 5 validation function, validateModeledWaterSurfaceElevationOutputs, twice. First with values that are all at or above the bed, including one exactly at the bed and one missing value; every check must pass. Then with one value 0.1 m below the 100 m bed; only the bed check may fail, with exactly one violation whose message names that Time Series file, that Creek Segment (and not the other one), the timestamp, the value, and the bed. What is real: the validation code and its check names. What is synthetic: every input file; nothing is read from real pipeline output, and there is no network. What it does not check: whether real modeled values are correct, the hydraulics that produced them, the other validation checks, or how Stage 5 writes its catalog and report files.",

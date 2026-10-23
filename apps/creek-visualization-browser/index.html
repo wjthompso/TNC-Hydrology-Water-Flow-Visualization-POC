@@ -50,18 +50,25 @@
           <p id="experience-subtitle" class="mt-1 text-sm text-slate-400">
             Observed water at USGS gauge 11120600, Jalama Creek near Lompoc.
           </p>
-          <label for="dataset-picker" class="mt-3 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            Dataset
-          </label>
+          <div class="mt-3 flex items-center justify-between gap-2">
+            <label for="dataset-picker" class="block text-[11px] font-medium uppercase tracking-wide text-slate-400">
+              Dataset
+            </label>
+            <button
+              id="dataset-about-btn"
+              type="button"
+              aria-haspopup="dialog"
+              class="pointer-events-auto flex cursor-pointer items-center gap-1 rounded text-[11px] font-medium text-cyan-300 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            >
+              <svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4" />
+                <path d="M8 7.25v4M8 4.75v.25" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+              About this data
+            </button>
+          </div>
           <select
             id="dataset-picker"
-            class="pointer-events-auto mt-1 w-full cursor-pointer rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
-          ></select>
-          <label for="imagery-picker" class="mt-3 block text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            Imagery
-          </label>
-          <select
-            id="imagery-picker"
             class="pointer-events-auto mt-1 w-full cursor-pointer rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           ></select>
         </header>
@@ -69,18 +76,23 @@
         <section class="pointer-events-auto mb-4">
           <div class="mb-2 flex items-center justify-between gap-3">
             <h2 class="text-sm font-medium text-slate-200">Time</h2>
+            <!-- Icon swapped between play and pause by observation-timeline-controls.ts; aria-label carries the name. -->
             <button
               id="timeline-play-btn"
               type="button"
               aria-pressed="false"
               aria-label="Play"
-              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2.5 py-1 text-xs font-medium text-cyan-100 transition-colors hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Play
-            </button>
+              title="Play"
+              class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-cyan-500/60 bg-cyan-950/60 text-cyan-100 transition-colors hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950"
+            ></button>
           </div>
-          <!-- The spinner is replaced with the first selected time (observation-timeline-controls.ts). -->
-          <p id="timeline-readout" class="mb-2 text-sm font-medium text-cyan-100"><span class="loading-spinner" aria-hidden="true"></span>Loading time…</p>
+          <div class="flex items-baseline justify-between gap-3">
+            <!-- The spinner is replaced with the first selected time (observation-timeline-controls.ts). -->
+            <p id="timeline-readout" class="text-sm font-medium text-cyan-100"><span class="loading-spinner" aria-hidden="true"></span>Loading time…</p>
+            <!-- Selected Creek Segment's water level at the selected time; filled by water-surface-elevation-chart.ts. -->
+            <span id="wse-chart-current-value" class="shrink-0 text-sm font-semibold tabular-nums text-sky-300" aria-live="polite"></span>
+          </div>
+          <p id="timeline-status" class="text-xs text-slate-300 empty:hidden" aria-live="polite"></p>
           <label for="timeline-slider" class="sr-only">Observation time</label>
           <input
             id="timeline-slider"
@@ -90,8 +102,38 @@
             step="1"
             value="0"
             aria-valuetext="Loading time"
-            class="w-full accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            class="mt-1 w-full accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           />
+          <!-- Hidden until observation-timeline-controls.ts binds it to a dataset's record. -->
+          <div id="timeline-range" role="group" aria-label="Time range" class="" hidden>
+            <div class="flex items-end justify-between gap-2">
+              <label class="flex flex-col gap-0.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                From
+                <input
+                  id="timeline-range-start"
+                  type="date"
+                  class="pointer-events-auto cursor-pointer rounded-md border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-xs normal-case tracking-normal text-slate-100 [color-scheme:dark] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                />
+              </label>
+              <button
+                id="timeline-range-reset"
+                type="button"
+                hidden
+                class="mb-0.5 cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-0.5 text-[11px] font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+              >
+                Full record
+              </button>
+              <label class="flex flex-col items-end gap-0.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                To
+                <input
+                  id="timeline-range-end"
+                  type="date"
+                  class="pointer-events-auto cursor-pointer rounded-md border border-slate-600 bg-slate-800 px-1.5 py-0.5 text-xs normal-case tracking-normal text-slate-100 [color-scheme:dark] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+                />
+              </label>
+            </div>
+            <p id="timeline-range-message" class="text-[11px] text-amber-300 empty:hidden" aria-live="polite"></p>
+          </div>
           <div class="mt-2 grid grid-cols-5 gap-1.5" role="group" aria-label="Playback speed">
             <button
               id="timeline-speed-0-5x"
@@ -139,7 +181,6 @@
               10×
             </button>
           </div>
-          <p id="timeline-status" class="mt-2 min-h-5 text-sm text-slate-300" aria-live="polite"></p>
         </section>
 
         <section
@@ -199,10 +240,6 @@
               Reset zoom
             </button>
           </div>
-          <p id="wse-chart-current" class="mt-1.5 flex items-baseline justify-between gap-2 text-xs" aria-live="polite">
-            <span id="wse-chart-current-time" class="text-slate-200"></span>
-            <span id="wse-chart-current-value" class="font-semibold tabular-nums text-sky-300"></span>
-          </p>
           <p id="wse-chart-hover" class="mt-1 min-h-4 text-[11px] text-slate-400"></p>
           <p id="wse-chart-empty" class="text-xs leading-relaxed text-slate-400"></p>
         </section>
@@ -217,7 +254,6 @@
             />
             <span id="transfer-water-toggle-label"></span>
           </label>
-          <div id="modeled-dataset-info" class="mt-3"></div>
         </section>
 
         <p
@@ -312,6 +348,60 @@
           </svg>
         </a>
       </div>
+
+      <!--
+        Imagery widget: an Esri-style square map button that opens the imagery
+        list. Bound by scene-imagery-widget.ts. Sits at the top-right corner;
+        in development it drops below the Dev tools button.
+      -->
+      <div id="imagery-widget" class="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col items-end">
+        <button
+          id="imagery-widget-btn"
+          type="button"
+          aria-expanded="false"
+          aria-controls="imagery-widget-panel"
+          aria-label="Imagery"
+          title="Imagery"
+          class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-slate-600/80 bg-slate-900/85 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-expanded:border-cyan-400/70 aria-expanded:bg-cyan-950/80 aria-expanded:text-cyan-100"
+        >
+          <svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M10 2.75 17.25 6.5 10 10.25 2.75 6.5 10 2.75Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+            <path d="m2.75 10 7.25 3.75L17.25 10M2.75 13.5l7.25 3.75 7.25-3.75" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <fieldset
+          id="imagery-widget-panel"
+          hidden
+          class="mt-2 w-64 rounded-lg border border-slate-700/80 bg-slate-900/90 p-2 text-slate-100 shadow-xl shadow-black/40 backdrop-blur"
+        >
+          <legend class="sr-only">Imagery</legend>
+          <p class="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400" aria-hidden="true">Imagery</p>
+          <div id="imagery-widget-options" class="flex flex-col gap-0.5"></div>
+        </fieldset>
+      </div>
+
+      <!-- "About this data" for the active Dataset; content filled by dataset-about-dialog.ts. -->
+      <dialog
+        id="dataset-about-dialog"
+        aria-labelledby="dataset-about-dialog-title"
+        class="pointer-events-auto m-auto max-h-[min(36rem,calc(100vh-4rem))] w-[min(32rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900/95 p-5 text-slate-100 shadow-xl shadow-black/40 backdrop:bg-slate-950/70 backdrop:backdrop-blur-sm"
+      >
+        <div class="flex items-start justify-between gap-3">
+          <h2 id="dataset-about-dialog-title" class="text-base font-semibold leading-snug"></h2>
+          <form method="dialog">
+            <button
+              type="submit"
+              aria-label="Close"
+              class="shrink-0 cursor-pointer rounded p-0.5 text-slate-400 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              </svg>
+            </button>
+          </form>
+        </div>
+        <div id="dataset-about-dialog-body" class="mt-3 space-y-2 text-sm leading-relaxed text-slate-300"></div>
+      </dialog>
 
       <div
         id="loading-overlay"

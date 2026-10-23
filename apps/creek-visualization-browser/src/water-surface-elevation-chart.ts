@@ -76,8 +76,9 @@ export interface WaterSurfaceElevationChartElements {
   zoomRow: HTMLElement;
   zoomReadout: HTMLElement;
   resetZoomButton: HTMLButtonElement;
-  /** Under the chart: the selected time and the water level at that time. */
-  currentTime: HTMLElement;
+  /** Optional time label for the value; the page shows the time in the slider readout instead. */
+  currentTime?: HTMLElement | null;
+  /** Water level at the selected time, next to the slider readout. */
   currentValue: HTMLElement;
 }
 
@@ -331,12 +332,12 @@ export function createWaterSurfaceElevationChart(
   /** Time and value under the chart; always shown while a series is loaded, zoomed or not. */
   const drawCurrentReadout = (): void => {
     if (!series || selectedTimeUtcMs === null) {
-      elements.currentTime.textContent = '';
+      if (elements.currentTime) elements.currentTime.textContent = '';
       elements.currentValue.textContent = '';
       return;
     }
     const valueM = selectedValueM();
-    elements.currentTime.textContent = formatObservationTime(selectedTimeUtcMs);
+    if (elements.currentTime) elements.currentTime.textContent = formatObservationTime(selectedTimeUtcMs);
     elements.currentValue.textContent = valueM === null ? 'No reading' : formatWaterLevel(valueM, unit);
   };
 
