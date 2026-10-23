@@ -3,6 +3,7 @@
 // - a screen-sized map-pin icon over each station that appears once the camera is
 //   far enough that the 4 m mast is too small to find; clicking it flies back.
 
+import Camera from '@arcgis/core/Camera';
 import Graphic from '@arcgis/core/Graphic';
 import { watch } from '@arcgis/core/core/reactiveUtils';
 import Point from '@arcgis/core/geometry/Point';
@@ -26,9 +27,12 @@ const LOCATOR_HEIGHT_ABOVE_GROUND_M = 25;
 const LOCATOR_ICON_SIZE_PX = 34;
 /** The floating card's tail points at this height over the mast's base. */
 const CARD_ANCHOR_ABOVE_MAST_TOP_M = 0.5;
-/** Camera framing when flying back to a station from its pin. */
-const RETURN_SCALE = 1200;
-const RETURN_TILT_DEGREES = 62;
+/** Camera framing when flying back to a station from its pin, captured from the developer HUD. */
+const STATION_RETURN_CAMERA = {
+  positionWgs84: [-120.48445878281296, 34.5132897192747, 51.182938386686146],
+  headingDegrees: 321.9715016992689,
+  tiltDegrees: 69.03840692937186,
+} as const;
 
 /**
  * Cyan teardrop map pin with a white gauge mast glyph (pole, arm, sensor).
@@ -153,9 +157,7 @@ export async function installMonitoringStationLocator(
     }
     openCard(station);
     if (hit?.type === 'graphic' && hit.graphic.layer?.id === MONITORING_STATION_LOCATOR_LAYER_ID) {
-      await view
-        .goTo({ target: groundPoint(station.attributes), scale: RETURN_SCALE, tilt: RETURN_TILT_DEGREES }, { duration: 1200 })
-        .catch(() => undefined);
+      await view.goTo(stationReturnCamera(), { duration: 1200 }).catch(() => undefined);
     }
   });
 
@@ -209,6 +211,15 @@ function locatorSymbol(): PointSymbol3D {
 
 function stationMarkerLayers(view: SceneView): __esri.Layer[] {
   return view.map?.allLayers.filter((layer) => layer.id === MONITORING_STATION_MARKER_LAYER_ID).toArray() ?? [];
+}
+
+function stationReturnCamera(): Camera {
+  const [longitude, latitude, z] = STATION_RETURN_CAMERA.positionWgs84;
+  return new Camera({
+    position: new Point({ longitude, latitude, z, spatialReference: { wkid: 4326 } }),
+    heading: STATION_RETURN_CAMERA.headingDegrees,
+    tilt: STATION_RETURN_CAMERA.tiltDegrees,
+  });
 }
 
 function groundPoint(attributes: StationMarkerAttributes): Point {
