@@ -3,6 +3,7 @@ import Point from '@arcgis/core/geometry/Point';
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { CreekSegment, MonitoringStation } from './creek-data-contract';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { STREAM_GAUGE_MAST, stationMarkerSymbol } from './station-marker-models';
 
 export interface StationMarkerAttributes {
@@ -42,6 +43,7 @@ export async function addMonitoringStationMarkers(
   view: SceneView,
   stations: readonly MonitoringStation[],
   segmentsById: ReadonlyMap<string, CreekSegment>,
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): Promise<{ layer: GraphicsLayer; stations: StationMarkerAttributes[] }> {
   const placed: StationMarkerAttributes[] = [];
   const layer = new GraphicsLayer({
@@ -50,6 +52,10 @@ export async function addMonitoringStationMarkers(
     elevationInfo: { mode: 'relative-to-ground' },
   });
   view.map?.add(layer);
+  lifetime.onEnd(() => {
+    view.map?.remove(layer);
+    layer.destroy();
+  });
 
   for (const station of stations) {
     const [longitude, latitude] = station.locationWgs84;

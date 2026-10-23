@@ -2,6 +2,7 @@ import { expect, test } from '../../../../support/browser/response-cache/index.t
 import { FAST_TEST_SCENE_IMAGERY_ID } from '../../../../../apps/creek-visualization-browser/src/scene-imagery-options.ts';
 import {
   distanceMeters,
+  expectGaugeMeasuredWaterAndInferredNeighboursOnly,
   GAUGE_SEGMENT_ID,
   gaugeSegmentMidpointWgs84,
   openObservedWaterPage,
@@ -18,15 +19,18 @@ import {
  * from the cache is fetched live, and if that fetch is unavailable the result is
  * inconclusive rather than passed. Nothing else is mocked. The test-only seam supplies
  * the water-segment list, water-graphic identity, and camera target. The test
- * checks that only Creek Segment 27714637-026 has water, that exactly one
- * water graphic exists for that segment, that the camera target is within
- * 300 m of that segment's midpoint from the committed path, and that the
- * removed synthetic controls are absent. It does not check the visual
- * appearance of the water.
+ * checks that Creek Segment 27714637-026 has measured (not inferred) water
+ * with a water bucket, that every other segment with water is one of the
+ * inferred neighbours named in the committed observed-wse-propagation.json
+ * (up to 3 upstream and 3 downstream) and is flagged inferred, that no
+ * segment outside that neighbourhood has water, that each segment has one
+ * water graphic, that the camera target is within 300 m of the gauge
+ * segment's midpoint from the committed path, and that the removed synthetic
+ * controls are absent. It does not check the visual appearance of the water.
  *
  * Imagery dataset used in the visualization: Esri World Imagery.
  */
-test('Open the page on water for the Jalama Near Lompoc gauge Creek Segment only, with the camera framed there and no leftover synthetic ribbons.', async ({
+test('Open the page on measured water for the Jalama Near Lompoc gauge Creek Segment, with the camera framed there and no leftover synthetic ribbons.', async ({
   page,
 }) => {
   const watch = watchLiveServices(page);
@@ -35,10 +39,11 @@ test('Open the page on water for the Jalama Near Lompoc gauge Creek Segment only
     const seam = await readSeam(page);
     const midpoint = gaugeSegmentMidpointWgs84();
 
-    expect(seam.waterSegmentIds).toEqual([GAUGE_SEGMENT_ID]);
-    expect(seam.waterGraphicGeometryIdentity).toHaveLength(1);
-    expect(seam.waterGraphicGeometryIdentity[0]?.segmentId).toBe(GAUGE_SEGMENT_ID);
-    expect(seam.waterGraphicGeometryIdentity[0]?.bucketMinElevationM).not.toBeNull();
+    expectGaugeMeasuredWaterAndInferredNeighboursOnly(seam);
+    const gaugeWater = seam.waterGraphicGeometryIdentity.find(
+      (item) => item.segmentId === GAUGE_SEGMENT_ID,
+    );
+    expect(gaugeWater?.bucketMinElevationM).not.toBeNull();
     const cameraTarget = seam.cameraTargetWgs84;
     if (!cameraTarget) throw new Error('The camera target is missing.');
     expect(distanceMeters(cameraTarget, midpoint)).toBeLessThanOrEqual(300);

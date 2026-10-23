@@ -171,8 +171,6 @@ describe('SST-001', () => {
   it('The catalog rejects a test entry that breaks the classification rules, and feature filters return each matching test once.', () => {
     expect(validateCatalog(testCatalog)).toEqual([]);
     expect(testCatalog.examples.map(({ id }) => id)).toEqual([
-      'FBT-E001',
-      'FBT-E002',
       'CCT-E001',
     ]);
 

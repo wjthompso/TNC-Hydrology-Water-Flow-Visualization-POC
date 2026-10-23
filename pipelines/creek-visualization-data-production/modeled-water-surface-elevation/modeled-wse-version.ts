@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
+import process from 'node:process';
 import { repositoryRoot } from '../constants.ts';
 import { stageDirectory } from './pipeline-configuration.ts';
 import {
@@ -12,7 +13,7 @@ import {
   type RecordedModeledWseDerivationMethod,
 } from './modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
 import { readSavedModeledWseVersion } from './modeled-wse-derivation-methods/modeled-wse-derivation-method-outputs.ts';
-import { CURRENT_MODELED_WSE_DERIVATION_METHOD } from './modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
+import { requestedModeledWseDerivationMethod } from './modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
 
 /**
  * The modeled WSE version the working tree's Stage 0–3 code produces, and the rule that protects a
@@ -23,7 +24,8 @@ import { CURRENT_MODELED_WSE_DERIVATION_METHOD } from './modeled-wse-derivation-
  * are never touched. See METHODOLOGY.md "Modeled WSE Derivation Methods".
  */
 
-const config = CURRENT_MODELED_WSE_DERIVATION_METHOD;
+/** The current method, or the one named by `--modeled-wse-method=<id>` (see the registry). */
+const config = requestedModeledWseDerivationMethod(process.argv);
 
 /** Where the current version's Stage 3 output lives. Synchronous, so stage files can use it at load time. */
 export const CURRENT_MODELED_WSE_VERSION_RELATIVE_PATH = modeledWseVersionRelativePath(config.id, config.version);

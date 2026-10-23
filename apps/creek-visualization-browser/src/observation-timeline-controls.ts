@@ -2,6 +2,7 @@ import {
   timeAtGridIndex,
   type ObservationClock,
 } from './creek-data-contract';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import {
   dateInputValue,
   fullSlotRange,
@@ -117,12 +118,14 @@ export interface ObservationTimelineController {
  * Time range controls narrow the slider to whole days. The slider, playback,
  * and Play-restart then use only that range. A selected time outside a new
  * range moves to its nearest edge. Reset restores the whole record.
+ * Ending the `lifetime` stops playback and unbinds every control.
  */
 export function bindObservationTimelineControls(
   elements: ObservationTimelineElements,
   clock: ObservationClock,
   openingGridIndex: number,
   onSelectedTime: (timeUtcMs: number) => void,
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): ObservationTimelineController {
   const { playButton, slider, timeReadout, speedButtons = [], timeRangeControls } = elements;
   const fullRange = fullSlotRange(clock);
@@ -130,6 +133,11 @@ export function bindObservationTimelineControls(
   let currentIndex = 0;
   let selectedSpeed = 1;
   let playbackTimer: number | null = null;
+  const listening = { signal: lifetime.signal };
+  lifetime.onEnd(() => {
+    if (playbackTimer != null) window.clearInterval(playbackTimer);
+    playbackTimer = null;
+  });
 
   slider.step = '1';
   const applyRangeToSlider = (): void => {
@@ -203,14 +211,14 @@ export function bindObservationTimelineControls(
     if (currentIndex >= range.lastIndex) selectIndex(range.firstIndex);
     if (currentIndex >= range.lastIndex) return;
     startPlayback();
-  });
+  }, listening);
 
   for (const { speed, button } of speedButtons) {
     button.addEventListener('click', () => {
       selectedSpeed = speed;
       updateSpeedButtons();
       if (playbackTimer != null) startPlayback();
-    });
+    }, listening);
   }
 
   updateSpeedButtons();
@@ -224,7 +232,7 @@ export function bindObservationTimelineControls(
     const index = Number.parseInt(slider.value, 10);
     if (!Number.isFinite(index)) return;
     scrubToIndex(index);
-  });
+  }, listening);
 
   selectIndex(openingGridIndex);
 
@@ -264,12 +272,12 @@ export function bindObservationTimelineControls(
       setRange(next);
     };
 
-    startDateInput.addEventListener('change', applyDateInputs);
-    endDateInput.addEventListener('change', applyDateInputs);
+    startDateInput.addEventListener('change', applyDateInputs, listening);
+    endDateInput.addEventListener('change', applyDateInputs, listening);
     resetButton.addEventListener('click', () => {
       message.textContent = '';
       setRange(fullRange);
-    });
+    }, listening);
 
     showRange();
     container.hidden = false;

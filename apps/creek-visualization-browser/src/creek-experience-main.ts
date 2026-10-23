@@ -1,5 +1,5 @@
 import '@arcgis/core/assets/esri/themes/dark/main.css';
-import './style.css';
+import { whenOnce } from '@arcgis/core/core/reactiveUtils';
 import Camera from '@arcgis/core/Camera';
 import Point from '@arcgis/core/geometry/Point';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
@@ -10,6 +10,7 @@ import {
 } from './creek-visualization-library-interface';
 import type { WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { HitTestCapture, HitTestCaptureHit } from './dev-tools-capture-schema';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
 import {
   availableDatasetPickerOptions,
@@ -20,9 +21,11 @@ import {
   readCameraQuery,
   readDatasetSelection,
   readOpeningTimeQuery,
+  type DatasetSelection,
 } from './modeled-water-catalog';
 import { creekDataSourceConfiguration } from './creek-data-source-configuration';
 import { showModeledDatasetAccuracyNotice } from './modeled-dataset-accuracy-notices';
+import { waitAtMost } from './bounded-startup-wait';
 import { bindDatasetAboutDialog, fillObservedGaugeAbout } from './dataset-about-dialog';
 import { bindSceneImageryWidget } from './scene-imagery-widget';
 import { showLoadingMessage } from './loading-spinner';
@@ -119,82 +122,38 @@ type TestModeWindow = Window & { __TNC_TEST__?: CreekVisualizationTestSeam };
 
 let attachment: CreekVisualizationAttachment | null = null;
 let sceneView: SceneView | null = null;
+/** Ends everything the open Dataset's experience attached to the scene. The SceneView stays. */
+let lifetime: ExperienceLifetime | null = null;
+let experienceElements: ExperienceElements | null = null;
+let observedChrome: ObservedChrome | null = null;
+let switchingDataset = false;
+
+interface ExperienceElements {
+  container: HTMLDivElement;
+  playButton: HTMLButtonElement;
+  slider: HTMLInputElement;
+  timeReadout: HTMLElement;
+  status: HTMLElement;
+}
+
+/** Page text the observed experience owns; the modeled experience overwrites it and a switch back restores it. */
+interface ObservedChrome {
+  documentTitle: string;
+  title: string | null;
+  subtitle: string | null;
+  legendLabel: string | null;
+}
 
 const ready = startExperience();
 installTestSeam(ready);
 
 async function startExperience(): Promise<boolean> {
   try {
-    const container = document.getElementById('arcgis-view');
-    const playButton = document.getElementById('timeline-play-btn');
-    const slider = document.getElementById('timeline-slider');
-    const timeReadout = document.getElementById('timeline-readout');
-    const status = document.getElementById('timeline-status');
-    if (!(container instanceof HTMLDivElement)) throw new Error('The map view is missing.');
-    if (!(playButton instanceof HTMLButtonElement)) throw new Error('The play button is missing.');
-    if (!(slider instanceof HTMLInputElement)) throw new Error('The time slider is missing.');
-    if (!(timeReadout instanceof HTMLElement) || !(status instanceof HTMLElement)) {
-      throw new Error('The time readout is missing.');
-    }
-
+    experienceElements = readExperienceElements();
+    observedChrome = readObservedChrome();
     const selection = readDatasetSelection(location.search);
     bindDatasetPicker(selection.kind === 'modeled' ? selection.datasetId : OBSERVED_DATASET_OPTION_ID);
-
-    if (selection.kind === 'modeled') {
-      // Modeled water (UCS-271). The observed path below stays unchanged.
-      setLoadingOverlayText(
-        creekDataSourceConfiguration.dataSource === 'hosted'
-          ? 'Loading modeled water from the Dangermond Preserve ArcGIS portal… (sign in if asked)'
-          : 'Loading modeled water…',
-      );
-      const { startModeledCreekExperience } = await import('./modeled-creek-experience');
-      const started = await startModeledCreekExperience(selection, {
-        container,
-        playButton,
-        slider,
-        timeReadout,
-        status,
-        speedButtons: readPlaybackSpeedButtons(),
-        timeRangeControls: readTimeRangeControls(),
-        ...readModeledPanelElements(),
-      });
-      sceneView = started.view;
-      attachment = started.attachment;
-      bindImageryWidget(sceneView);
-      await restoreCarriedCamera(sceneView);
-      hideLoadingOverlay();
-      await installDevToolsIfRequested();
-      openAccuracyNoticeUnlessTestMode(selection.datasetId);
-      return true;
-    }
-
-    const data = await loadPublishedCreekVisualizationData();
-    showInferredWaterLegend(data.propagation?.hopsPerDirection ?? 0);
-    const segment = data.segmentsById.get(data.station.segmentId);
-    if (!segment) throw new Error('The gauge segment is missing from the creek network.');
-
-    sceneView = await createStandaloneExperienceShell(container, segment.pathWgs84);
-    bindImageryWidget(sceneView);
-    bindDatasetAboutDialog('About the observed gauge data', fillObservedGaugeAbout);
-    attachment = attachCreekVisualization(sceneView, {
-      data,
-      playButton,
-      slider,
-      timeReadout,
-      status,
-      speedButtons: readPlaybackSpeedButtons(),
-      timeRangeControls: readTimeRangeControls(),
-      openingTimeUtcMs: readOpeningTimeQuery(location.search),
-      // The gauge's creek segment opens selected, so the chart is visible before anyone discovers clicking.
-      initialSelectedSegmentId: data.station.segmentId,
-    });
-    await attachment.flush();
-    // UCS-261: a stream gauge mast where the Jalama Near Lompoc gauge is installed.
-    const markers = await addMonitoringStationMarkers(sceneView, [data.station], data.segmentsById);
-    await installMonitoringStationLocator(sceneView, markers.stations);
-    await restoreCarriedCamera(sceneView);
-    hideLoadingOverlay();
-    await installDevToolsIfRequested();
+    await openExperience(selection, experienceElements, { carriedSegmentId: null, initial: true });
     return true;
   } catch (error: unknown) {
     console.error(error);
@@ -203,10 +162,156 @@ async function startExperience(): Promise<boolean> {
   }
 }
 
+function readExperienceElements(): ExperienceElements {
+  const container = document.getElementById('arcgis-view');
+  const playButton = document.getElementById('timeline-play-btn');
+  const slider = document.getElementById('timeline-slider');
+  const timeReadout = document.getElementById('timeline-readout');
+  const status = document.getElementById('timeline-status');
+  if (!(container instanceof HTMLDivElement)) throw new Error('The map view is missing.');
+  if (!(playButton instanceof HTMLButtonElement)) throw new Error('The play button is missing.');
+  if (!(slider instanceof HTMLInputElement)) throw new Error('The time slider is missing.');
+  if (!(timeReadout instanceof HTMLElement) || !(status instanceof HTMLElement)) {
+    throw new Error('The time readout is missing.');
+  }
+  return { container, playButton, slider, timeReadout, status };
+}
+
+/**
+ * Opens one Dataset's experience on the page. The first call creates the
+ * SceneView; every later call reuses it, so the imagery, terrain, and camera
+ * stay while only the creek water, controls, and chart change.
+ */
+async function openExperience(
+  selection: DatasetSelection,
+  elements: ExperienceElements,
+  options: { carriedSegmentId: string | null; initial: boolean },
+): Promise<void> {
+  const experienceLifetime = createExperienceLifetime();
+  lifetime = experienceLifetime;
+  try {
+    if (selection.kind === 'modeled') await openModeledExperience(selection, elements, experienceLifetime);
+    else await openObservedExperience(elements, experienceLifetime, options.carriedSegmentId);
+  } catch (error: unknown) {
+    experienceLifetime.end();
+    lifetime = null;
+    attachment = null;
+    throw error;
+  }
+  if (!sceneView) throw new Error('The scene view is missing.');
+  if (options.carriedSegmentId && selection.kind === 'modeled') {
+    attachment?.selectedCreekSegmentChart?.selectSegment(options.carriedSegmentId);
+  }
+  if (options.initial) {
+    await restoreCarriedCamera(sceneView);
+    void hideLoadingOverlayWhenSceneDrawn(sceneView);
+  }
+  await installDevToolsIfRequested(experienceLifetime);
+  if (selection.kind === 'modeled') openAccuracyNoticeUnlessTestMode(selection.datasetId);
+}
+
+async function openModeledExperience(
+  selection: Extract<DatasetSelection, { kind: 'modeled' }>,
+  elements: ExperienceElements,
+  experienceLifetime: ExperienceLifetime,
+): Promise<void> {
+  // Modeled water (UCS-271). The observed path stays separate.
+  setLoadingOverlayText(
+    creekDataSourceConfiguration.dataSource === 'hosted'
+      ? 'Loading modeled water from the Dangermond Preserve ArcGIS portal… (sign in if asked)'
+      : 'Loading modeled water…',
+  );
+  const { startModeledCreekExperience } = await import('./modeled-creek-experience');
+  const started = await startModeledCreekExperience(
+    selection,
+    {
+      ...elements,
+      speedButtons: readPlaybackSpeedButtons(),
+      timeRangeControls: readTimeRangeControls(),
+      ...readModeledPanelElements(),
+    },
+    { view: sceneView ?? undefined, lifetime: experienceLifetime },
+  );
+  const firstScene = sceneView === null;
+  sceneView = started.view;
+  attachment = started.attachment;
+  if (firstScene) bindImageryWidget(sceneView);
+}
+
+async function openObservedExperience(
+  elements: ExperienceElements,
+  experienceLifetime: ExperienceLifetime,
+  carriedSegmentId: string | null,
+): Promise<void> {
+  restoreObservedChrome();
+  const data = await loadPublishedCreekVisualizationData();
+  showInferredWaterLegend(data.propagation?.hopsPerDirection ?? 0);
+  experienceLifetime.onEnd(hideInferredWaterLegend);
+  const segment = data.segmentsById.get(data.station.segmentId);
+  if (!segment) throw new Error('The gauge segment is missing from the creek network.');
+
+  if (!sceneView) {
+    sceneView = await createStandaloneExperienceShell(elements.container, segment.pathWgs84);
+    bindImageryWidget(sceneView);
+  }
+  bindDatasetAboutDialog('About the observed gauge data', fillObservedGaugeAbout);
+  attachment = attachCreekVisualization(sceneView, {
+    data,
+    playButton: elements.playButton,
+    slider: elements.slider,
+    timeReadout: elements.timeReadout,
+    status: elements.status,
+    speedButtons: readPlaybackSpeedButtons(),
+    timeRangeControls: readTimeRangeControls(),
+    openingTimeUtcMs: readOpeningTimeQuery(location.search),
+    // The gauge's creek segment opens selected, so the chart is visible before anyone discovers clicking.
+    initialSelectedSegmentId: carriedSegmentId ?? data.station.segmentId,
+    lifetime: experienceLifetime,
+  });
+  await attachment.flush();
+  // UCS-261: a stream gauge mast where the Jalama Near Lompoc gauge is installed.
+  const markers = await addMonitoringStationMarkers(sceneView, [data.station], data.segmentsById, experienceLifetime);
+  await installMonitoringStationLocator(sceneView, markers.stations, experienceLifetime);
+}
+
+function readObservedChrome(): ObservedChrome {
+  return {
+    documentTitle: document.title,
+    title: document.getElementById('experience-title')?.textContent ?? null,
+    subtitle: document.getElementById('experience-subtitle')?.textContent ?? null,
+    legendLabel: document.getElementById('legend-water-label')?.textContent ?? null,
+  };
+}
+
+/** Undoes what the modeled experience wrote over the observed page text and panels. */
+function restoreObservedChrome(): void {
+  if (!observedChrome) return;
+  document.title = observedChrome.documentTitle;
+  const text: readonly [string, string | null][] = [
+    ['experience-title', observedChrome.title],
+    ['experience-subtitle', observedChrome.subtitle],
+    ['legend-water-label', observedChrome.legendLabel],
+  ];
+  for (const [id, value] of text) {
+    const element = document.getElementById(id);
+    if (element && value !== null) element.textContent = value;
+  }
+  document.getElementById('modeled-panel')?.classList.add('hidden');
+  const transferRow = document.getElementById('legend-transfer-row');
+  transferRow?.classList.add('hidden');
+  transferRow?.classList.remove('flex');
+}
+
 /**
  * Creek Segment Observed WSE Propagation (UCS-300): names the teal water in the legend as inferred,
  * never as measured. Hidden when the data propagates nothing.
  */
+function hideInferredWaterLegend(): void {
+  const row = document.getElementById('legend-inferred-row');
+  row?.classList.add('hidden');
+  row?.classList.remove('flex');
+}
+
 function showInferredWaterLegend(hopsPerDirection: number): void {
   const row = document.getElementById('legend-inferred-row');
   const label = document.getElementById('legend-inferred-label');
@@ -234,17 +339,27 @@ function openAccuracyNoticeUnlessTestMode(datasetId: string): void {
  * gets a corner toggle button so the HUD is always one click away; Vite drops
  * that branch, and the toggle module, from production builds.
  */
-async function installDevToolsIfRequested(): Promise<void> {
+async function installDevToolsIfRequested(experienceLifetime: ExperienceLifetime): Promise<void> {
   if (!sceneView || !attachment) return;
+  const view = sceneView;
+  const open = attachment;
   const requested = new URLSearchParams(location.search).has('devtools');
   if (import.meta.env.DEV) {
     const { installDevToolsToggle } = await import('./dev-tools-toggle');
-    installDevToolsToggle({ view: sceneView, attachment, container: document.body, openOnLoad: requested });
+    if (experienceLifetime.signal.aborted) return;
+    installDevToolsToggle({
+      view,
+      attachment: open,
+      container: document.body,
+      openOnLoad: requested,
+      lifetime: experienceLifetime,
+    });
     return;
   }
   if (!requested) return;
   const { installDevToolsHud } = await import('./dev-tools-hud');
-  installDevToolsHud({ view: sceneView, attachment, container: document.body });
+  if (experienceLifetime.signal.aborted) return;
+  installDevToolsHud({ view, attachment: open, container: document.body, lifetime: experienceLifetime });
 }
 
 /**
@@ -264,8 +379,9 @@ async function restoreCarriedCamera(view: SceneView): Promise<void> {
 }
 
 /**
- * Fills the Dataset picker. A change opens the other Dataset at the same
- * selected time and camera, so the switch keeps your place.
+ * Fills the Dataset picker. A change swaps the creek water on the open scene
+ * at the same selected time, camera, and selected Creek Segment, so the switch
+ * keeps your place and the imagery and terrain are not drawn again.
  */
 function bindDatasetPicker(selectedOptionId: string): void {
   const picker = document.getElementById('dataset-picker');
@@ -279,15 +395,48 @@ function bindDatasetPicker(selectedOptionId: string): void {
       return node;
     }),
   );
+  let shownOptionId = selectedOptionId;
   picker.addEventListener('change', () => {
-    location.assign(
-      datasetPageUrl(picker.value, location, {
-        selectedTimeUtcMs: attachment?.selectedTimeUtcMs ?? null,
-        cameraPose: readCameraPose(sceneView),
-        selectedCreekSegmentId: attachment?.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null,
-      }),
-    );
+    if (switchingDataset || picker.value === shownOptionId) return;
+    void switchDataset(picker, shownOptionId).then((openedOptionId) => {
+      shownOptionId = openedOptionId;
+      picker.value = openedOptionId;
+    });
   });
+}
+
+/**
+ * Takes the open Dataset's water, controls, and chart off the scene and puts
+ * the picked Dataset's on, keeping the SceneView. Returns the picker option now
+ * open: the new one, or the old one when the switch failed.
+ */
+async function switchDataset(picker: HTMLSelectElement, previousOptionId: string): Promise<string> {
+  const elements = experienceElements;
+  if (!elements) return previousOptionId;
+  switchingDataset = true;
+  picker.disabled = true;
+  const carriedSegmentId = attachment?.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null;
+  const nextUrl = datasetPageUrl(picker.value, location, {
+    selectedTimeUtcMs: attachment?.selectedTimeUtcMs ?? null,
+    cameraPose: null,
+    selectedCreekSegmentId: null,
+  });
+  try {
+    lifetime?.end();
+    lifetime = null;
+    attachment = null;
+    showLoadingMessage(elements.status, 'Switching Dataset…');
+    history.replaceState(history.state, '', nextUrl);
+    await openExperience(readDatasetSelection(location.search), elements, { carriedSegmentId, initial: false });
+    return picker.value;
+  } catch (error: unknown) {
+    console.error(error);
+    showExperienceError(error instanceof Error ? error.message : 'The Dataset could not be opened.');
+    return previousOptionId;
+  } finally {
+    picker.disabled = false;
+    switchingDataset = false;
+  }
 }
 
 function readModeledPanelElements(): {
@@ -506,12 +655,33 @@ function readHit(
           segmentId?: unknown;
           bucketMinElevationM?: unknown;
           bucketMaxElevationM?: unknown;
+          waterSurfaceElevationM?: unknown;
+          bucketMinDepthM?: unknown;
+          bucketMaxDepthM?: unknown;
         }
       | null;
+    const segmentId = typeof attributes?.segmentId === 'string' ? attributes.segmentId : null;
+    const bucketMinDepthM = readFiniteOrNull(attributes?.bucketMinDepthM);
+    if (bucketMinDepthM !== null) {
+      // `bed-parallel-depth` water: its buckets are depths, so the elevation reported is the modeled WSE.
+      const waterSurfaceElevationM = readFiniteOrNull(attributes?.waterSurfaceElevationM);
+      return {
+        layerId,
+        graphicType: 'water-surface',
+        segmentId,
+        bucketMinElevationM: waterSurfaceElevationM,
+        bucketMaxElevationM: null,
+        waterSurfaceElevationM,
+        bucketMinDepthM,
+        bucketMaxDepthM: readFiniteOrNull(attributes?.bucketMaxDepthM),
+        mapPointWgs84: mapPoint,
+        distanceM,
+      };
+    }
     return {
       layerId,
       graphicType: 'water-surface',
-      segmentId: typeof attributes?.segmentId === 'string' ? attributes.segmentId : null,
+      segmentId,
       bucketMinElevationM: readFiniteOrNull(attributes?.bucketMinElevationM),
       bucketMaxElevationM: readFiniteOrNull(attributes?.bucketMaxElevationM),
       mapPointWgs84: mapPoint,
@@ -642,4 +812,33 @@ function showExperienceError(message: string): void {
 
 function hideLoadingOverlay(): void {
   document.getElementById('loading-overlay')?.remove();
+}
+
+/** Longest the overlay waits for the first scene draw; a stalled terrain service must not trap it. */
+const FIRST_SCENE_DRAW_WAIT_LIMIT_MS = 20_000;
+const LOADING_OVERLAY_FADE_MS = 500;
+
+/**
+ * Keeps the loading overlay over the 3D scene until SceneView has drawn its
+ * first still frame (no layer or terrain updating, camera stationary), then
+ * fades it out. Data loading finishes well before terrain and imagery tiles
+ * stream in, so removing the overlay earlier shows a blank or half-drawn globe.
+ * Not awaited by startup: the test seam's `ready` promise keeps its timing, and
+ * test mode removes the overlay without a fade so pixel reads never see it.
+ */
+async function hideLoadingOverlayWhenSceneDrawn(view: SceneView): Promise<void> {
+  setLoadingOverlayText('Drawing terrain and imagery…');
+  try {
+    await waitAtMost(
+      whenOnce(() => !view.updating && view.stationary),
+      FIRST_SCENE_DRAW_WAIT_LIMIT_MS,
+    );
+  } finally {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && import.meta.env.VITE_TEST_MODE !== 'true') {
+      overlay.classList.add('opacity-0');
+      await new Promise((resolve) => setTimeout(resolve, LOADING_OVERLAY_FADE_MS));
+    }
+    hideLoadingOverlay();
+  }
 }

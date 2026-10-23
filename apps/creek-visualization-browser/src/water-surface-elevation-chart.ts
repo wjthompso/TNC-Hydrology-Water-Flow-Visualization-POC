@@ -11,6 +11,7 @@
 // short outlier fills the chart. Double-click the chart or press Reset zoom to
 // show the whole record again.
 
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { formatObservationTime } from './observation-timeline-controls';
 import { formatWaterLevel, type WaterLevelUnit } from './water-level-units';
 
@@ -20,13 +21,17 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * `top` leaves a headroom band above the highest reading for the blue value
  * tag on the time cursor, so the tag never covers the line or its peak.
  */
-const PLOT_INSET = { left: 44, right: 8, top: 24, bottom: 18 } as const;
+const PLOT_INSET = { left: 54, right: 8, top: 30, bottom: 22 } as const;
 /** The cursor value tag sits in the headroom band, this far below the plot's top edge. */
 const CURSOR_TAG_TOP = 4;
+/** Cursor value tag height and the width of one of its 12 px glyphs (about 0.6 em). */
+const CURSOR_TAG_HEIGHT = 20;
+const CURSOR_TAG_GLYPH_WIDTH = 7.2;
+const CURSOR_TAG_PADDING = 10;
 /** The range slider runs full-width — it has no Y-axis labels so it does not need the chart's left margin. */
 const OVERVIEW_INSET = { left: 4, right: 4, top: 2, bottom: 2 } as const;
-const FALLBACK_SIZE = { width: 300, height: 144 } as const;
-const FALLBACK_OVERVIEW_SIZE = { width: 300, height: 32 } as const;
+const FALLBACK_SIZE = { width: 300, height: 192 } as const;
+const FALLBACK_OVERVIEW_SIZE = { width: 300, height: 40 } as const;
 /** A pointer this close to a window edge grabs that edge. */
 const HANDLE_GRAB_PX = 7;
 /** The zoom window never gets narrower than this many chart pixels' worth of the record. */
@@ -37,7 +42,8 @@ const MIN_WINDOW_READINGS = 4;
 const KEYBOARD_STEP_FRACTION = 0.01;
 
 const NO_SELECTION_TEXT = 'Click creek water on the map to see its water-surface elevation over time.';
-const HOVER_HINT_TEXT = 'Hover to read a value. Click to move the time slider. Drag the bar below to zoom.';
+/** Full instructions live in the chart's info tip (index.html); this is the short idle prompt. */
+const HOVER_HINT_TEXT = 'Hover the chart to read a value.';
 
 const axisDateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Los_Angeles',
@@ -164,7 +170,9 @@ export function createWaterSurfaceElevationChart(
   elements: WaterSurfaceElevationChartElements,
   onSelectTime: (timeUtcMs: number) => void,
   initialUnit: WaterLevelUnit = 'wse-navd88-m',
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): WaterSurfaceElevationChart {
+  const listening = { signal: lifetime.signal };
   let unit: WaterLevelUnit = initialUnit;
   let series: PreparedSeries | null = null;
   let view: TimeWindow = { startUtcMs: 0, endUtcMs: 1 };
@@ -192,9 +200,9 @@ export function createWaterSurfaceElevationChart(
   // Blue value tag above the cursor: the water level at the selected time.
   const cursorTag = createSvgElement('g', {});
   cursorTag.id = 'wse-chart-cursor-value';
-  const cursorTagBox = createSvgElement('rect', { class: 'fill-slate-950/90 stroke-sky-400/70', rx: '3', height: '14' });
+  const cursorTagBox = createSvgElement('rect', { class: 'fill-slate-950/90 stroke-sky-400/70', rx: '3', height: String(CURSOR_TAG_HEIGHT) });
   const cursorTagText = createSvgElement('text', {
-    class: 'fill-sky-300 text-[10px] font-semibold',
+    class: 'fill-sky-300 text-xs font-semibold',
     'text-anchor': 'middle',
     'dominant-baseline': 'middle',
   });
@@ -371,7 +379,7 @@ export function createWaterSurfaceElevationChart(
     cursorTimeUtcMs = time;
     const x = xForTime(time);
     // The cursor runs up into the headroom band so the value tag sits on top of it.
-    showVertical(cursor, x, CURSOR_TAG_TOP + 14, PLOT_INSET.top + frame.plotHeight);
+    showVertical(cursor, x, CURSOR_TAG_TOP + CURSOR_TAG_HEIGHT, PLOT_INSET.top + frame.plotHeight);
     const valueM = selectedValueM();
     if (valueM === null) {
       hideCursorTag();
@@ -382,14 +390,14 @@ export function createWaterSurfaceElevationChart(
     cursorDot.setAttribute('visibility', 'visible');
     const label = formatWaterLevel(valueM, unit);
     cursorTagText.textContent = label;
-    // About 5.6 px per 10 px glyph; kept inside the plot so it never clips at an edge.
-    const width = label.length * 5.8 + 8;
+    // Kept inside the plot so it never clips at an edge.
+    const width = label.length * CURSOR_TAG_GLYPH_WIDTH + CURSOR_TAG_PADDING;
     const left = clamp(x - width / 2, PLOT_INSET.left, PLOT_INSET.left + frame.plotWidth - width);
     cursorTagBox.setAttribute('x', String(left));
     cursorTagBox.setAttribute('y', String(CURSOR_TAG_TOP));
     cursorTagBox.setAttribute('width', String(width));
     cursorTagText.setAttribute('x', String(left + width / 2));
-    cursorTagText.setAttribute('y', String(CURSOR_TAG_TOP + 7.5));
+    cursorTagText.setAttribute('y', String(CURSOR_TAG_TOP + CURSOR_TAG_HEIGHT / 2));
     cursorTag.setAttribute('visibility', 'visible');
   };
 
@@ -493,18 +501,18 @@ export function createWaterSurfaceElevationChart(
     const reading = readingAtPointer(event);
     if (reading) drawHover(reading);
     else clearHover();
-  });
-  elements.plot.addEventListener('pointerleave', clearHover);
+  }, listening);
+  elements.plot.addEventListener('pointerleave', clearHover, listening);
   elements.plot.addEventListener('click', (event) => {
     // Select the reading the hover readout shows. Chrome reports whole-pixel
     // click coordinates but fractional pointer coordinates, and one pixel spans
     // many readings, so recomputing here could pick a different reading.
     const timeUtcMs = hoverTimeUtcMs ?? readingAtPointer(event)?.timeUtcMs ?? null;
     if (timeUtcMs !== null) onSelectTime(timeUtcMs);
-  });
+  }, listening);
   // Plotly convention: double-click resets the zoom.
-  elements.plot.addEventListener('dblclick', resetView);
-  elements.resetZoomButton.addEventListener('click', resetView);
+  elements.plot.addEventListener('dblclick', resetView, listening);
+  elements.resetZoomButton.addEventListener('click', resetView, listening);
 
   // --- Range slider input ------------------------------------------------------
   const overviewLocalX = (event: PointerEvent): number =>
@@ -534,7 +542,7 @@ export function createWaterSurfaceElevationChart(
     }
     elements.overview.setPointerCapture(event.pointerId);
     elements.overview.classList.add('cursor-grabbing');
-  });
+  }, listening);
 
   elements.overview.addEventListener('pointermove', (event) => {
     if (!drag || !series) return;
@@ -565,7 +573,7 @@ export function createWaterSurfaceElevationChart(
         );
         break;
     }
-  });
+  }, listening);
 
   const endDrag = (event: PointerEvent): void => {
     if (!drag) return;
@@ -575,9 +583,9 @@ export function createWaterSurfaceElevationChart(
     }
     elements.overview.classList.remove('cursor-grabbing');
   };
-  elements.overview.addEventListener('pointerup', endDrag);
-  elements.overview.addEventListener('pointercancel', endDrag);
-  elements.overview.addEventListener('dblclick', resetView);
+  elements.overview.addEventListener('pointerup', endDrag, listening);
+  elements.overview.addEventListener('pointercancel', endDrag, listening);
+  elements.overview.addEventListener('dblclick', resetView, listening);
 
   const onHandleKey = (edge: 'start' | 'end') => (event: KeyboardEvent): void => {
     if (!series) return;
@@ -598,11 +606,29 @@ export function createWaterSurfaceElevationChart(
     if (edge === 'start') setView(clampWindow({ startUtcMs: target, endUtcMs: view.endUtcMs }, 'start'));
     else setView(clampWindow({ startUtcMs: view.startUtcMs, endUtcMs: target }, 'end'));
   };
-  startHandle.addEventListener('keydown', onHandleKey('start'));
-  endHandle.addEventListener('keydown', onHandleKey('end'));
+  startHandle.addEventListener('keydown', onHandleKey('start'), listening);
+  endHandle.addEventListener('keydown', onHandleKey('end'), listening);
 
-  new ResizeObserver(render).observe(elements.plot);
-  new ResizeObserver(render).observe(elements.overview);
+  const resizeObserver = new ResizeObserver(render);
+  resizeObserver.observe(elements.plot);
+  resizeObserver.observe(elements.overview);
+  lifetime.onEnd(() => {
+    resizeObserver.disconnect();
+    if (renderHandle !== null) cancelAnimationFrame(renderHandle);
+    renderHandle = null;
+    svg.remove();
+    overviewSvg.remove();
+    elements.segmentLabel.textContent = '';
+    elements.sourceLabel.textContent = '';
+    elements.hoverReadout.textContent = '';
+    elements.emptyMessage.textContent = '';
+    elements.zoomReadout.textContent = '';
+    if (elements.currentTime) elements.currentTime.textContent = '';
+    elements.currentValue.textContent = '';
+    elements.overview.classList.remove('cursor-grabbing');
+    for (const element of [elements.plot, elements.overview, elements.zoomRow]) element.classList.add('hidden');
+    elements.emptyMessage.classList.remove('hidden');
+  });
 
   // --- Public API --------------------------------------------------------------
   const setSeries = (next: WaterSurfaceElevationSeries | null, emptyText = NO_SELECTION_TEXT): void => {
@@ -864,12 +890,12 @@ function axisElements(
   elements.push(
     svgText(formatWindowEdge(window.startUtcMs, window), {
       x: String(PLOT_INSET.left),
-      y: String(bottom + 12),
+      y: String(bottom + 14),
       'text-anchor': 'start',
     }),
     svgText(formatWindowEdge(window.endUtcMs, window), {
       x: String(right),
-      y: String(bottom + 12),
+      y: String(bottom + 14),
       'text-anchor': 'end',
     }),
   );
@@ -877,7 +903,7 @@ function axisElements(
 }
 
 function svgText(text: string, attributes: Record<string, string>): SVGTextElement {
-  const element = createSvgElement('text', { class: 'fill-slate-400 text-[10px]', ...attributes });
+  const element = createSvgElement('text', { class: 'fill-slate-400 text-xs', ...attributes });
   element.textContent = text;
   return element;
 }

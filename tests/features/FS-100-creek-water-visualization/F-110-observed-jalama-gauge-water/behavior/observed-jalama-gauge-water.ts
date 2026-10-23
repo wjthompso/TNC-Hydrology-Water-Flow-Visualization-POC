@@ -40,6 +40,12 @@ interface CreekSegmentsFile {
   }>;
 }
 
+interface ObservedWsePropagationFile {
+  gaugeSegmentId: string;
+  hopsPerDirection: number;
+  segments: Array<{ segmentId: string; role: string; hops: number }>;
+}
+
 export interface ObservationClock {
   firstUtcMs: number;
   stepMs: number;
@@ -52,6 +58,8 @@ export interface SeamSnapshot {
   waterGraphicGeometryIdentity: Array<{
     segmentId: string;
     bucketMinElevationM: number | null;
+    /** True for water inferred by Creek Segment Observed WSE Propagation; false for measured water. */
+    inferred: boolean;
   }>;
   cameraTargetWgs84: [number, number] | null;
 }
@@ -214,6 +222,56 @@ export function gaugeSegmentMidpointWgs84(): [number, number] {
   return [longitude / segment.pathWgs84.length, latitude / segment.pathWgs84.length];
 }
 
+/**
+ * The Creek Segments that may draw inferred water beside the gauge Creek Segment, read from the
+ * committed Creek Segment Observed WSE Propagation data: up to `hopsPerDirection` upstream and
+ * downstream. A neighbour is dry, so absent from the scene, when the inferred depth is not above zero.
+ */
+export function inferredNeighbourSegmentIds(): string[] {
+  const file = JSON.parse(
+    readFileSync(path.join(publishedDataRoot, 'observed-wse-propagation.json'), 'utf8'),
+  ) as ObservedWsePropagationFile;
+  if (file.gaugeSegmentId !== GAUGE_SEGMENT_ID) {
+    throw new Error(`Propagation data is centred on ${file.gaugeSegmentId}, not ${GAUGE_SEGMENT_ID}.`);
+  }
+  const neighbours = file.segments.filter((item) => item.role !== 'gauge');
+  if (neighbours.length === 0 || neighbours.some((item) => item.hops < 1 || item.hops > file.hopsPerDirection)) {
+    throw new Error('Propagation data has no neighbours, or a neighbour outside hopsPerDirection.');
+  }
+  return neighbours.map((item) => item.segmentId);
+}
+
+/**
+ * The water set is the gauge Creek Segment's measured water plus, at most, the inferred
+ * neighbours. Every drawn segment other than the gauge is a propagation neighbour flagged
+ * inferred, the gauge's own water is not flagged inferred and has a bucket, and no segment
+ * outside the gauge neighbourhood has water.
+ */
+export function expectGaugeMeasuredWaterAndInferredNeighboursOnly(seam: SeamSnapshot): void {
+  const neighbourIds = new Set(inferredNeighbourSegmentIds());
+  const drawn = seam.waterGraphicGeometryIdentity.filter((item) => item.bucketMinElevationM !== null);
+
+  const gauge = drawn.find((item) => item.segmentId === GAUGE_SEGMENT_ID);
+  expect(gauge, `gauge segment ${GAUGE_SEGMENT_ID} has water`).toBeDefined();
+  expect(gauge?.inferred, 'gauge segment water is measured, not inferred').toBe(false);
+
+  const others = drawn.filter((item) => item.segmentId !== GAUGE_SEGMENT_ID);
+  expect(
+    others.filter((item) => !neighbourIds.has(item.segmentId)).map((item) => item.segmentId),
+    'drawn water outside the gauge neighbourhood',
+  ).toEqual([]);
+  expect(
+    others.filter((item) => !item.inferred).map((item) => item.segmentId),
+    'neighbour water not flagged inferred',
+  ).toEqual([]);
+
+  expect(new Set(drawn.map((item) => item.segmentId)).size, 'one water graphic per segment').toBe(drawn.length);
+  expect(
+    [...seam.waterSegmentIds].sort(),
+    'segments listed as having water match the drawn graphics',
+  ).toEqual(drawn.map((item) => item.segmentId).sort());
+}
+
 export function distanceMeters(
   from: readonly [number, number],
   to: readonly [number, number],
@@ -242,13 +300,16 @@ export function watchLiveServices(page: Page): LiveServiceWatch {
 /**
  * Opens the observed-water page. `imagery` picks the scene imagery dataset; a test
  * whose promise is not about imagery passes the fast one and names it in its methodology.
+ * `pagePath` adds query parameters (for example `/?modeledExtent=jalama-gauge-reach`) that a
+ * later Dataset switch carries along.
  */
 export async function openObservedWaterPage(
   page: Page,
   watch: LiveServiceWatch,
   imagery: SceneImageryId = DEFAULT_SCENE_IMAGERY_ID,
+  pagePath = '/',
 ): Promise<void> {
-  await page.goto(withSceneImagery('/', imagery), { waitUntil: 'commit', timeout: 30_000 });
+  await page.goto(withSceneImagery(pagePath, imagery), { waitUntil: 'commit', timeout: 30_000 });
   const outcome = await page.evaluate(async (readyBudgetMs: number) => {
     const started = performance.now();
     while (performance.now() - started < readyBudgetMs) {
@@ -313,6 +374,7 @@ export async function readSeam(page: Page): Promise<SeamSnapshot> {
       waterGraphicGeometryIdentity: seam.waterGraphicGeometryIdentity.map((item) => ({
         segmentId: item.segmentId,
         bucketMinElevationM: item.bucketMinElevationM,
+        inferred: item.inferred === true,
       })),
       cameraTargetWgs84: target ? [target[0], target[1]] : null,
     };

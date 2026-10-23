@@ -14,6 +14,7 @@ import {
   type WaterSurfaceElevationChartState,
   type WaterSurfaceElevationSeries,
 } from './water-surface-elevation-chart';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { isWaterLevelUnit, readWaterLevelUnit, saveWaterLevelUnit, type WaterLevelUnit } from './water-level-units';
 
 /** What the chart shows for a segment: its series, or a message saying why there is none yet. */
@@ -80,7 +81,10 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
  * Binds the WSE (m NAVD88) / WSE (ft NAVD88) buttons. The choice is
  * remembered across reloads and Dataset switches.
  */
-function bindWaterLevelUnitToggle(onChange: (unit: WaterLevelUnit) => void): WaterLevelUnit {
+function bindWaterLevelUnitToggle(
+  onChange: (unit: WaterLevelUnit) => void,
+  lifetime: ExperienceLifetime,
+): WaterLevelUnit {
   const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-water-level-unit]')];
   let current = readWaterLevelUnit();
   const render = (): void => {
@@ -96,7 +100,7 @@ function bindWaterLevelUnitToggle(onChange: (unit: WaterLevelUnit) => void): Wat
       saveWaterLevelUnit(current);
       render();
       onChange(current);
-    });
+    }, { signal: lifetime.signal });
   }
   render();
   return current;
@@ -109,10 +113,13 @@ export function bindSelectedCreekSegmentChart(input: {
   chartContentForSegment: (segmentId: string) => SegmentChartContent;
   /** Called with the time of the chart reading a person clicked. */
   onChartTimeClicked: (timeUtcMs: number) => void;
+  /** Ending it unbinds the click, the chart, and the highlight. */
+  lifetime?: ExperienceLifetime;
 }): SelectedCreekSegmentChart {
+  const lifetime = input.lifetime ?? createExperienceLifetime();
   let chartForToggle: ReturnType<typeof createWaterSurfaceElevationChart> | null = null;
-  const initialUnit = bindWaterLevelUnitToggle((unit) => chartForToggle?.setUnit(unit));
-  const chart = createWaterSurfaceElevationChart(input.chartElements, input.onChartTimeClicked, initialUnit);
+  const initialUnit = bindWaterLevelUnitToggle((unit) => chartForToggle?.setUnit(unit), lifetime);
+  const chart = createWaterSurfaceElevationChart(input.chartElements, input.onChartTimeClicked, initialUnit, lifetime);
   chartForToggle = chart;
   let shownContentKey: unknown = null;
 
@@ -135,7 +142,7 @@ export function bindSelectedCreekSegmentChart(input: {
     else chart.setSeries(null, content.emptyText);
   };
 
-  const selection = bindCreekSegmentSelection(input.view, input.waterGraphics, showContentFor);
+  const selection = bindCreekSegmentSelection(input.view, input.waterGraphics, showContentFor, lifetime);
 
   return {
     selection,

@@ -4,11 +4,6 @@
     {
       "id": "FS-100",
       "name": "Creek Water Visualization"
-    },
-    {
-      "id": "FS-900",
-      "name": "Example catalog",
-      "example": true
     }
   ],
   "features": [
@@ -62,9 +57,16 @@
       "lifecycleChange": null
     },
     {
-      "id": "F-900",
-      "featureSetId": "FS-900",
-      "name": "Account sign-in",
+      "id": "F-180",
+      "featureSetId": "FS-100",
+      "name": "Dataset switching (the Dataset picker swaps the creek water on the same map)",
+      "lifecycle": "active",
+      "lifecycleChange": null
+    },
+    {
+      "id": "F-190",
+      "featureSetId": "FS-100",
+      "name": "Control panel layout",
       "lifecycle": "active",
       "lifecycleChange": null
     }
@@ -78,22 +80,6 @@
   ],
   "examples": [
     {
-      "id": "FBT-E001",
-      "name": "A new user can sign in and register for multi-factor authentication.",
-      "methodology": "This example does not run. If promoted, the browser and application flow would be real: the test would create a new account through the user interface, enroll an authenticator second factor, sign out, and sign back in with the password plus a current authenticator code before observing the account page. The identity backend would need an isolated test tenant or emulator, the authenticator-code helper would be test-only, and authentication responses would not be mocked. SMS and email enrollment are not covered.",
-      "category": "feature-behavior",
-      "owner": "F-900",
-      "sourceFile": "tests/features/FS-900-example-catalog/F-900-account-sign-in/behavior/FBT-E001.example.spec.ts"
-    },
-    {
-      "id": "FBT-E002",
-      "name": "Signing in with a wrong password shows an error and does not open the account.",
-      "methodology": "This example does not run. If promoted, it would use the real browser and application flow with an isolated test account to submit a known wrong password, observe the visible error, verify that account navigation and multi-factor enrollment do not appear, then visit the protected account URL directly and observe the sign-in page instead of account content. The account credentials would be test-only, and authentication responses would not be mocked. This checks browser-observable access and does not inspect the identity provider's internal session storage.",
-      "category": "feature-behavior",
-      "owner": "F-900",
-      "sourceFile": "tests/features/FS-900-example-catalog/F-900-account-sign-in/behavior/FBT-E002.example.spec.ts"
-    },
-    {
       "id": "CCT-E001",
       "name": "Water depth in meters equals the surveyed water elevation minus the surveyed bed elevation.",
       "methodology": "This example does not run. If promoted, it would call the real production water-depth calculation through an imported production seam and compare exact known surveyed values: 103.75 m water minus 101.25 m bed equals 2.5 m, and 99.5 m water minus 100 m bed equals -0.5 m. Inputs are fixed test values; no calculation or response is mocked. It does not read a map or network response.",
@@ -105,8 +91,8 @@
   "tests": [
     {
       "id": "FBT-001",
-      "name": "Open the page on water for the Jalama Near Lompoc gauge Creek Segment only, with the camera framed there and no leftover synthetic ribbons.",
-      "methodology": "Opens the locally served page and waits until the read-only test seam reports ready. The browser page, ArcGIS SceneView, and committed published creek data are real. Esri World Imagery and Esri World Elevation responses are real and are reused from a local disk cache; a response missing from the cache is fetched live, and if that fetch is unavailable the result is inconclusive rather than passed. Nothing else is mocked. The test-only seam supplies the water-segment list, water-graphic identity, and camera target. The test checks that only Creek Segment 27714637-026 has water, that exactly one water graphic exists for that segment, that the camera target is within 300 m of that segment's midpoint from the committed path, and that the removed synthetic controls are absent. It does not check the visual appearance of the water. Imagery dataset used in the visualization: Esri World Imagery.",
+      "name": "Open the page on measured water for the Jalama Near Lompoc gauge Creek Segment, with the camera framed there and no leftover synthetic ribbons.",
+      "methodology": "Opens the locally served page and waits until the read-only test seam reports ready. The browser page, ArcGIS SceneView, and committed published creek data are real. Esri World Imagery and Esri World Elevation responses are real and are reused from a local disk cache; a response missing from the cache is fetched live, and if that fetch is unavailable the result is inconclusive rather than passed. Nothing else is mocked. The test-only seam supplies the water-segment list, water-graphic identity, and camera target. The test checks that Creek Segment 27714637-026 has measured (not inferred) water with a water bucket, that every other segment with water is one of the inferred neighbours named in the committed observed-wse-propagation.json (up to 3 upstream and 3 downstream) and is flagged inferred, that no segment outside that neighbourhood has water, that each segment has one water graphic, that the camera target is within 300 m of the gauge segment's midpoint from the committed path, and that the removed synthetic controls are absent. It does not check the visual appearance of the water. Imagery dataset used in the visualization: Esri World Imagery.",
       "category": "feature-behavior",
       "owner": "F-110",
       "additionalFeatureAssociations": [],
@@ -125,7 +111,7 @@
     {
       "id": "FBT-002",
       "name": "Scrub to a different observation time and replace the shown water without leaving the previous water in place.",
-      "methodology": "Starts from the opening observation, then sets the real time slider to the published 2026-01-03T15:15Z flood peak and checks that the selected time and water-bucket identity change while exactly one water graphic remains on Creek Segment 27714637-026. The browser page and committed published data are real. Esri World Imagery and Esri World Elevation responses are real and are reused from a local disk cache; a response missing from the cache is fetched live, and if that fetch is unavailable the result is inconclusive rather than passed. Nothing else is mocked. It does not check the visual appearance of the water. Imagery dataset used in the visualization: Esri World Imagery.",
+      "methodology": "Starts from the opening observation, then sets the real time slider to the published 2026-01-03T15:15Z flood peak and checks that the selected time and the water bucket of Creek Segment 27714637-026 change, and that the water set stays that segment's measured water plus only its inferred neighbours from the committed observed-wse-propagation.json, so no previous water is left behind. The browser page and committed published data are real. Esri World Imagery and Esri World Elevation responses are real and are reused from a local disk cache; a response missing from the cache is fetched live, and if that fetch is unavailable the result is inconclusive rather than passed. Nothing else is mocked. It does not check the visual appearance of the water. Imagery dataset used in the visualization: Esri World Imagery.",
       "category": "feature-behavior",
       "owner": "F-110",
       "additionalFeatureAssociations": [],
@@ -315,10 +301,13 @@
     {
       "id": "FBT-013",
       "name": "Clicking a time on the Jalama gauge water-surface elevation chart moves the time slider to that time and redraws the gauge segment's water at that time's elevation.",
-      "methodology": "Why it matters: a person reads the gauge's water-surface elevation over time on the Water-Surface Elevation Chart, clicks a moment such as a flood peak, and expects the map to jump there. How it checks: opens the locally served observed page in test mode, waits for the test seam and a finished SceneView frame, then moves the camera instantly to a fixed straight-down pose 150 m above the gauge Creek Segment 27714637-026's opening water and settles again. It finds a pixel where SceneView.hitTest reports that segment's water, clear of the sidebar, and clicks it with the real mouse, which selects the segment and fills the chart. It moves the real mouse to the chart line at the committed 2026-01-03T15:15Z flood peak, reads the reading the chart reports under the pointer, and clicks there. The test fails unless the selected time equals that reading's time and lies within about one chart pixel of the peak; the time slider's slot, its spoken value, and the time readout match that time; the gauge segment's water is redrawn at the prepared bucket holding the committed reading for that time, which differs from the opening water; only that segment shows water; and the chart's time cursor sits at that time. What is real: the browser page, ArcGIS SceneView, the committed published creek data, the real mouse clicks, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. What is test-only: the camera command and the read-only seam that reports the selection, chart, slider, and drawn-water state. What it does not check: water colour, the highlight's look, chart styling, keyboard input, or modeled water.",
+      "methodology": "Why it matters: a person reads the gauge's water-surface elevation over time on the Water-Surface Elevation Chart, clicks a moment such as a flood peak, and expects the map to jump there. How it checks: opens the locally served observed page in test mode, waits for the test seam and a finished SceneView frame, then moves the camera instantly to a fixed straight-down pose 150 m above the gauge Creek Segment 27714637-026's opening water and settles again. It finds a pixel where SceneView.hitTest reports that segment's water, clear of the sidebar, and clicks it with the real mouse, which selects the segment and fills the chart. It moves the real mouse to the chart line at the committed 2026-01-03T15:15Z flood peak, reads the reading the chart reports under the pointer, and clicks there. The test fails unless the selected time equals that reading's time and lies within about one chart pixel of the peak; the time slider's slot, its spoken value, and the time readout match that time; the gauge segment's water is redrawn at the prepared bucket holding the committed reading for that time, which differs from the opening water; the water set is that segment's measured water plus only its inferred neighbours from the committed observed-wse-propagation.json; and the chart's time cursor sits at that time. What is real: the browser page, ArcGIS SceneView, the committed published creek data, the real mouse clicks, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. What is test-only: the camera command and the read-only seam that reports the selection, chart, slider, and drawn-water state. What it does not check: water colour, the highlight's look, chart styling, keyboard input, or modeled water.",
       "category": "feature-behavior",
       "owner": "F-160",
-      "additionalFeatureAssociations": ["F-110", "F-150"],
+      "additionalFeatureAssociations": [
+        "F-110",
+        "F-150"
+      ],
       "scope": "end-to-end",
       "environment": "browser",
       "browserMode": "live",
@@ -337,7 +326,10 @@
       "methodology": "Why it matters: a person looking at modeled water clicks a moment on a Creek Segment's Water-Surface Elevation Chart and expects the map to show that moment's modeled water. How it checks: opens the locally served page on the “Inferred Creek WSE — hourly (from NOAA National Water Model v3.0 flows)” Dataset for the jalama-gauge-reach extent at 2022-10-01T00:00Z, a low-flow hour, checks that the opening time matches the URL, moves the camera instantly to a fixed straight-down pose 150 m above Creek Segment 27714637-026's opening water, and waits for the modeled loads and a finished frame. It clicks that segment's water with the real mouse at a pixel where SceneView.hitTest reports it, which selects the segment and fills the chart with water year 2023. It moves the real mouse to the chart line at the 2023-01-10T01:00Z flood peak, reads the reading under the pointer, and clicks. The test fails unless the selected time equals that reading's time and lies within 24 hours of the peak; the time slider's slot, spoken value, and readout match it; once the modeled loads finish, the elevation the page holds for the segment equals the charted value; the segment's water is redrawn at the prepared bucket holding that value, which differs from the opening water; and the chart's time cursor sits at that time. What is real: the browser page, ArcGIS SceneView, the developer's local modeled pipeline output served by the development middleware, the real mouse clicks, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. When the local pipeline output is missing the result is inconclusive with a message naming the pipeline command; it never passes without that output. What is test-only: the camera command and the read-only seam. What it does not check: clicks that cross into another water year, water colour or slope, chart styling, other Datasets or extents, or whether the modeled elevations are hydrologically right.",
       "category": "feature-behavior",
       "owner": "F-160",
-      "additionalFeatureAssociations": ["F-140", "F-150"],
+      "additionalFeatureAssociations": [
+        "F-140",
+        "F-150"
+      ],
       "scope": "end-to-end",
       "environment": "browser",
       "browserMode": "live",
@@ -356,7 +348,9 @@
       "methodology": "Why it matters: a person picks one Creek Segment by clicking its water and needs to see clearly which one is picked, with the old pick released. How it checks: opens the locally served page on the “Inferred Creek WSE — hourly (from NOAA National Water Model v3.0 flows)” Dataset for the jalama-gauge-reach extent at the 2023-01-10T01:00Z flood peak, when neighbouring Creek Segments 27714637-046 and 27714637-047 both show wide water, and checks that nothing is selected or highlighted and the chart is empty. For each segment in turn it moves the camera instantly to a fixed straight-down pose 150 m above that segment's water, waits for the modeled loads and a finished frame, and clicks the segment's water with the real mouse at a pixel where SceneView.hitTest reports it. After each click the test fails unless that segment is the Selected Creek Segment, it is the only segment whose drawn water carries the selection highlight, the chart reports that segment with readings, the chart heading names it, and the chart plot is visible. The second click therefore also checks that the first segment's highlight is gone. What is real: the browser page, ArcGIS SceneView and its highlight, the developer's local modeled pipeline output served by the development middleware, the real mouse clicks, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. When the local pipeline output is missing the result is inconclusive with a message naming the pipeline command. What is test-only: the camera command and the read-only seam that reports the selection and which drawn water graphics carry the highlight. What it does not check: the highlight's colour or pixels, clicking empty ground, observed water, or chart values.",
       "category": "feature-behavior",
       "owner": "F-150",
-      "additionalFeatureAssociations": ["F-160"],
+      "additionalFeatureAssociations": [
+        "F-160"
+      ],
       "scope": "end-to-end",
       "environment": "browser",
       "browserMode": "live",
@@ -375,7 +369,9 @@
       "methodology": "Why it matters: during scrubbing or playback a person reads the chart's time cursor to see where the map's moment sits in the record; a cursor that lags or stays put misleads them. How it checks: opens the locally served observed page in test mode, moves the camera instantly to a fixed straight-down pose 150 m above gauge Creek Segment 27714637-026's water, settles the frame, and clicks that segment's water with the real mouse at a pixel where SceneView.hitTest reports it. It checks that the cursor sits at the opening time, then sets the real time slider to the committed 2026-01-03T15:15Z flood peak with the same input and change events a scrub fires. The test fails unless the chart reports its cursor at the flood peak, the drawn cursor line is visible, and the drawn line's horizontal position is within 1 pixel of the chart line's position for that time. What is real: the browser page, ArcGIS SceneView, the committed published creek data, the real mouse click, the real time slider, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable the result is inconclusive rather than passed. What is test-only: the camera command and the read-only seam. What it does not check: Play button playback, modeled water, chart styling, or the water drawn on the map, which FBT-002 covers.",
       "category": "feature-behavior",
       "owner": "F-160",
-      "additionalFeatureAssociations": ["F-110"],
+      "additionalFeatureAssociations": [
+        "F-110"
+      ],
       "scope": "end-to-end",
       "environment": "browser",
       "browserMode": "live",
@@ -394,7 +390,9 @@
       "methodology": "Why it matters: a person sweeps the pointer across the chart to read values before choosing a moment; if hovering changed the time, the map would jump around and lose their place. How it checks: opens the locally served observed page in test mode, moves the camera instantly to a fixed straight-down pose 150 m above gauge Creek Segment 27714637-026's water, settles the frame, and clicks that segment's water with the real mouse at a pixel where SceneView.hitTest reports it. It records the time slider's slot, spoken value, and readout, and the drawn water, then moves the real mouse in steps onto the chart line at the committed 2026-01-03T15:15Z flood peak without clicking and holds it there for 500 ms. The test fails unless the hover readout shows the hovered reading's Pacific time and its committed water-surface elevation to two decimals, and the time slider, spoken value, readout, selected time, drawn water, and chart time cursor are all unchanged. What is real: the browser page, ArcGIS SceneView, the committed published creek data, the real mouse, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable the result is inconclusive rather than passed. What is test-only: the camera command and the read-only seam. What it does not check: touch input, the hover marker's look, modeled water, or what clicking does, which FBT-013 covers.",
       "category": "feature-behavior",
       "owner": "F-160",
-      "additionalFeatureAssociations": ["F-110"],
+      "additionalFeatureAssociations": [
+        "F-110"
+      ],
       "scope": "end-to-end",
       "environment": "browser",
       "browserMode": "live",
@@ -425,6 +423,47 @@
       "durationBudgetMs": 20000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-170-dev-tools-click-marker/behavior/FBT-018.live.spec.ts"
+    },
+    {
+      "id": "FBT-019",
+      "name": "Switching the Dataset in the picker replaces the creek water on the same map, without reloading the page or rebuilding the scene.",
+      "methodology": "Why it matters: switching Dataset should swap the creek water, not rebuild the whole map. A full page reload throws away the ArcGIS SceneView, the imagery and terrain tiles, and the USGS 3DEP elevation layer, so every switch pays the whole scene startup again. How it checks: opens the locally served page on the observed gauge Dataset with the fast Esri World Imagery, for the jalama-gauge-reach extent, moves the camera instantly to a fixed pose 400 m above the gauge Creek Segment, and waits for a finished frame. It then tags the page's window and the SceneView canvas element in the browser and starts counting page loads. It chooses the “Modeled Creek Water Levels — hourly (from NOAA National Water Model v3.0 flows)” Dataset in the real Dataset picker and waits up to 9 seconds for the modeled title and for the modeled loads to finish. It then chooses “Observed gauge” in the picker and waits up to 9 seconds for the observed gauge Creek Segment's water to return. After each switch the test fails unless no page load happened, the window tag is still present, and the SceneView canvas on screen is the same element as before. After the first switch the camera must also sit within about 10 m, 5 m of height, and 1 degree of heading and tilt of where it was. What is real: the browser page, the Dataset picker, ArcGIS SceneView, the developer's local modeled pipeline output served by the development middleware, the committed published gauge data, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. When the local pipeline output is missing the result is inconclusive with a message naming the pipeline command. What is test-only: the camera command and the read-only seam. What it does not check: tile request counts or load times, the modeled water's shape (FBT-011 and FBT-012 cover it), the selected time, which each Dataset snaps to its own time grid, the selected Creek Segment, the accuracy notice, or that the address bar names the new Dataset.",
+      "category": "feature-behavior",
+      "owner": "F-180",
+      "additionalFeatureAssociations": [
+        "F-110",
+        "F-140"
+      ],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-180-dataset-switching/behavior/FBT-019.live.spec.ts"
+    },
+    {
+      "id": "FBT-020",
+      "name": "Zooming the browser in makes the control panel scroll to its last line, and a thin scrollbar shows only while the pointer is over the panel.",
+      "methodology": "Opens the timeline fixture page with the real control panel markup and stylesheet. The ArcGIS scene and published gauge series are not loaded, and the test fails if the page requests ArcGIS. A 1280×300 window stands in for a zoomed-in browser, which shrinks the page's CSS viewport. There, the panel's last line (the imagery credit) starts below the window edge, the panel stays inside the window, and the panel's own scroll area is taller than it is visible. The test then moves the real mouse over the panel and turns the real wheel, and checks that the scroll offset moves and the credit comes inside the window. For the scrollbar, it reads the panel's computed scrollbar color with the pointer away (thumb transparent), over the panel (thumb visible), and away again (transparent). At a 1280×1600 window the panel has no scroll overflow. It does not check the scrollbar's pixels, its look in Firefox or Safari, touch scrolling, or the map.",
+      "category": "feature-behavior",
+      "owner": "F-190",
+      "additionalFeatureAssociations": [],
+      "scope": "component",
+      "environment": "browser",
+      "browserMode": "deterministic",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 5000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-190-control-panel-layout/behavior/FBT-020.deterministic.spec.ts"
     },
     {
       "id": "FBT-131",
@@ -565,7 +604,9 @@
       "methodology": "Why it matters: observed and modeled water must draw one set of prepared water-surface polygons, so switching between the Jalama gauge readings and a modeled Dataset never changes the water's shape at the same water-surface elevation. Publish copies a reviewed, committed snapshot of Stage 4's polygon set for the gauge's Creek Segment, 27714637-026, so a drifted snapshot or a newer Stage 4 run that nobody re-reviewed would quietly split them again. How it checks: it reads the snapshot's provenance file to find the Stage 4 source path and method (junction-sloped-terrain-fill v1), then reads the 27714637-026 polygon set from three places: the local Stage 4 output for the jalama-gauge-reach extent, the published water-surface-polygon-sets.json, and the retained snapshot. Each must hold exactly one set for that Creek Segment. The published set and the retained set must each deep-equal the Stage 4 set: segmentNetworkVersion, segment id, and every bucket's minimum, maximum, and ring coordinates. When the gitignored local Stage 4 output is missing, the test is skipped with a message naming npm run pipeline:modeled-wse:all -- --extent=jalama-gauge-reach; a skip is reported as not run, never passed. What is real: the committed published file, the committed snapshot and provenance, and the developer's local Stage 4 output. Nothing is mocked, nothing is rebuilt, and there is no network. What it does not check: whether Stage 4's polygons are hydraulically right, other Creek Segments, the dangermond-preserve extent, how the browser draws the polygons, or that the published file is reproducible from retained sources (FST-003 does).",
       "category": "feature-supporting",
       "owner": "F-110",
-      "additionalFeatureAssociations": ["F-140"],
+      "additionalFeatureAssociations": [
+        "F-140"
+      ],
       "scope": "integration",
       "environment": "non-browser",
       "browserMode": "not-applicable",

@@ -154,8 +154,21 @@ export class ProgressLine {
 
   private render(): void {
     if (this.finished) return;
-    process.stdout.write(`${clearTerminalLine}${spinnerFrames[this.frameIndex]} ${this.line}`);
+    const frame = `${spinnerFrames[this.frameIndex]} ${this.line}`;
+    process.stdout.write(`${clearTerminalLine}${fitToTerminalWidth(frame)}`);
   }
+}
+
+/**
+ * Keeps an animated frame on one terminal row. A wrapped frame cannot be erased by carriage
+ * return plus clear-line, so each redraw would otherwise leave a new row behind.
+ */
+function fitToTerminalWidth(text: string): string {
+  const columns = process.stdout.columns;
+  if (!columns || columns < 2) return text;
+  const usableColumns = columns - 1; // Writing in the last column can trigger an early wrap.
+  if (text.length <= usableColumns) return text;
+  return `${text.slice(0, usableColumns - 1)}…`;
 }
 
 export class RunProgress {

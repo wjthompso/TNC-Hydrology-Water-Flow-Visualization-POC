@@ -12,6 +12,7 @@ import IconSymbol3DLayer from '@arcgis/core/symbols/IconSymbol3DLayer';
 import PointSymbol3D from '@arcgis/core/symbols/PointSymbol3D';
 import LineCallout3D from '@arcgis/core/symbols/callouts/LineCallout3D';
 import type SceneView from '@arcgis/core/views/SceneView';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import {
   MONITORING_STATION_MARKER_LAYER_ID,
   type StationMarkerAttributes,
@@ -71,6 +72,7 @@ interface StationOnMap {
 export async function installMonitoringStationLocator(
   view: SceneView,
   stationAttributes: readonly StationMarkerAttributes[],
+  lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): Promise<void> {
   const card = readCardElements();
   if (!card) return;
@@ -81,6 +83,10 @@ export async function installMonitoringStationLocator(
     elevationInfo: { mode: 'relative-to-ground' },
   });
   view.map?.add(locatorLayer);
+  lifetime.onEnd(() => {
+    view.map?.remove(locatorLayer);
+    locatorLayer.destroy();
+  });
 
   const stations: StationOnMap[] = [];
   for (const attributes of stationAttributes) {
@@ -142,9 +148,10 @@ export async function installMonitoringStationLocator(
     card.root.classList.add('hidden');
   };
 
-  card.closeButton.addEventListener('click', closeCard);
+  card.closeButton.addEventListener('click', closeCard, { signal: lifetime.signal });
+  lifetime.onEnd(closeCard);
 
-  view.on('click', async (event) => {
+  const clickHandle = view.on('click', async (event) => {
     const result = await view.hitTest(event, { include: [locatorLayer, ...stationMarkerLayers(view)] });
     const hit = result.results.find((item) => item.type === 'graphic');
     const station =
@@ -161,7 +168,7 @@ export async function installMonitoringStationLocator(
     }
   });
 
-  watch(
+  const cameraWatch = watch(
     () => view.camera,
     () => {
       updateLocators();
@@ -170,16 +177,22 @@ export async function installMonitoringStationLocator(
     { initial: true },
   );
   // Width and height changes move every screen point without moving the camera.
-  watch(
+  const sizeWatch = watch(
     () => [view.width, view.height],
     () => placeCard(),
   );
+  lifetime.onEnd(() => {
+    clickHandle.remove();
+    cameraWatch.remove();
+    sizeWatch.remove();
+  });
 
   // Not awaited: the ground height only refines the card anchor and the pin's
   // camera distance, and `queryElevation` can wait a minute on a stalled
   // elevation service.
   for (const station of stations) {
     void groundElevationM(view, station.attributes).then((elevationM) => {
+      if (lifetime.signal.aborted) return;
       station.groundElevationM = elevationM;
       updateLocators();
       placeCard();

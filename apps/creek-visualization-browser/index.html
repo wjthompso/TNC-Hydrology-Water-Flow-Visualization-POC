@@ -6,6 +6,13 @@
     <!-- Empty icon so the browser does not request a missing /favicon.ico and log a 404. -->
     <link rel="icon" href="data:," />
     <title>Jalama Creek observed water</title>
+    <!--
+      Linked here, not imported from the scene module: main.ts loads the ArcGIS
+      modules with a dynamic import, so an import there paints the page unstyled
+      until the whole ArcGIS bundle has downloaded. Vite bundles and processes
+      this link through Tailwind in dev and in the build.
+    -->
+    <link rel="stylesheet" href="/src/style.css" />
     <style>
       /* Auto-hiding overlay scrollbar for the info sidebar.
          scrollbar-gutter: stable both-edges mirrors the gutter on both sides so
@@ -41,24 +48,41 @@
       <div id="arcgis-view" class="absolute inset-0"></div>
 
       <aside
-        class="pointer-events-none absolute left-4 top-4 z-10 max-h-[calc(100vh-2rem)] w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-xl backdrop-blur"
+        class="pointer-events-none absolute left-4 top-4 z-10 max-h-[calc(100vh-2rem)] w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-xl backdrop-blur"
       >
-        <div class="scrollbar-autohide h-full overflow-y-auto p-4">
+        <div id="control-panel-scroll" class="scrollbar-autohide pointer-events-auto max-h-[calc(100vh-2rem)] overflow-y-auto p-4">
         <header class="mb-3 border-b border-slate-700 pb-3">
-          <p class="text-xs font-medium uppercase tracking-wide text-cyan-300">Jalama Creek</p>
-          <h1 id="experience-title" class="mt-1 text-lg font-semibold leading-tight">Observed water</h1>
-          <p id="experience-subtitle" class="mt-1 text-sm text-slate-400">
-            Observed water at USGS gauge 11120600, Jalama Creek near Lompoc.
-          </p>
+          <p class="text-sm font-medium uppercase tracking-wide text-cyan-300">Jalama Creek</p>
+          <!--
+            Small print lives in the info tip: the Dataset subtitle (set by the
+            experience scripts) and the map controls. See .info-tip-* in style.css.
+          -->
+          <div class="relative mt-1 flex items-start justify-between gap-2">
+            <h1 id="experience-title" class="text-xl font-semibold leading-tight">Observed water</h1>
+            <span class="group/tip">
+              <button
+                type="button"
+                aria-label="About this view and map controls"
+                aria-describedby="header-info-tip"
+                class="info-tip-button"
+              >
+                i
+              </button>
+              <div id="header-info-tip" role="tooltip" class="info-tip-bubble top-full">
+                <p id="experience-subtitle">Observed water at USGS gauge 11120600, Jalama Creek near Lompoc.</p>
+                <p class="mt-2 text-slate-300">Drag to pan. Scroll to zoom. Right-drag to tilt.</p>
+              </div>
+            </span>
+          </div>
           <div class="mt-3 flex items-center justify-between gap-2">
-            <label for="dataset-picker" class="block text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            <label for="dataset-picker" class="block text-sm font-medium uppercase tracking-wide text-slate-400">
               Dataset
             </label>
             <button
               id="dataset-about-btn"
               type="button"
               aria-haspopup="dialog"
-              class="pointer-events-auto flex cursor-pointer items-center gap-1 rounded text-[11px] font-medium text-cyan-300 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+              class="pointer-events-auto flex cursor-pointer items-center gap-1 rounded text-sm font-medium text-cyan-300 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
             >
               <svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.4" />
@@ -69,13 +93,13 @@
           </div>
           <select
             id="dataset-picker"
-            class="pointer-events-auto mt-1 w-full cursor-pointer rounded-md border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            class="pointer-events-auto mt-1 w-full cursor-pointer rounded-md border border-slate-600 bg-slate-800 px-2 py-1.5 text-base text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
           ></select>
         </header>
 
         <section class="pointer-events-auto mb-4">
           <div class="mb-2 flex items-center justify-between gap-3">
-            <h2 class="text-sm font-medium text-slate-200">Time</h2>
+            <h2 class="text-base font-medium text-slate-200">Time</h2>
             <!-- Icon swapped between play and pause by observation-timeline-controls.ts; aria-label carries the name. -->
             <button
               id="timeline-play-btn"
@@ -83,16 +107,16 @@
               aria-pressed="false"
               aria-label="Play"
               title="Play"
-              class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-cyan-500/60 bg-cyan-950/60 text-cyan-100 transition-colors hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950"
+              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-cyan-500/60 bg-cyan-950/60 text-cyan-100 transition-colors hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950"
             ></button>
           </div>
           <div class="flex items-baseline justify-between gap-3">
             <!-- The spinner is replaced with the first selected time (observation-timeline-controls.ts). -->
-            <p id="timeline-readout" class="text-sm font-medium text-cyan-100"><span class="loading-spinner" aria-hidden="true"></span>Loading time…</p>
+            <p id="timeline-readout" class="text-base font-medium text-cyan-100"><span class="loading-spinner" aria-hidden="true"></span>Loading time…</p>
             <!-- Selected Creek Segment's water level at the selected time; filled by water-surface-elevation-chart.ts. -->
-            <span id="wse-chart-current-value" class="shrink-0 text-sm font-semibold tabular-nums text-sky-300" aria-live="polite"></span>
+            <span id="wse-chart-current-value" class="shrink-0 text-base font-semibold tabular-nums text-sky-300" aria-live="polite"></span>
           </div>
-          <p id="timeline-status" class="text-xs text-slate-300 empty:hidden" aria-live="polite"></p>
+          <p id="timeline-status" class="text-sm text-slate-300 empty:hidden" aria-live="polite"></p>
           <label for="timeline-slider" class="sr-only">Observation time</label>
           <input
             id="timeline-slider"
@@ -140,7 +164,7 @@
               type="button"
               aria-label="0.5 times speed"
               aria-pressed="false"
-              class="cursor-pointer appearance-none whitespace-nowrap rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+              class="cursor-pointer appearance-none whitespace-nowrap rounded-md border border-cyan-500/60 bg-cyan-950/60 px-1 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
               0.5×
             </button>
@@ -149,7 +173,7 @@
               type="button"
               aria-label="1 times speed"
               aria-pressed="true"
-              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-1 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
               1×
             </button>
@@ -158,7 +182,7 @@
               type="button"
               aria-label="2 times speed"
               aria-pressed="false"
-              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-1 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
               2×
             </button>
@@ -167,7 +191,7 @@
               type="button"
               aria-label="5 times speed"
               aria-pressed="false"
-              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-1 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
               5×
             </button>
@@ -176,7 +200,7 @@
               type="button"
               aria-label="10 times speed"
               aria-pressed="false"
-              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-xs font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+              class="cursor-pointer appearance-none rounded-md border border-cyan-500/60 bg-cyan-950/60 px-1 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
               10×
             </button>
@@ -188,11 +212,33 @@
           class="pointer-events-auto mb-4 border-t border-slate-700 pt-3"
           aria-labelledby="wse-chart-title"
         >
-          <div class="mb-1 flex items-baseline justify-between gap-3">
-            <h2 id="wse-chart-title" class="text-sm font-medium text-slate-200">Water-surface elevation (WSE)</h2>
-            <span id="wse-chart-segment" class="text-xs text-amber-300"></span>
+          <div class="relative mb-1 flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <h2 id="wse-chart-title" class="text-base font-medium leading-snug text-slate-200">Water level (water-surface elevation, WSE)</h2>
+              <span id="wse-chart-segment" class="text-sm text-amber-300"></span>
+            </div>
+            <!--
+              The data source and the chart instructions sit in the info tip, so the
+              chart keeps the panel's vertical space. wse-chart-hover is the
+              instruction text; the chart script fills it (water-surface-elevation-chart.ts).
+            -->
+            <span class="group/tip">
+              <button
+                type="button"
+                aria-label="About this chart: data source and how to use it"
+                aria-describedby="wse-chart-info-tip"
+                class="info-tip-button"
+              >
+                i
+              </button>
+              <div id="wse-chart-info-tip" role="tooltip" class="info-tip-bubble bottom-full">
+                <p id="wse-chart-source" class="text-slate-200"></p>
+                <p class="mt-2 text-slate-300">
+                  Hover to read a value. Click to move the time slider. Drag the bar below to zoom.
+                </p>
+              </div>
+            </span>
           </div>
-          <p id="wse-chart-source" class="text-[11px] leading-snug text-slate-400"></p>
           <div
             id="water-level-unit-toggle"
             class="mt-2 grid grid-cols-2 gap-1"
@@ -204,7 +250,7 @@
               data-water-level-unit="wse-navd88-m"
               aria-pressed="true"
               title="Water-surface elevation (WSE) in meters above the NAVD88 vertical datum."
-              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-[11px] font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
               WSE (m NAVD88)
             </button>
@@ -213,39 +259,39 @@
               data-water-level-unit="wse-navd88-ft"
               aria-pressed="false"
               title="Water-surface elevation (WSE) in feet above the NAVD88 vertical datum."
-              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1 text-[11px] font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
               WSE (ft NAVD88)
             </button>
           </div>
           <div
             id="wse-chart-plot"
-            class="mt-2 hidden h-40 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
+            class="mt-2 hidden h-48 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
             role="img"
             aria-label="Water-surface elevation over time for the selected Creek Segment. Click a time to select it."
           ></div>
           <div
             id="wse-chart-overview"
-            class="mt-1 hidden h-8 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/40"
+            class="mt-1 hidden h-10 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/40"
             role="group"
             aria-label="Zoom range. Drag a handle to resize, drag inside to pan, or drag outside to pick a new range. Double-click to show the whole record."
           ></div>
           <div id="wse-chart-zoom-row" class="mt-1 hidden items-center justify-between gap-2 [&:not(.hidden)]:flex">
-            <span id="wse-chart-zoom-readout" class="truncate text-[11px] text-slate-400"></span>
+            <span id="wse-chart-zoom-readout" class="truncate text-sm text-slate-400"></span>
             <button
               id="wse-chart-reset-zoom"
               type="button"
-              class="shrink-0 cursor-pointer rounded border border-slate-600 bg-slate-800 px-2 py-0.5 text-[11px] text-slate-200 hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40"
+              class="shrink-0 cursor-pointer rounded border border-slate-600 bg-slate-800 px-2 py-1 text-sm text-slate-200 hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40"
             >
               Reset zoom
             </button>
           </div>
-          <p id="wse-chart-hover" class="mt-1 min-h-4 text-[11px] text-slate-400"></p>
-          <p id="wse-chart-empty" class="text-xs leading-relaxed text-slate-400"></p>
+          <p id="wse-chart-hover" class="mt-1 min-h-5 text-sm text-slate-400"></p>
+          <p id="wse-chart-empty" class="text-sm leading-relaxed text-slate-400"></p>
         </section>
 
         <section id="modeled-panel" class="pointer-events-auto mb-4 hidden border-t border-slate-700 pt-3">
-          <label class="flex cursor-pointer items-start gap-2 text-sm text-slate-200">
+          <label class="flex cursor-pointer items-start gap-2 text-base text-slate-200">
             <input
               id="transfer-water-toggle"
               type="checkbox"
@@ -258,20 +304,19 @@
 
         <p
           id="experience-error"
-          class="pointer-events-auto mt-3 hidden rounded-md border border-red-400/40 bg-red-950/60 p-2 text-sm text-red-100"
+          class="pointer-events-auto mt-3 hidden rounded-md border border-red-400/40 bg-red-950/60 p-2 text-base text-red-100"
           role="alert"
         ></p>
 
-        <footer class="mt-4 border-t border-slate-700 pt-3 text-[11px] leading-relaxed text-slate-500">
+        <footer class="mt-4 border-t border-slate-700 pt-3 text-xs leading-relaxed text-slate-400">
           <p id="scene-note">Imagery: Esri, Maxar, Earthstar Geographics, and the GIS User Community. Terrain: Esri World Elevation.</p>
-          <p class="mt-1 text-slate-400">Drag to pan. Scroll to zoom. Right-drag to tilt.</p>
         </footer>
         </div>
       </aside>
 
       <section
         aria-label="Map legend"
-        class="pointer-events-none absolute bottom-8 right-3 z-10 w-max max-w-[min(20rem,calc(100vw-24.5rem))] rounded-lg border border-slate-700/80 bg-slate-900/80 p-3 shadow-xl backdrop-blur"
+        class="pointer-events-none absolute bottom-8 right-3 z-10 w-max max-w-[min(20rem,calc(100vw-27.5rem))] rounded-lg border border-slate-700/80 bg-slate-900/80 p-3 shadow-xl backdrop-blur"
       >
         <h2 class="text-sm font-semibold text-slate-100">Legend</h2>
         <div class="mt-2 flex items-center gap-2 text-xs leading-relaxed text-slate-300">
@@ -406,7 +451,7 @@
       <div
         id="loading-overlay"
         role="status"
-        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 text-sm text-slate-300"
+        class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-slate-950/70 text-sm text-slate-300 transition-opacity duration-500 motion-reduce:transition-none"
       ><span class="loading-spinner" aria-hidden="true"></span>Loading observed water…</div>
 
       <!--

@@ -7,6 +7,9 @@ import { GAUGE_DATUM_FT } from './observed-gauge-readings';
 const LINK_CLASS =
   'text-cyan-300 underline decoration-cyan-300/50 underline-offset-2 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300';
 
+/** Replaced on every Dataset switch, so the button opens the active Dataset's text. */
+let aboutClick: (() => void) | null = null;
+
 /** Fills the dialog and wires the button. `fillBody` runs on every open, so late-loading content shows. */
 export function bindDatasetAboutDialog(title: string, fillBody: (body: HTMLElement) => void): void {
   const button = document.getElementById('dataset-about-btn');
@@ -16,13 +19,17 @@ export function bindDatasetAboutDialog(title: string, fillBody: (body: HTMLEleme
   if (!(button instanceof HTMLButtonElement) || !(dialog instanceof HTMLDialogElement) || !heading || !body) {
     return;
   }
-  button.addEventListener('click', () => {
+  if (aboutClick) button.removeEventListener('click', aboutClick);
+  aboutClick = () => {
     heading.textContent = title;
     fillBody(body);
     // showModal() traps focus, closes on Escape, and returns focus to the button.
     dialog.showModal();
-  });
-  // A click on the backdrop closes the dialog.
+  };
+  button.addEventListener('click', aboutClick);
+  // A click on the backdrop closes the dialog. Bound once; later calls only replace the content.
+  if (dialog.dataset.backdropBound === 'true') return;
+  dialog.dataset.backdropBound = 'true';
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
   });

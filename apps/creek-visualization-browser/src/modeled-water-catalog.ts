@@ -20,12 +20,12 @@ export const DATASET_PICKER_OPTIONS = [
   { id: OBSERVED_DATASET_OPTION_ID, label: 'Observed gauge', kind: 'observed' },
   {
     id: 'california-natural-flows-monthly',
-    label: 'Inferred Creek WSE — monthly (from California Natural Flows)',
+    label: 'Modeled Creek Water Levels — monthly (from California Natural Flows)',
     kind: 'modeled',
   },
   {
     id: 'national-water-model-hourly',
-    label: 'Inferred Creek WSE — hourly (from NOAA National Water Model v3.0 flows)',
+    label: 'Modeled Creek Water Levels — hourly (from NOAA National Water Model v3.0 flows)',
     kind: 'modeled',
   },
 ] as const;

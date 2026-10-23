@@ -2,6 +2,7 @@ import type SceneView from '@arcgis/core/views/SceneView';
 import { createArcGISSceneRenderer, type WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { ElevationBucket, LoadedCreekVisualization } from './creek-data-contract';
 import { inferredWaterSegmentGeometry } from './inferred-water-segment-geometry';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import {
   bindObservationTimelineControls,
   type PlaybackSpeedControl,
@@ -35,6 +36,8 @@ export interface AttachCreekVisualizationOptions {
   openingTimeUtcMs?: number | null;
   /** Creek Segment selected on open, so the chart shows without a click. Null opens with no selection. */
   initialSelectedSegmentId?: string | null;
+  /** Ending it takes the observed water, timeline controls, chart, and selection off the scene. The view stays. */
+  lifetime?: ExperienceLifetime;
 }
 
 export interface CreekVisualizationAttachment {
@@ -66,6 +69,7 @@ export function attachCreekVisualization(
   view: SceneView,
   options: AttachCreekVisualizationOptions,
 ): CreekVisualizationAttachment {
+  const lifetime = options.lifetime ?? createExperienceLifetime();
   const state: {
     selectedTimeUtcMs: number;
     observedWaterSurfaceElevationM: number | null;
@@ -95,6 +99,7 @@ export function attachCreekVisualization(
     },
     inferredWaterSegmentGeometry(options.data),
   );
+  lifetime.onEnd(() => renderer.dispose());
 
   const applyPins = (
     placements: readonly SegmentWaterPlacement[],
@@ -139,6 +144,7 @@ export function attachCreekVisualization(
     options.data.clock,
     openingIndexFor(options.data.clock, options.openingTimeUtcMs ?? null, options.data.openingGridIndex),
     applySelectedTime,
+    lifetime,
   );
 
   const chartElements = readWaterSurfaceElevationChartElements();
@@ -162,6 +168,7 @@ export function attachCreekVisualization(
         };
       },
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+      lifetime,
     });
     selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
     selectedCreekSegmentChart.selectSegment(options.initialSelectedSegmentId ?? null);

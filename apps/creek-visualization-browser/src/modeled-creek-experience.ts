@@ -13,6 +13,7 @@ import type SceneView from '@arcgis/core/views/SceneView';
 import type { SegmentPolygonPlacement, WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { ElevationBucket, LonLat, ObservationClock } from './creek-data-contract';
 import type { CreekVisualizationAttachment } from './creek-visualization-library-interface';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import {
   bindObservationTimelineControls,
   type PlaybackSpeedControl,
@@ -37,6 +38,7 @@ import {
   createModeledWaterDataStore,
   heldJunctionWaterSurfaceAt,
   heldValueAt,
+  heldWaterDepthAt,
   readCreekSegmentPaths,
   readFlowlineIndex,
   type CreekSegmentPathRecord,
@@ -52,7 +54,7 @@ import {
   type SelectedCreekSegmentChart,
 } from './selected-creek-segment-chart';
 import { bucketForWaterSurfaceElevation } from './selected-time-creek-state-resolver';
-import type { JunctionWaterSurface } from './sloped-water-surface';
+import type { BedParallelWaterDepth, JunctionWaterSurface } from './sloped-water-surface';
 import { showLoadingMessage } from './loading-spinner';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 import {
@@ -81,6 +83,15 @@ const OPENING_SEGMENT_ID = '27714637-026';
  */
 function drawsSlopedWaterSurfaces(method: WsePolygonMethodVersion): boolean {
   return method.browserDrawing === 'sloped-between-junctions';
+}
+
+/**
+ * `bed-parallel-depth`: the method's buckets are water depths, picked by the
+ * held value minus the segment's anchor bed elevation, and each ring vertex is
+ * lifted to its own bed reference plus the depth there.
+ */
+function drawsBedParallelDepth(method: WsePolygonMethodVersion): boolean {
+  return method.browserDrawing === 'bed-parallel-depth';
 }
 
 export interface ModeledExperienceElements {
@@ -130,7 +141,7 @@ export interface DrainageAreaRatioTransferSegment {
 
 export interface ModeledExperienceSeam {
   readonly datasetId: string;
-  /** Picker label of the Dataset, e.g. "Inferred Creek WSE — monthly (from California Natural Flows)". */
+  /** Picker label of the Dataset, e.g. "Modeled Creek Water Levels — monthly (from California Natural Flows)". */
   readonly datasetLabel: string;
   readonly extentId: string;
   readonly selectedTimeUtcMs: number;
@@ -181,10 +192,22 @@ export interface ModeledExperienceSeam {
 
 type ModeledSeamWindow = Window & { __TNC_MODELED__?: ModeledExperienceSeam };
 
+export interface ModeledExperienceScene {
+  /**
+   * The SceneView a previous experience left open. When given, nothing is
+   * created for the scene: the imagery, terrain, and camera stay as they are.
+   */
+  view?: SceneView;
+  /** Ending it takes this experience's water, controls, chart, and seam off the page. The view stays. */
+  lifetime?: ExperienceLifetime;
+}
+
 export async function startModeledCreekExperience(
   selection: Extract<DatasetSelection, { kind: 'modeled' }>,
   elements: ModeledExperienceElements,
+  scene: ModeledExperienceScene = {},
 ): Promise<{ view: SceneView; attachment: CreekVisualizationAttachment }> {
+  const lifetime = scene.lifetime ?? createExperienceLifetime();
   const { datasetId, extentId } = selection;
   const [catalogFile, methodListFile, crosswalk, segmentPaths] = await Promise.all([
     modeledDataSource().loadCatalog(extentId),
@@ -223,7 +246,7 @@ export async function startModeledCreekExperience(
     elements.legendTransferLabel.textContent = DRAINAGE_AREA_RATIO_TRANSFER_LEGEND_LABEL;
   }
 
-  const view = await createStandaloneExperienceShell(elements.container, openingPath(index));
+  const view = scene.view ?? (await createStandaloneExperienceShell(elements.container, openingPath(index)));
 
   const state = {
     selectedTimeUtcMs: selected.dataset.timeRangeUtcMs[0],
@@ -248,14 +271,19 @@ export async function startModeledCreekExperience(
     updateStatus();
     selectedCreekSegmentChart?.refresh();
   });
+  lifetime.onEnd(() => renderer.dispose());
 
   const store = createModeledWaterDataStore({
     extentId,
     dataSource: modeledDataSource(),
     wsePolygonMethodPath: wsePolygonMethod.path,
+    modeledWseVersionPath: wsePolygonMethod.builtFromModeledWsePath ?? null,
     timeSeries: selected.timeSeries,
     timeStep: selected.dataset.timeStep,
-    onChange: () => applySelectedTime(state.selectedTimeUtcMs),
+    // A fetch that lands after the experience ended must not redraw or write status text.
+    onChange: () => {
+      if (!lifetime.signal.aborted) applySelectedTime(state.selectedTimeUtcMs);
+    },
   });
 
   const resolvePlacements = (timeUtcMs: number): SegmentPolygonPlacement[] => {
@@ -272,9 +300,15 @@ export async function startModeledCreekExperience(
         const pinned = pinnedBySegmentId.get(segmentId);
         let bucket: ElevationBucket | null = null;
         let junctionWaterSurface: JunctionWaterSurface | null = null;
+        let bedParallelWaterDepth: BedParallelWaterDepth | null = null;
         if (pinned !== undefined) {
           // A test pin asks for one flat height, so no slope.
           bucket = bucketForWaterSurfaceElevation(buckets, pinned);
+        } else if (series && (state.showTransferWater || !isTransfer) && drawsBedParallelDepth(wsePolygonMethod)) {
+          // Buckets are depths: no held value, no anchor bed, or zero depth draws nothing.
+          const depth = heldWaterDepthAt(series, segmentId, timeUtcMs, holdMs);
+          bucket = depth && depth.anchorDepthM > 0 ? bucketForWaterSurfaceElevation(buckets, depth.anchorDepthM) : null;
+          if (bucket) bedParallelWaterDepth = depth;
         } else if (series && (state.showTransferWater || !isTransfer)) {
           const elevationM = heldValueAt(series, segmentId, timeUtcMs, holdMs);
           bucket = elevationM === null ? null : bucketForWaterSurfaceElevation(buckets, elevationM);
@@ -282,7 +316,13 @@ export async function startModeledCreekExperience(
             junctionWaterSurface = heldJunctionWaterSurfaceAt(series, segmentId, timeUtcMs, holdMs);
           }
         }
-        placements.push({ segmentId, bucket, drainageAreaRatioTransfer: isTransfer, junctionWaterSurface });
+        placements.push({
+          segmentId,
+          bucket,
+          drainageAreaRatioTransfer: isTransfer,
+          junctionWaterSurface,
+          ...(bedParallelWaterDepth ? { bedParallelWaterDepth } : {}),
+        });
       }
     }
     return placements;
@@ -393,6 +433,7 @@ export async function startModeledCreekExperience(
     clock,
     openingGridIndex(clock, selection.openingTimeUtcMs),
     applySelectedTime,
+    lifetime,
   );
 
   /**
@@ -426,22 +467,28 @@ export async function startModeledCreekExperience(
       chartElements,
       chartContentForSegment,
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+      lifetime,
     });
     selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
   }
 
-  elements.transferToggle.addEventListener('change', () => {
-    state.showTransferWater = elements.transferToggle.checked;
-    applySelectedTime(state.selectedTimeUtcMs);
-  });
+  elements.transferToggle.addEventListener(
+    'change',
+    () => {
+      state.showTransferWater = elements.transferToggle.checked;
+      applySelectedTime(state.selectedTimeUtcMs);
+    },
+    { signal: lifetime.signal },
+  );
 
   refreshVisibleFlowlines();
-  watch(
+  const stationaryWatch = watch(
     () => view.stationary,
     (stationary) => {
       if (stationary) refreshVisibleFlowlines();
     },
   );
+  lifetime.onEnd(() => stationaryWatch.remove());
 
   const whenIdle = async (): Promise<void> => {
     // A landed fetch can queue the next one (polygons, then Time Series), so loop.
@@ -462,7 +509,8 @@ export async function startModeledCreekExperience(
       index = nextIndex;
       segmentCenters = segmentCentersById(index);
       knownComids = new Set(index.flowlines.map((flowline) => flowline.tncComid));
-      store.setWsePolygonMethodPath(next.path);
+      // Also reloads the Time Series when the new method was built from another modeled WSE version.
+      store.setWsePolygonMethodPath(next.path, next.builtFromModeledWsePath ?? null);
       renderer.clear();
       writeWsePolygonMethodToUrl(methodList, next);
       refreshVisibleFlowlines();
@@ -541,6 +589,11 @@ export async function startModeledCreekExperience(
   Object.defineProperty(window as ModeledSeamWindow, '__TNC_MODELED__', {
     configurable: true,
     value: seam,
+  });
+  lifetime.onEnd(() => {
+    if ((window as ModeledSeamWindow).__TNC_MODELED__ === seam) {
+      Reflect.deleteProperty(window, '__TNC_MODELED__');
+    }
   });
 
   await whenIdle();
