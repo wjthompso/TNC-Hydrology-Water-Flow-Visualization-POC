@@ -1,5 +1,6 @@
 import { expect, test } from '../../../../support/browser/response-cache/index.ts';
 import {
+  expectGaugeMeasuredWaterAndInferredNeighboursOnly,
   floodPeakObservation,
   GAUGE_SEGMENT_ID,
   gridIndexForTime,
@@ -100,7 +101,7 @@ test("Clicking a time on the Jalama gauge water-surface elevation chart moves th
     expect(expectedBucket.minWaterSurfaceElevationM, 'the redrawn water differs from the opening water').not.toBe(
       openingBucket.minWaterSurfaceElevationM,
     );
-    expect((await readSeam(page)).waterSegmentIds).toEqual([GAUGE_SEGMENT_ID]);
+    expectGaugeMeasuredWaterAndInferredNeighboursOnly(await readSeam(page));
     expect((await readSelection(page)).chartCursorTimeUtcMs, 'chart time cursor').toBe(pointedTimeUtcMs);
 
     finishSceneCheck(failures, terrain, watch);

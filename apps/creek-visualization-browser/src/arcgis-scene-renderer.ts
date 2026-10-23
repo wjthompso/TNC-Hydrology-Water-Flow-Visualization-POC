@@ -54,6 +54,8 @@ export interface ArcGISSceneRenderer {
   readonly layer: GraphicsLayer;
   /** The drawn water graphic of one Creek Segment, or null when it has never been drawn. */
   graphicForSegment(segmentId: string): Graphic | null;
+  /** Cancels the pending frame and takes the water layer off the map. The view itself stays. */
+  dispose(): void;
 }
 
 /** Shared by the observed renderer and the modeled renderer so both waters look the same. */
@@ -140,6 +142,7 @@ export function createArcGISSceneRenderer(
 
   let pending: readonly SegmentPolygonPlacement[] | null = null;
   let frameHandle: number | null = null;
+  let disposed = false;
   let appliedKey: string | null = null;
 
   const apply = (placements: readonly SegmentPolygonPlacement[]): void => {
@@ -184,6 +187,7 @@ export function createArcGISSceneRenderer(
 
   return {
     schedule(placements) {
+      if (disposed) return;
       const key = placementKey(placements);
       if (frameHandle == null && key === appliedKey) return;
       pending = placements;
@@ -209,6 +213,14 @@ export function createArcGISSceneRenderer(
     graphicForSegment(segmentId) {
       const graphic = graphicsBySegmentId.get(segmentId);
       return graphic?.layer ? graphic : null;
+    },
+    dispose() {
+      disposed = true;
+      if (frameHandle != null) cancelAnimationFrame(frameHandle);
+      frameHandle = null;
+      pending = null;
+      view.map?.remove(layer);
+      layer.destroy();
     },
   };
 }

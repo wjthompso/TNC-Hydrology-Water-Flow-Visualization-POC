@@ -53,6 +53,7 @@ import { formatObservationTime } from './observation-timeline-controls';
 import type { StationMarkerGallery } from './station-marker-gallery';
 import type { DevToolsClickMarker } from './dev-tools-click-marker';
 import { createDevToolsClickMarker } from './dev-tools-click-marker';
+import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { wsePolygonMethodKey, type WsePolygonMethodVersion } from './wse-polygon-generation-methods';
 
 interface DevToolsHudOptions {
@@ -70,6 +71,8 @@ interface DevToolsHudOptions {
    * HUD creates the marker itself.
    */
   clickMarker?: DevToolsClickMarker;
+  /** Ending it removes the panel, its timers, and its map layers. The view stays. */
+  lifetime?: ExperienceLifetime;
 }
 
 export interface DevToolsHudHandle {
@@ -208,7 +211,8 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   }
 
   loadHudDisplayFont();
-  const clickMarker = options.clickMarker ?? createDevToolsClickMarker(options.view);
+  const lifetime = options.lifetime ?? createExperienceLifetime();
+  const clickMarker = options.clickMarker ?? createDevToolsClickMarker(options.view, lifetime);
   // The toggle owns the marker and calls setOpen. A direct mount starts open.
   const panelStartsOpen = !options.clickMarker;
   if (panelStartsOpen) clickMarker.setVisible(true);
@@ -471,16 +475,16 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   // --- WSE override: draw the Selected Creek Segment at a chosen elevation ---
   // Shown in both views. Lets you compare how observed and modeled polygons
   // look at the same water-surface elevation.
-  scrollHost.appendChild(buildWseOverrideTools(options.attachment, modeledSeam));
+  scrollHost.appendChild(buildWseOverrideTools(options.attachment, modeledSeam, lifetime));
 
   // --- Drainage-Area Ratio Transfer tools (modeled experience only) --------
   // Shown in both views: it is a camera tool, not a readout.
   if (modeledSeam) {
-    scrollHost.appendChild(buildDrainageAreaRatioTransferTools(options.view, modeledSeam));
+    scrollHost.appendChild(buildDrainageAreaRatioTransferTools(options.view, modeledSeam, lifetime));
   }
 
   // --- Station marker gallery (UCS-261): every candidate model on Jalama Road ---
-  scrollHost.appendChild(buildStationMarkerGalleryTools(options.view));
+  scrollHost.appendChild(buildStationMarkerGalleryTools(options.view, lifetime));
 
   // --- Footer: shared copy feedback ----------------------------------------
   const footer = createElement('footer', [
@@ -503,6 +507,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   scrollHost.appendChild(footer);
 
   options.container.appendChild(root);
+  lifetime.onEnd(() => root.remove());
 
   // Auto-hiding overlay scrollbar: floats over the content, fades when idle.
   OverlayScrollbars(scrollHost, {
@@ -552,10 +557,11 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     positionValue.textContent = `${longitude.toFixed(6)}, ${latitude.toFixed(6)}`;
   };
   renderCameraPose();
-  watch(
+  const cameraWatch = watch(
     () => options.view.camera,
     () => renderCameraPose(),
   );
+  lifetime.onEnd(() => cameraWatch.remove());
 
   const copyCameraPose = (): void => {
     void copyWithFeedback(JSON.stringify(seam.cameraPose, null, 2), copyFeedback, 'Camera pose copied.');
@@ -631,10 +637,11 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   };
 
   if (panelStartsOpen) {
-    options.view.on('click', (event) => {
+    const clickHandle = options.view.on('click', (event) => {
       clickMarker.noteClick(event.mapPoint);
       captureScreenClick({ x: event.x, y: event.y });
     });
+    lifetime.onEnd(() => clickHandle.remove());
   }
 
   const copyClickCapture = (): void => {
@@ -729,7 +736,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     renderWaterReadouts();
   };
   refreshLiveReadouts();
-  window.setInterval(refreshLiveReadouts, WATER_READOUT_REFRESH_MS);
+  lifetime.every(refreshLiveReadouts, WATER_READOUT_REFRESH_MS);
 
   const copyPlacements = (): void => {
     void copyWithFeedback(
@@ -770,6 +777,7 @@ const WSE_OVERRIDE_NUDGE_M = 0.05;
 function buildWseOverrideTools(
   attachment: CreekVisualizationAttachment,
   modeledSeam: ModeledExperienceSeam | null,
+  lifetime: ExperienceLifetime,
 ): HTMLElement {
   const section = buildSection('WSE override', '04b', 2, 'Selected Creek Segment · temporary');
   section.root.id = 'dev-tools-wse-override';
@@ -896,7 +904,7 @@ function buildWseOverrideTools(
 
   render();
   // Polled so a selection change clears the override within half a second, even with the HUD closed.
-  window.setInterval(render, WSE_OVERRIDE_REFRESH_MS);
+  lifetime.every(render, WSE_OVERRIDE_REFRESH_MS);
   return section.root;
 }
 
@@ -927,7 +935,11 @@ function extentPageUrl(extentId: string, current: Location): string {
  * loads that flowline. The list is re-read on each press because Time Series
  * flags arrive as flowline files load. Framing all at once is secondary.
  */
-function buildDrainageAreaRatioTransferTools(view: SceneView, seam: ModeledExperienceSeam): HTMLElement {
+function buildDrainageAreaRatioTransferTools(
+  view: SceneView,
+  seam: ModeledExperienceSeam,
+  lifetime: ExperienceLifetime,
+): HTMLElement {
   const section = buildSection(
     DRAINAGE_AREA_RATIO_TRANSFER_DEV_TOOLS_TITLE,
     '05',
@@ -1102,7 +1114,7 @@ function buildDrainageAreaRatioTransferTools(view: SceneView, seam: ModeledExper
   nextButton.addEventListener('click', () => void step(1));
 
   refreshList();
-  window.setInterval(() => {
+  lifetime.every(() => {
     if (!busy) refreshList();
   }, TRANSFER_LIST_REFRESH_MS);
   return section.root;
@@ -1113,7 +1125,7 @@ function buildDrainageAreaRatioTransferTools(view: SceneView, seam: ModeledExper
  * marker lined up along Jalama Road beside the gauge, with status tints to try.
  * The gallery module loads on first open.
  */
-function buildStationMarkerGalleryTools(view: SceneView): HTMLElement {
+function buildStationMarkerGalleryTools(view: SceneView, lifetime: ExperienceLifetime): HTMLElement {
   const section = buildSection('Station marker gallery', '06', 2, 'All candidate 3D markers, on Jalama Road');
   section.root.id = 'dev-tools-station-marker-gallery';
 
@@ -1201,6 +1213,11 @@ function buildStationMarkerGalleryTools(view: SceneView): HTMLElement {
   };
 
   toggleButton.addEventListener('click', () => void (gallery ? close() : open()));
+  // Take an open gallery off the map without flying the camera back: the next Dataset keeps the view where it is.
+  lifetime.onEnd(() => {
+    void gallery?.close({ restoreCamera: false });
+    gallery = null;
+  });
   return section.root;
 }
 

@@ -38,6 +38,8 @@ export interface ModeledWaterSceneRenderer {
   readonly layer: GraphicsLayer;
   /** The drawn water graphic of one Creek Segment, or null when it is not drawn. */
   graphicForSegment(segmentId: string): Graphic | null;
+  /** Cancels the pending frame and takes the water layer off the map. The view itself stays. */
+  dispose(): void;
 }
 
 export function createModeledWaterSceneRenderer(
@@ -61,6 +63,7 @@ export function createModeledWaterSceneRenderer(
   const writtenSurfaceKey = new Map<string, string>();
   let pending: readonly SegmentPolygonPlacement[] | null = null;
   let frameHandle: number | null = null;
+  let disposed = false;
 
   const apply = (placements: readonly SegmentPolygonPlacement[]): void => {
     const seen = new Set<string>();
@@ -135,6 +138,7 @@ export function createModeledWaterSceneRenderer(
 
   return {
     schedule(placements) {
+      if (disposed) return;
       pending = placements;
       if (frameHandle != null) return;
       frameHandle = requestAnimationFrame(() => {
@@ -161,6 +165,14 @@ export function createModeledWaterSceneRenderer(
     graphicForSegment(segmentId) {
       const graphic = graphicsBySegmentId.get(segmentId);
       return graphic?.layer ? graphic : null;
+    },
+    dispose() {
+      disposed = true;
+      if (frameHandle != null) cancelAnimationFrame(frameHandle);
+      frameHandle = null;
+      pending = null;
+      view.map?.remove(layer);
+      layer.destroy();
     },
   };
 }

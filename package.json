@@ -9,7 +9,7 @@
   "scriptDescriptions": {
     "usage": "Run a command with `npm run <name>`. Arguments after `--` pass through to that command.",
     "testSelectors": "Run one Feature Behavior Test (FBT) with `npm run test:id -- FBT-018`; run one Feature with `npm run test:feature -- F-170`; run one Feature Set with `npm run test:feature-set -- FS-100`.",
-    "testViewingFlags": "Add `--headed` to show browser windows or `--ui` for interactive Playwright UI mode. UI-mode results are not recorded; `test:gate` rejects `--ui`.",
+    "testViewingFlags":"Add `--headed` to show browser windows or `--ui` for interactive Playwright UI mode. UI-mode results are not recorded; `test:gate` rejects `--ui`.",
     "modeledWseFlags": "Modeled water-surface elevation (WSE) commands accept `--extent=<id>` (default: `dangermond-preserve`; fast development extent: `jalama-gauge-reach`), `--water-years=2020-2022`, and `--force`. Stage 4 also accepts `--wse-polygon-method=<id>`.",
     "commands": {
       "help": "Prints this command reference with descriptions, selectors, and supported flags; it does not run another command.",
