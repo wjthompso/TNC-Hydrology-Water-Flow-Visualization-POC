@@ -11,8 +11,13 @@ export const WSE_POLYGON_METHOD_QUERY_PARAM = 'wsePolygonMethod';
 /** Dev-middleware file listing the saved method versions of one extent. */
 export const WSE_POLYGON_METHODS_PATH = 'wse-polygon-methods.json';
 
-/** How the method's polygons are drawn: lifted between the junction WSEs, or flat at the bucket minimum. */
-export type WsePolygonBrowserDrawing = 'sloped-between-junctions' | 'flat-at-bucket-minimum';
+/**
+ * How the method's polygons are drawn: lifted between the junction WSEs, flat
+ * at the bucket minimum, or `bed-parallel-depth`: buckets are water depths and
+ * each ring vertex carries its creek-bed elevation as z, so the water sits that
+ * depth above the bed at every vertex.
+ */
+export type WsePolygonBrowserDrawing = 'sloped-between-junctions' | 'flat-at-bucket-minimum' | 'bed-parallel-depth';
 
 export interface WsePolygonMethodVersion {
   methodId: string;
@@ -22,6 +27,12 @@ export interface WsePolygonMethodVersion {
   browserDrawing: WsePolygonBrowserDrawing;
   /** Relative to the extent, e.g. `04-water-surface-polygons/junction-sloped-terrain-fill/v1`. */
   path: string;
+  /**
+   * Modeled WSE version folder the polygons were built from, relative to
+   * `03-time-series/`, e.g. `m1-drainage-area-ratio-manning-rating-curve/v1`.
+   * Local dev middleware only; absent for hosted data and older manifests.
+   */
+  builtFromModeledWsePath?: string;
 }
 
 export interface WsePolygonMethodList {
@@ -46,14 +57,18 @@ export function readWsePolygonMethodList(value: unknown): WsePolygonMethodList {
     if (typeof methodId !== 'string' || typeof version !== 'number' || typeof path !== 'string') {
       fail(`wse-polygon-methods.json version ${index + 1} needs methodId, version, and path.`);
     }
+    const builtFromModeledWsePath =
+      typeof entry.builtFromModeledWsePath === 'string' && entry.builtFromModeledWsePath.length > 0
+        ? entry.builtFromModeledWsePath
+        : undefined;
     return {
       methodId,
       version,
       label: typeof entry.label === 'string' ? entry.label : methodId,
       description: typeof entry.description === 'string' ? entry.description : '',
-      browserDrawing:
-        entry.browserDrawing === 'flat-at-bucket-minimum' ? 'flat-at-bucket-minimum' : 'sloped-between-junctions',
+      browserDrawing: readBrowserDrawing(entry.browserDrawing),
       path,
+      ...(builtFromModeledWsePath ? { builtFromModeledWsePath } : {}),
     } satisfies WsePolygonMethodVersion;
   });
   return {
@@ -84,6 +99,12 @@ export function resolveWsePolygonMethod(
     ? list.versions.find((entry) => entry.methodId === match[1] && entry.version === Number(match[2]))
     : newestOf(request);
   return requested ? { selected: requested, unmatchedRequest: null } : { selected: fallback, unmatchedRequest: request };
+}
+
+/** Unknown or missing values keep the original default, `sloped-between-junctions`. */
+function readBrowserDrawing(value: unknown): WsePolygonBrowserDrawing {
+  if (value === 'flat-at-bucket-minimum' || value === 'bed-parallel-depth') return value;
+  return 'sloped-between-junctions';
 }
 
 function fail(message: string): never {

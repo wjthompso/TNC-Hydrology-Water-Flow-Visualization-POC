@@ -662,12 +662,33 @@ function readHit(
           segmentId?: unknown;
           bucketMinElevationM?: unknown;
           bucketMaxElevationM?: unknown;
+          waterSurfaceElevationM?: unknown;
+          bucketMinDepthM?: unknown;
+          bucketMaxDepthM?: unknown;
         }
       | null;
+    const segmentId = typeof attributes?.segmentId === 'string' ? attributes.segmentId : null;
+    const bucketMinDepthM = readFiniteOrNull(attributes?.bucketMinDepthM);
+    if (bucketMinDepthM !== null) {
+      // `bed-parallel-depth` water: its buckets are depths, so the elevation reported is the modeled WSE.
+      const waterSurfaceElevationM = readFiniteOrNull(attributes?.waterSurfaceElevationM);
+      return {
+        layerId,
+        graphicType: 'water-surface',
+        segmentId,
+        bucketMinElevationM: waterSurfaceElevationM,
+        bucketMaxElevationM: null,
+        waterSurfaceElevationM,
+        bucketMinDepthM,
+        bucketMaxDepthM: readFiniteOrNull(attributes?.bucketMaxDepthM),
+        mapPointWgs84: mapPoint,
+        distanceM,
+      };
+    }
     return {
       layerId,
       graphicType: 'water-surface',
-      segmentId: typeof attributes?.segmentId === 'string' ? attributes.segmentId : null,
+      segmentId,
       bucketMinElevationM: readFiniteOrNull(attributes?.bucketMinElevationM),
       bucketMaxElevationM: readFiniteOrNull(attributes?.bucketMaxElevationM),
       mapPointWgs84: mapPoint,

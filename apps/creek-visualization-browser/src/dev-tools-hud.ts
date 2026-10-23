@@ -94,6 +94,8 @@ interface CameraPoseShape {
 interface SegmentPlacementShape {
   segmentId: string;
   bucketMinElevationM: number | null;
+  /** `bed-parallel-depth` methods only: the drawn bucket's minimum water depth, m. */
+  bucketMinDepthM?: number | null;
 }
 
 /** Copied from Dataset and time, and nested as `dataset` in Copy all JSON. */
@@ -1596,6 +1598,12 @@ function renderClickCapture(capture: HitTestCapture, summary: HTMLElement): void
   if (waterHits.length > 0) {
     const lines = waterHits.map((hit) => {
       const segmentId = hit.segmentId ?? '(unknown)';
+      if (hit.bucketMinDepthM != null) {
+        // `bed-parallel-depth` water: the bucket is a depth range, so show the modeled WSE as the elevation.
+        const wse = hit.waterSurfaceElevationM == null ? '—' : String(hit.waterSurfaceElevationM);
+        const maxDepth = hit.bucketMaxDepthM == null ? '—' : String(hit.bucketMaxDepthM);
+        return `segment ${segmentId} @ ${wse} m (depth bucket ${hit.bucketMinDepthM}–${maxDepth} m)`;
+      }
       const min = hit.bucketMinElevationM == null ? '—' : String(hit.bucketMinElevationM);
       const max = hit.bucketMaxElevationM == null ? '—' : String(hit.bucketMaxElevationM);
       return `segment ${segmentId} @ ${min} m (bucket ${min}–${max})`;
@@ -1626,7 +1634,8 @@ function buildCaptureRow(label: string, lines: readonly string[]): HTMLElement {
 function summarizeClickCapture(capture: HitTestCapture, nearSegment: SelectedModeledSegment | null): string {
   const waterHit = capture.hits.find((hit) => hit.graphicType === 'water-surface');
   if (waterHit) {
-    const elevationText = waterHit.bucketMinElevationM == null ? '—' : `${waterHit.bucketMinElevationM} m`;
+    const elevationM = waterHit.bucketMinElevationM ?? waterHit.waterSurfaceElevationM ?? null;
+    const elevationText = elevationM == null ? '—' : `${elevationM} m`;
     return `Water · ${waterHit.segmentId ?? '(unknown)'} @ ${elevationText}`;
   }
   const near =
@@ -1724,7 +1733,7 @@ function buildWsePolygonMethodPicker(seam: ModeledExperienceSeam): HTMLElement {
   const render = (status?: string): void => {
     const drawn = seam.wsePolygonMethod;
     select.value = wsePolygonMethodKey(drawn);
-    const drawing = drawn.browserDrawing === 'sloped-between-junctions' ? 'drawn sloped between junctions' : 'drawn flat';
+    const drawing = describeBrowserDrawing(drawn);
     description.textContent = [
       `${drawn.label} (${wsePolygonMethodKey(drawn)}, ${drawing}).`,
       drawn.description,
@@ -1755,10 +1764,22 @@ function buildWsePolygonMethodPicker(seam: ModeledExperienceSeam): HTMLElement {
   return root;
 }
 
+function describeBrowserDrawing(method: WsePolygonMethodVersion): string {
+  if (method.browserDrawing === 'sloped-between-junctions') return 'drawn sloped between junctions';
+  if (method.browserDrawing === 'bed-parallel-depth') {
+    const source = method.builtFromModeledWsePath ? `, Time Series from ${method.builtFromModeledWsePath}` : '';
+    return `drawn at a water depth above the creek bed${source}`;
+  }
+  return 'drawn flat';
+}
+
 // --- Formatting -------------------------------------------------------------
 
 function formatPlacementElevation(placement: SegmentPlacementShape): string {
-  return placement.bucketMinElevationM == null ? 'hidden' : `${placement.bucketMinElevationM.toFixed(3)} m`;
+  if (placement.bucketMinElevationM == null) return 'hidden';
+  // `bed-parallel-depth` water: the elevation is the modeled WSE; the bucket is a depth.
+  const depth = placement.bucketMinDepthM == null ? '' : ` (depth bucket from ${placement.bucketMinDepthM.toFixed(3)} m)`;
+  return `${placement.bucketMinElevationM.toFixed(3)} m${depth}`;
 }
 
 /**

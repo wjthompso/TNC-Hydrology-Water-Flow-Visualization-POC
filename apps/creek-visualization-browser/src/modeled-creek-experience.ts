@@ -36,6 +36,7 @@ import {
   createModeledWaterDataStore,
   heldJunctionWaterSurfaceAt,
   heldValueAt,
+  heldWaterDepthAt,
   readCreekSegmentPaths,
   readFlowlineIndex,
   type CreekSegmentPathRecord,
@@ -51,7 +52,7 @@ import {
   type SelectedCreekSegmentChart,
 } from './selected-creek-segment-chart';
 import { bucketForWaterSurfaceElevation } from './selected-time-creek-state-resolver';
-import type { JunctionWaterSurface } from './sloped-water-surface';
+import type { BedParallelWaterDepth, JunctionWaterSurface } from './sloped-water-surface';
 import { showLoadingMessage } from './loading-spinner';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 import {
@@ -80,6 +81,15 @@ const OPENING_SEGMENT_ID = '27714637-026';
  */
 function drawsSlopedWaterSurfaces(method: WsePolygonMethodVersion): boolean {
   return method.browserDrawing === 'sloped-between-junctions';
+}
+
+/**
+ * `bed-parallel-depth`: the method's buckets are water depths, picked by the
+ * held value minus the segment's anchor bed elevation, and each ring vertex is
+ * lifted to its own bed reference plus the depth there.
+ */
+function drawsBedParallelDepth(method: WsePolygonMethodVersion): boolean {
+  return method.browserDrawing === 'bed-parallel-depth';
 }
 
 export interface ModeledExperienceElements {
@@ -265,6 +275,7 @@ export async function startModeledCreekExperience(
     extentId,
     dataSource: modeledDataSource(),
     wsePolygonMethodPath: wsePolygonMethod.path,
+    modeledWseVersionPath: wsePolygonMethod.builtFromModeledWsePath ?? null,
     timeSeries: selected.timeSeries,
     timeStep: selected.dataset.timeStep,
     // A fetch that lands after the experience ended must not redraw or write status text.
@@ -287,9 +298,15 @@ export async function startModeledCreekExperience(
         const pinned = pinnedBySegmentId.get(segmentId);
         let bucket: ElevationBucket | null = null;
         let junctionWaterSurface: JunctionWaterSurface | null = null;
+        let bedParallelWaterDepth: BedParallelWaterDepth | null = null;
         if (pinned !== undefined) {
           // A test pin asks for one flat height, so no slope.
           bucket = bucketForWaterSurfaceElevation(buckets, pinned);
+        } else if (series && (state.showTransferWater || !isTransfer) && drawsBedParallelDepth(wsePolygonMethod)) {
+          // Buckets are depths: no held value, no anchor bed, or zero depth draws nothing.
+          const depth = heldWaterDepthAt(series, segmentId, timeUtcMs, holdMs);
+          bucket = depth && depth.anchorDepthM > 0 ? bucketForWaterSurfaceElevation(buckets, depth.anchorDepthM) : null;
+          if (bucket) bedParallelWaterDepth = depth;
         } else if (series && (state.showTransferWater || !isTransfer)) {
           const elevationM = heldValueAt(series, segmentId, timeUtcMs, holdMs);
           bucket = elevationM === null ? null : bucketForWaterSurfaceElevation(buckets, elevationM);
@@ -297,7 +314,13 @@ export async function startModeledCreekExperience(
             junctionWaterSurface = heldJunctionWaterSurfaceAt(series, segmentId, timeUtcMs, holdMs);
           }
         }
-        placements.push({ segmentId, bucket, drainageAreaRatioTransfer: isTransfer, junctionWaterSurface });
+        placements.push({
+          segmentId,
+          bucket,
+          drainageAreaRatioTransfer: isTransfer,
+          junctionWaterSurface,
+          ...(bedParallelWaterDepth ? { bedParallelWaterDepth } : {}),
+        });
       }
     }
     return placements;
@@ -492,7 +515,8 @@ export async function startModeledCreekExperience(
       index = nextIndex;
       segmentCenters = segmentCentersById(index);
       knownComids = new Set(index.flowlines.map((flowline) => flowline.tncComid));
-      store.setWsePolygonMethodPath(next.path);
+      // Also reloads the Time Series when the new method was built from another modeled WSE version.
+      store.setWsePolygonMethodPath(next.path, next.builtFromModeledWsePath ?? null);
       renderer.clear();
       writeWsePolygonMethodToUrl(methodList, next);
       refreshVisibleFlowlines();

@@ -22,6 +22,22 @@ export interface JunctionWaterSurface {
   downstreamM: number;
 }
 
+/**
+ * One Creek Segment's water depth at the selected time, for a WSE Polygon
+ * Generation Method drawn `bed-parallel-depth` (its buckets are depths, and
+ * each ring vertex is `[lon, lat, bedReferenceM]`). All values in meters.
+ */
+export interface BedParallelWaterDepth {
+  /** Modeled water-surface elevation at the anchor cross-section, m NAVD88. */
+  waterSurfaceElevationM: number;
+  /** Creek-bed elevation under the anchor cross-section, m NAVD88. */
+  anchorBedElevationM: number;
+  /** `waterSurfaceElevationM − anchorBedElevationM`, clamped at 0; picks the bucket. */
+  anchorDepthM: number;
+  /** Depth above the bed at the segment's two ends; null when the Time Series lacks either. */
+  junctionDepth: { upstreamM: number; downstreamM: number } | null;
+}
+
 /** Lon/lat vertices of a Creek Segment's flowline, ordered upstream to downstream. */
 export type SegmentFlowlinePath = readonly LonLat[];
 
@@ -55,6 +71,38 @@ export function slopedRingsWgs84(
     ring.map(([lon, lat]) => {
       const fraction = projector.fractionAlong([lon, lat]);
       return [lon, lat, surface.upstreamM + (surface.downstreamM - surface.upstreamM) * fraction];
+    }),
+  );
+}
+
+/**
+ * Rings for `bed-parallel-depth`: each vertex's z is its own bed reference
+ * (the ring's third coordinate) plus the water depth there. The depth runs
+ * linearly from the upstream to the downstream junction depth between the same
+ * two boundaries `slopedRingsWgs84` uses; without junction depths, or without
+ * the segment's flowline geometry, every vertex takes the anchor depth. A
+ * vertex without a bed reference falls back to the anchor bed elevation.
+ */
+export function bedParallelRingsWgs84(
+  rings: readonly LonLatRing[],
+  geometry: SegmentSurfaceGeometry | null,
+  depth: BedParallelWaterDepth,
+): number[][][] {
+  const junctionDepth = depth.junctionDepth;
+  const projector = geometry && junctionDepth ? createSurfaceProjector(geometry) : null;
+  const depthAt = (point: LonLat): number => {
+    if (!projector || !junctionDepth) return depth.anchorDepthM;
+    const fraction = projector.fractionAlong(point);
+    return junctionDepth.upstreamM + (junctionDepth.downstreamM - junctionDepth.upstreamM) * fraction;
+  };
+  return rings.map((ring) =>
+    ring.map((vertex) => {
+      const [lon, lat] = vertex;
+      // Rings are typed lon/lat; this method's files carry the bed reference as a third number.
+      const bedReferenceM = (vertex as readonly number[])[2];
+      const bedM =
+        typeof bedReferenceM === 'number' && Number.isFinite(bedReferenceM) ? bedReferenceM : depth.anchorBedElevationM;
+      return [lon, lat, bedM + depthAt([lon, lat])];
     }),
   );
 }
