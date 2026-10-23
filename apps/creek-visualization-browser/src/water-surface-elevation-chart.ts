@@ -20,13 +20,17 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
  * `top` leaves a headroom band above the highest reading for the blue value
  * tag on the time cursor, so the tag never covers the line or its peak.
  */
-const PLOT_INSET = { left: 44, right: 8, top: 24, bottom: 18 } as const;
+const PLOT_INSET = { left: 54, right: 8, top: 30, bottom: 22 } as const;
 /** The cursor value tag sits in the headroom band, this far below the plot's top edge. */
 const CURSOR_TAG_TOP = 4;
+/** Cursor value tag height and the width of one of its 12 px glyphs (about 0.6 em). */
+const CURSOR_TAG_HEIGHT = 20;
+const CURSOR_TAG_GLYPH_WIDTH = 7.2;
+const CURSOR_TAG_PADDING = 10;
 /** The range slider runs full-width — it has no Y-axis labels so it does not need the chart's left margin. */
 const OVERVIEW_INSET = { left: 4, right: 4, top: 2, bottom: 2 } as const;
-const FALLBACK_SIZE = { width: 300, height: 144 } as const;
-const FALLBACK_OVERVIEW_SIZE = { width: 300, height: 32 } as const;
+const FALLBACK_SIZE = { width: 300, height: 192 } as const;
+const FALLBACK_OVERVIEW_SIZE = { width: 300, height: 40 } as const;
 /** A pointer this close to a window edge grabs that edge. */
 const HANDLE_GRAB_PX = 7;
 /** The zoom window never gets narrower than this many chart pixels' worth of the record. */
@@ -37,7 +41,8 @@ const MIN_WINDOW_READINGS = 4;
 const KEYBOARD_STEP_FRACTION = 0.01;
 
 const NO_SELECTION_TEXT = 'Click creek water on the map to see its water-surface elevation over time.';
-const HOVER_HINT_TEXT = 'Hover to read a value. Click to move the time slider. Drag the bar below to zoom.';
+/** Full instructions live in the chart's info tip (index.html); this is the short idle prompt. */
+const HOVER_HINT_TEXT = 'Hover the chart to read a value.';
 
 const axisDateFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Los_Angeles',
@@ -191,9 +196,9 @@ export function createWaterSurfaceElevationChart(
   // Blue value tag above the cursor: the water level at the selected time.
   const cursorTag = createSvgElement('g', {});
   cursorTag.id = 'wse-chart-cursor-value';
-  const cursorTagBox = createSvgElement('rect', { class: 'fill-slate-950/90 stroke-sky-400/70', rx: '3', height: '14' });
+  const cursorTagBox = createSvgElement('rect', { class: 'fill-slate-950/90 stroke-sky-400/70', rx: '3', height: String(CURSOR_TAG_HEIGHT) });
   const cursorTagText = createSvgElement('text', {
-    class: 'fill-sky-300 text-[10px] font-semibold',
+    class: 'fill-sky-300 text-xs font-semibold',
     'text-anchor': 'middle',
     'dominant-baseline': 'middle',
   });
@@ -370,7 +375,7 @@ export function createWaterSurfaceElevationChart(
     cursorTimeUtcMs = time;
     const x = xForTime(time);
     // The cursor runs up into the headroom band so the value tag sits on top of it.
-    showVertical(cursor, x, CURSOR_TAG_TOP + 14, PLOT_INSET.top + frame.plotHeight);
+    showVertical(cursor, x, CURSOR_TAG_TOP + CURSOR_TAG_HEIGHT, PLOT_INSET.top + frame.plotHeight);
     const valueM = selectedValueM();
     if (valueM === null) {
       hideCursorTag();
@@ -381,14 +386,14 @@ export function createWaterSurfaceElevationChart(
     cursorDot.setAttribute('visibility', 'visible');
     const label = formatWaterLevel(valueM, unit);
     cursorTagText.textContent = label;
-    // About 5.6 px per 10 px glyph; kept inside the plot so it never clips at an edge.
-    const width = label.length * 5.8 + 8;
+    // Kept inside the plot so it never clips at an edge.
+    const width = label.length * CURSOR_TAG_GLYPH_WIDTH + CURSOR_TAG_PADDING;
     const left = clamp(x - width / 2, PLOT_INSET.left, PLOT_INSET.left + frame.plotWidth - width);
     cursorTagBox.setAttribute('x', String(left));
     cursorTagBox.setAttribute('y', String(CURSOR_TAG_TOP));
     cursorTagBox.setAttribute('width', String(width));
     cursorTagText.setAttribute('x', String(left + width / 2));
-    cursorTagText.setAttribute('y', String(CURSOR_TAG_TOP + 7.5));
+    cursorTagText.setAttribute('y', String(CURSOR_TAG_TOP + CURSOR_TAG_HEIGHT / 2));
     cursorTag.setAttribute('visibility', 'visible');
   };
 
@@ -863,12 +868,12 @@ function axisElements(
   elements.push(
     svgText(formatWindowEdge(window.startUtcMs, window), {
       x: String(PLOT_INSET.left),
-      y: String(bottom + 12),
+      y: String(bottom + 14),
       'text-anchor': 'start',
     }),
     svgText(formatWindowEdge(window.endUtcMs, window), {
       x: String(right),
-      y: String(bottom + 12),
+      y: String(bottom + 14),
       'text-anchor': 'end',
     }),
   );
@@ -876,7 +881,7 @@ function axisElements(
 }
 
 function svgText(text: string, attributes: Record<string, string>): SVGTextElement {
-  const element = createSvgElement('text', { class: 'fill-slate-400 text-[10px]', ...attributes });
+  const element = createSvgElement('text', { class: 'fill-slate-400 text-xs', ...attributes });
   element.textContent = text;
   return element;
 }

@@ -11,6 +11,30 @@
   .loading-spinner {
     @apply mr-2 inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent align-[-0.125em] motion-reduce:animate-none;
   }
+
+  /*
+   * Sidebar info tip: a focusable "i" button plus a bubble that holds the
+   * small print (sub labels, instructions). Markup pattern, in index.html:
+   *   <div class="relative ...">                      the row; the bubble spans it
+   *     <span class="group/tip">                      static, so the row stays the anchor
+   *       <button class="info-tip-button" aria-describedby="x">i</button>
+   *       <div id="x" role="tooltip" class="info-tip-bubble top-full">...</div>
+   *     </span>
+   *   </div>
+   * The bubble spans the row (inset-x-0), so the sidebar's scroll container never
+   * clips it or grows a horizontal scrollbar. Use `bottom-full` near the bottom.
+   * It shows while the pointer is on the button or the bubble (the pointer can
+   * move onto it to read, WCAG 1.4.13) and while the button has keyboard focus.
+   * It stays in the accessibility tree either way, so aria-describedby reads it.
+   * Both classes set pointer-events-auto because the sidebar shell ignores the pointer.
+   */
+  .info-tip-button {
+    @apply pointer-events-auto inline-flex size-6 shrink-0 cursor-help items-center justify-center rounded-full border border-slate-500 text-sm font-semibold leading-none text-slate-300 hover:border-cyan-300 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300;
+  }
+
+  .info-tip-bubble {
+    @apply pointer-events-auto invisible absolute inset-x-0 z-30 rounded-md border border-slate-600 bg-slate-800 p-3 text-sm font-normal normal-case leading-snug tracking-normal text-slate-100 shadow-lg group-focus-within/tip:visible group-hover/tip:visible;
+  }
 }
 
 html,

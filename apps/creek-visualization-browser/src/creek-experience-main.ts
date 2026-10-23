@@ -1,5 +1,5 @@
 import '@arcgis/core/assets/esri/themes/dark/main.css';
-import './style.css';
+import { whenOnce } from '@arcgis/core/core/reactiveUtils';
 import Camera from '@arcgis/core/Camera';
 import Point from '@arcgis/core/geometry/Point';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
@@ -23,6 +23,7 @@ import {
 } from './modeled-water-catalog';
 import { creekDataSourceConfiguration } from './creek-data-source-configuration';
 import { showModeledDatasetAccuracyNotice } from './modeled-dataset-accuracy-notices';
+import { waitAtMost } from './bounded-startup-wait';
 import { showLoadingMessage } from './loading-spinner';
 import { installMonitoringStationLocator } from './monitoring-station-locator';
 import { addMonitoringStationMarkers } from './monitoring-station-marker-layer';
@@ -167,7 +168,7 @@ async function startExperience(): Promise<boolean> {
       attachment = started.attachment;
       bindImageryPicker(sceneView);
       await restoreCarriedCamera(sceneView);
-      hideLoadingOverlay();
+      void hideLoadingOverlayWhenSceneDrawn(sceneView);
       await installDevToolsIfRequested();
       openAccuracyNoticeUnlessTestMode(selection.datasetId);
       return true;
@@ -196,7 +197,7 @@ async function startExperience(): Promise<boolean> {
     const markers = await addMonitoringStationMarkers(sceneView, [data.station], data.segmentsById);
     await installMonitoringStationLocator(sceneView, markers.stations);
     await restoreCarriedCamera(sceneView);
-    hideLoadingOverlay();
+    void hideLoadingOverlayWhenSceneDrawn(sceneView);
     await installDevToolsIfRequested();
     return true;
   } catch (error: unknown) {
@@ -677,4 +678,33 @@ function showExperienceError(message: string): void {
 
 function hideLoadingOverlay(): void {
   document.getElementById('loading-overlay')?.remove();
+}
+
+/** Longest the overlay waits for the first scene draw; a stalled terrain service must not trap it. */
+const FIRST_SCENE_DRAW_WAIT_LIMIT_MS = 20_000;
+const LOADING_OVERLAY_FADE_MS = 500;
+
+/**
+ * Keeps the loading overlay over the 3D scene until SceneView has drawn its
+ * first still frame (no layer or terrain updating, camera stationary), then
+ * fades it out. Data loading finishes well before terrain and imagery tiles
+ * stream in, so removing the overlay earlier shows a blank or half-drawn globe.
+ * Not awaited by startup: the test seam's `ready` promise keeps its timing, and
+ * test mode removes the overlay without a fade so pixel reads never see it.
+ */
+async function hideLoadingOverlayWhenSceneDrawn(view: SceneView): Promise<void> {
+  setLoadingOverlayText('Drawing terrain and imagery…');
+  try {
+    await waitAtMost(
+      whenOnce(() => !view.updating && view.stationary),
+      FIRST_SCENE_DRAW_WAIT_LIMIT_MS,
+    );
+  } finally {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay && import.meta.env.VITE_TEST_MODE !== 'true') {
+      overlay.classList.add('opacity-0');
+      await new Promise((resolve) => setTimeout(resolve, LOADING_OVERLAY_FADE_MS));
+    }
+    hideLoadingOverlay();
+  }
 }
