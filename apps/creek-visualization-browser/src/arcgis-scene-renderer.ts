@@ -49,6 +49,14 @@ export interface SegmentPolygonPlacement {
    */
   bedParallelWaterDepth?: BedParallelWaterDepth | null;
   /**
+   * Modeled water only, for a method drawn `channel-ribbon-depth`: every depth-rung bucket of the segment
+   * (vertex-aligned morph targets of one ribbon). The modeled renderer draws the ribbon from them at
+   * `bedParallelWaterDepth` instead of from the one picked `bucket`. The observed renderer ignores it.
+   */
+  channelRibbonBuckets?: readonly ElevationBucket[];
+  /** `channel-ribbon-depth` only: the labeled display lift added to the ribbon's z (0 for true water). */
+  channelRibbonLiftM?: number;
+  /**
    * True for water inferred from the gauge by Creek Segment Observed WSE Propagation. The observed
    * renderer draws it with the inferred shading, sloped between `junctionWaterSurface` when the
    * segment's geometry is known; the modeled renderer ignores it.

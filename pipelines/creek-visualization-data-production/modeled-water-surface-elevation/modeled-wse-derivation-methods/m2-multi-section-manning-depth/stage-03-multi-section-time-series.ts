@@ -38,19 +38,30 @@ import { TERRAIN_TILE_INDEX_FILE, TerrainSampler, readTerrainTileIndex } from '.
 import { waterYearOf } from '../../water-years.ts';
 import { DRAINAGE_AREA_RATIO_TRANSFER, MAXIMUM_TRANSFER_DISTANCE_M } from '../m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { requestedModeledWseDerivationMethod } from '../modeled-wse-derivation-method-registry.ts';
-import { LOCAL_BED_SLOPE, M2_MULTI_SECTION_MANNING_DEPTH_METHOD, MULTI_SECTION_TIME_SERIES_FIELDS, SOLVED_SECTIONS } from './method-config.ts';
+import { junctionDepthsAlongRun, segmentRuns, smoothedDepthAtAnchor } from './junction-depths.ts';
+import {
+  ANCHOR_POSITION_ALONG_SEGMENT,
+  JUNCTION_BED_SECTIONS,
+  JUNCTION_DEPTH,
+  LOCAL_BED_SLOPE,
+  M2_MULTI_SECTION_MANNING_DEPTH_METHOD,
+  MULTI_SECTION_TIME_SERIES_FIELDS,
+  SOLVED_SECTIONS,
+} from './method-config.ts';
 import type { MultiSectionTimeSeriesFile, MultiSectionTimeSeriesSegment } from './multi-section-time-series-file.ts';
 import { lookUpRatingCurve } from './rating-curve-lookup.ts';
-import { solveSegmentSections, type BedProfilePoint, type SegmentSolvedSections, type SolvedSection } from './section-rating-curves.ts';
+import { solveSegmentSections, type BedProfilePoint, type SegmentSolvedSections } from './section-rating-curves.ts';
 
 /**
  * m2 Stage 3 — multi-section time series. Reads the saved Stage 0–1 output (shared with m1) and writes
  * the m2 Time Series to `03-time-series/m2-multi-section-manning-depth/v<version>/`.
  *
- * Per Creek Segment: the reach discharge × drainage-area ratio (exactly as m1), inverted on rating
- * curves at the start-end, anchor (mid-segment), and end-end Stage 1 sections, each with its own bed
- * and a local bed slope. `values` is the anchor WSE; the end sections give the depth at each vertex,
- * averaged with the neighbour's depth at the same vertex. See METHOD.md in this folder.
+ * Per Creek Segment: the reach discharge × drainage-area ratio (exactly as m1), inverted on the rating
+ * curve at the anchor (mid-segment) Stage 1 section, with its own bed and a local bed slope. That raw
+ * Manning anchor WSE is kept as `rawAnchorWseM`. The depth at each vertex is a smoothed mean of the
+ * neighbouring segments' raw anchor depths (`junction-depths.ts`), one number per shared vertex. From
+ * m2-v3 `values` is the WSE of that smoothed surface at the anchor point: anchor bed + the junction
+ * depths interpolated to the anchor position, so the chart shows the water the browser draws. See METHOD.md in this folder.
  *
  * Run with `--modeled-wse-method=m2-multi-section-manning-depth`: the version helpers in
  * `modeled-wse-version.ts` read that flag to pick the output folder and fingerprint, so this script
@@ -80,23 +91,17 @@ interface SegmentModel {
   hasDischarge: boolean;
 }
 
-/** Own (unshared) depths at the start and end vertices, parallel to the anchor values. */
-interface SegmentDepths {
-  values: (number | null)[];
-  depthAtStartVertex: (number | null)[];
-  depthAtEndVertex: (number | null)[];
+/** The raw Manning anchor WSE as written to the file, and the raw anchor depth it implies, parallel over the timestamps. */
+interface SegmentRawAnchors {
+  /** Written as `rawAnchorWseM`. */
+  rawAnchorWseM: (number | null)[];
+  /** Raw depth at the anchor: null where the WSE is null, 0 where the segment is dry. Feeds the junction depths. */
+  rawAnchorDepthM: (number | null)[];
 }
 
 /** WSE − bed, never below 0 (a ladder step rounded to the millimetre can sit a hair under the bed). */
 function depthAbove(wseM: number, bedM: number): number {
   return Math.max(0, wseM - bedM);
-}
-
-/** Depth at an end section; the anchor depth stands in when that end section has no rating curve. */
-function endSectionDepth(section: SolvedSection, dischargeM3s: number | null, anchorDepthM: number): number {
-  if (!section.curve) return anchorDepthM;
-  const { wseM } = lookUpRatingCurve(section.curve, dischargeM3s);
-  return wseM === null ? anchorDepthM : depthAbove(wseM, section.bedElevationM);
 }
 
 function invertSegment(input: {
@@ -106,13 +111,12 @@ function invertSegment(input: {
   endIndex: number;
   outcomes: OutcomeCounts;
   clampedBySegment: Map<string, number>;
-}): SegmentDepths {
+}): SegmentRawAnchors {
   const { model } = input;
   const length = input.endIndex - input.firstIndex;
-  const result: SegmentDepths = {
-    values: new Array<number | null>(length).fill(null),
-    depthAtStartVertex: new Array<number | null>(length).fill(null),
-    depthAtEndVertex: new Array<number | null>(length).fill(null),
+  const result: SegmentRawAnchors = {
+    rawAnchorWseM: new Array<number | null>(length).fill(null),
+    rawAnchorDepthM: new Array<number | null>(length).fill(null),
   };
   const anchor = model.sections?.anchor;
   const comid = model.crosswalk?.nhdplusV2Comid ?? null;
@@ -122,7 +126,6 @@ function invertSegment(input: {
     return result;
   }
   const ratio = model.crosswalk?.drainageAreaRatio ?? 1;
-  const { atStart, atEnd } = model.sections;
   for (let offset = 0; offset < length; offset += 1) {
     const reachValue = reachDischarge[input.firstIndex + offset] ?? null;
     const dischargeM3s = reachValue === null ? null : reachValue * ratio;
@@ -130,10 +133,9 @@ function invertSegment(input: {
     input.outcomes[outcome] += 1;
     if (outcome === 'clamped') input.clampedBySegment.set(model.segment.segmentId, (input.clampedBySegment.get(model.segment.segmentId) ?? 0) + 1);
     if (wseM === null) continue;
-    const anchorDepthM = depthAbove(wseM, anchor.bedElevationM);
-    result.values[offset] = roundValue(wseM, 3);
-    result.depthAtStartVertex[offset] = endSectionDepth(atStart, dischargeM3s, anchorDepthM);
-    result.depthAtEndVertex[offset] = endSectionDepth(atEnd, dischargeM3s, anchorDepthM);
+    // Dry or wet is decided on the raw WSE as written to the file, so a reader can rebuild every junction depth from `rawAnchorWseM`.
+    result.rawAnchorWseM[offset] = roundValue(wseM, 3);
+    result.rawAnchorDepthM[offset] = depthAbove(result.rawAnchorWseM[offset] as number, anchor.bedElevationM);
   }
   return result;
 }
@@ -153,9 +155,47 @@ function vertexBeds(
   const previous = adjacent.atStart ? modelsById.get(adjacent.atStart.segmentId)?.sections : undefined;
   const next = adjacent.atEnd ? modelsById.get(adjacent.atEnd.segmentId)?.sections : undefined;
   return {
-    atStartM: sharedAtVertex(own.atStart.bedElevationM, previous?.atEnd.bedElevationM),
-    atEndM: sharedAtVertex(own.atEnd.bedElevationM, next?.atStart.bedElevationM),
+    atStartM: sharedAtVertex(own.startEndBedElevationM, previous?.endEndBedElevationM),
+    atEndM: sharedAtVertex(own.endEndBedElevationM, next?.startEndBedElevationM),
   };
+}
+
+/** Depth at each segment's start and end vertex over the timestamp range, rounded as written to the file; null where the value is null. */
+interface JunctionDepths {
+  junctionDepthAtStart: (number | null)[];
+  junctionDepthAtEnd: (number | null)[];
+}
+
+/** The junction depths of every segment of one flowline, smoothed from the raw anchor depths: each run of joined segments is smoothed one timestamp at a time. */
+function junctionDepthsOfFlowline(
+  models: readonly SegmentModel[],
+  adjacentById: ReturnType<typeof adjacentSegmentsById>,
+  anchorsById: ReadonlyMap<string, SegmentRawAnchors>,
+  timestampCount: number,
+): Map<string, JunctionDepths> {
+  const depthsById = new Map<string, JunctionDepths>();
+  for (const run of segmentRuns(models.map((model) => model.segment), adjacentById)) {
+    const lengthsM = run.map((segment) => segment.preciseLengthM);
+    const rawAnchorDepthSeries = run.map((segment) => (anchorsById.get(segment.segmentId) as SegmentRawAnchors).rawAnchorDepthM);
+    const junctionDepths = run.map((): JunctionDepths => ({
+      junctionDepthAtStart: new Array<number | null>(timestampCount).fill(null),
+      junctionDepthAtEnd: new Array<number | null>(timestampCount).fill(null),
+    }));
+    for (let offset = 0; offset < timestampCount; offset += 1) {
+      const { atStartM, atEndM } = junctionDepthsAlongRun(
+        rawAnchorDepthSeries.map((series) => series[offset] ?? null),
+        lengthsM,
+      );
+      junctionDepths.forEach((depths, position) => {
+        const atStart = atStartM[position] ?? null;
+        const atEnd = atEndM[position] ?? null;
+        depths.junctionDepthAtStart[offset] = atStart === null ? null : roundValue(atStart, 3);
+        depths.junctionDepthAtEnd[offset] = atEnd === null ? null : roundValue(atEnd, 3);
+      });
+    }
+    run.forEach((segment, position) => depthsById.set(segment.segmentId, junctionDepths[position] as JunctionDepths));
+  }
+  return depthsById;
 }
 
 /**
@@ -173,20 +213,14 @@ function buildFlowlineSegments(input: {
   outcomes: OutcomeCounts;
   clampedBySegment: Map<string, number>;
 }): MultiSectionTimeSeriesSegment[] {
-  const depthsById = new Map<string, SegmentDepths>();
-  for (const model of input.models) depthsById.set(model.segment.segmentId, invertSegment({ ...input, model }));
+  const anchorsById = new Map<string, SegmentRawAnchors>();
+  for (const model of input.models) anchorsById.set(model.segment.segmentId, invertSegment({ ...input, model }));
+  const junctionDepthsById = junctionDepthsOfFlowline(input.models, input.adjacentById, anchorsById, input.endIndex - input.firstIndex);
   return input.models.map((model) => {
     const { segmentId } = model.segment;
-    const own = depthsById.get(segmentId) as SegmentDepths;
+    const rawAnchors = anchorsById.get(segmentId) as SegmentRawAnchors;
     const adjacent = input.adjacentById.get(segmentId) ?? {};
-    const previousDepths = adjacent.atStart ? depthsById.get(adjacent.atStart.segmentId) : undefined;
-    const nextDepths = adjacent.atEnd ? depthsById.get(adjacent.atEnd.segmentId) : undefined;
-    const junctionDepthAtStart = own.values.map((value, index) =>
-      value === null ? null : roundValue(sharedAtVertex(own.depthAtStartVertex[index] as number, previousDepths?.depthAtEndVertex[index]), 3),
-    );
-    const junctionDepthAtEnd = own.values.map((value, index) =>
-      value === null ? null : roundValue(sharedAtVertex(own.depthAtEndVertex[index] as number, nextDepths?.depthAtStartVertex[index]), 3),
-    );
+    const { junctionDepthAtStart, junctionDepthAtEnd } = junctionDepthsById.get(segmentId) as JunctionDepths;
     const sections = model.sections;
     const beds = sections ? vertexBeds(model, input.modelsById, adjacent) : null;
     const anchorBedElevationM = sections?.anchor.bedElevationM ?? Number.NaN;
@@ -200,9 +234,18 @@ function buildFlowlineSegments(input: {
     const junctionBedDownstreamM = runsDownstream ? bedAtEndM : bedAtStartM;
     const withBed = (depths: (number | null)[], bedM: number): (number | null)[] =>
       depths.map((depth) => (depth === null ? null : roundValue(bedM + depth, 3)));
+    // m2-v3: the segment's WSE is the smoothed surface at the anchor point, from the junction depths as written to the file.
+    // Start and end depths are used (not upstream and downstream) because the anchor is half-way, so the order does not matter.
+    const values = junctionDepthAtStart.map((depthAtStartM, offset) => {
+      const depthAtEndM = junctionDepthAtEnd[offset];
+      return depthAtStartM === null || depthAtEndM === null || depthAtEndM === undefined
+        ? null
+        : roundValue(anchorBedElevationM + smoothedDepthAtAnchor(depthAtStartM, depthAtEndM), 3);
+    });
     const record: MultiSectionTimeSeriesSegment = {
       segmentId,
-      values: own.values,
+      values,
+      rawAnchorWseM: rawAnchors.rawAnchorWseM,
       junctionWseUpstreamM: withBed(junctionDepthUpstreamM, junctionBedUpstreamM),
       junctionWseDownstreamM: withBed(junctionDepthDownstreamM, junctionBedDownstreamM),
       anchorBedElevationM,
@@ -269,7 +312,7 @@ async function buildModels(warnings: string[]): Promise<{ models: SegmentModel[]
     for (const section of record.sections) profile.push({ distanceM: section.networkDistanceM, bedM: section.bedElevationM });
     bedProfileByTncComid.set(tncComid, profile);
   }
-  console.log('  Loading USGS 3DEP terrain tiles to resample the solved cross-sections…');
+  console.log('  Loading USGS 3DEP terrain tiles to resample the anchor cross-sections…');
   const terrain = await TerrainSampler.load(acquireDirectory, readTerrainTileIndex(await readJson(path.join(acquireDirectory, TERRAIN_TILE_INDEX_FILE))));
 
   let slopeFlooredSections = 0;
@@ -292,16 +335,14 @@ async function buildModels(warnings: string[]): Promise<{ models: SegmentModel[]
     const sections = record
       ? solveSegmentSections({ terrain, segment, record, bedProfile: bedProfileByTncComid.get(tncComid) ?? [], direction })
       : undefined;
-    for (const section of sections ? [sections.atStart, sections.anchor, sections.atEnd] : []) {
-      if (section.slopeFloored) slopeFlooredSections += 1;
-      if (section.curve) continue;
-      sectionsWithoutCurve += 1;
-      warnings.push(
-        `${segmentId} ${section.problem ?? `section ${section.sectionIndex} has no rating curve`}; ` +
-          (section === sections?.anchor ? 'values are null.' : 'the anchor depth stands in at that end.'),
-      );
+    if (sections) {
+      if (sections.anchor.slopeFloored) slopeFlooredSections += 1;
+      if (!sections.anchor.curve) {
+        sectionsWithoutCurve += 1;
+        warnings.push(`${segmentId} ${sections.anchor.problem ?? `section ${sections.anchor.sectionIndex} has no rating curve`}; values are null.`);
+      }
     }
-    if ((index + 1) % 500 === 0 || index === network.length - 1) console.log(`  Rating curves at 3 sections: ${index + 1} of ${network.length} Creek Segments`);
+    if ((index + 1) % 500 === 0 || index === network.length - 1) console.log(`  Anchor rating curves: ${index + 1} of ${network.length} Creek Segments`);
     return {
       segment,
       crosswalk: segmentCrosswalk,
@@ -320,7 +361,7 @@ async function buildTimeSeries(): Promise<StageResult> {
   const outputFiles: string[] = [];
   const { models, slopeFlooredSections, sectionsWithoutCurve } = await buildModels(warnings);
   counts.creekSegments = models.length;
-  counts.solvedSections = models.length * 3;
+  counts.solvedSections = models.length;
   counts.slopeFlooredSolvedSections = slopeFlooredSections;
   counts.solvedSectionsWithoutRatingCurve = sectionsWithoutCurve;
   counts.drainageAreaRatioTransferSegments = models.filter((model) => model.crosswalk?.[DRAINAGE_AREA_RATIO_TRANSFER.fieldName]).length;
@@ -382,8 +423,9 @@ async function buildTimeSeries(): Promise<StageResult> {
     summaryLines.push(`${dataset.datasetId}: ${discharge.timestampsUtcMs.length} timestamps in ${ranges.length} file set(s); ${describeOutcomes(outcomes)}.`);
   }
   summaryLines.push(
-    `${models.length} Creek Segments × 3 solved sections (indexes ${SOLVED_SECTIONS.startEndSectionIndex}, ${SOLVED_SECTIONS.anchorSectionIndex}, ${SOLVED_SECTIONS.endEndSectionIndex}); ` +
-      `local slope ±${LOCAL_BED_SLOPE.halfWindowM} m, ${slopeFlooredSections} section slopes floored, ${sectionsWithoutCurve} sections without a rating curve.`,
+    `${models.length} Creek Segments × 1 solved anchor section (index ${SOLVED_SECTIONS.anchorSectionIndex}); junction beds from sections ${JUNCTION_BED_SECTIONS.startEndSectionIndex} and ${JUNCTION_BED_SECTIONS.endEndSectionIndex}; ` +
+      `local slope ±${LOCAL_BED_SLOPE.halfWindowM} m, ${slopeFlooredSections} section slopes floored, ${sectionsWithoutCurve} sections without a rating curve; ` +
+      `junction depth: mean of raw anchor depths within ±${JUNCTION_DEPTH.smoothingHalfWindowM} m; values = WSE of the smoothed surface at the anchor point (${ANCHOR_POSITION_ALONG_SEGMENT} along the segment), raw Manning anchor WSE in rawAnchorWseM.`,
     `${STEEP_EXAMPLE_SEGMENT_ID}: ${JSON.stringify(example[NATIONAL_WATER_MODEL.datasetId] ?? null)}`,
   );
   return { outputFiles, counts, warnings, measurements: { steepExampleSegment: { segmentId: STEEP_EXAMPLE_SEGMENT_ID, ...example } }, summaryLines };
@@ -425,6 +467,15 @@ await runStageEntryPoint(async () => {
         fileLayout: `segments[].${DRAINAGE_AREA_RATIO_TRANSFER.fieldName}: true only on transfer segments; beyond the maximum distance every value is null`,
       },
       inversion: 'first ladder crossing, linear interpolation (binary search, same result as m1); Q ≤ 0 → bed; missing → null; above curve → clamp',
+      junctionDepth: {
+        ...JUNCTION_DEPTH,
+        rule: 'one depth per shared vertex: length-weighted mean of the wet RAW anchor depths within the half-window; own raw anchor depth at a flowline end or next to a dry or null segment',
+      },
+      anchorWse: {
+        anchorPositionAlongSegment: ANCHOR_POSITION_ALONG_SEGMENT,
+        rule: 'values = anchorBedElevationM + (junction depth at the start vertex + (junction depth at the end vertex − start) × anchorPositionAlongSegment), rounded to 3 decimals; a dry segment (raw anchor depth 0) has depth 0 and values = anchor bed',
+        rawAnchorWseM: 'the raw Manning normal-depth WSE at the anchor section, kept for diagnosis',
+      },
     },
     run: buildTimeSeries,
   });

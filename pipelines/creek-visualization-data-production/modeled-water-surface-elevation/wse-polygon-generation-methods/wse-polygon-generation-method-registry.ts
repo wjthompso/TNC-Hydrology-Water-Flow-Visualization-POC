@@ -1,3 +1,4 @@
+import { FLOWLINE_CHANNEL_RIBBON_METHOD } from './flowline-channel-ribbon/method-config.ts';
 import { HEIGHT_ABOVE_NEAREST_DRAINAGE_FILL_METHOD } from './height-above-nearest-drainage-fill/method-config.ts';
 import { JUNCTION_SLOPED_TERRAIN_FILL_METHOD } from './junction-sloped-terrain-fill/method-config.ts';
 import type { WsePolygonGenerationMethodConfig } from './wse-polygon-generation-method.ts';
@@ -11,6 +12,7 @@ import type { WsePolygonGenerationMethodConfig } from './wse-polygon-generation-
 export const WSE_POLYGON_GENERATION_METHODS: readonly WsePolygonGenerationMethodConfig[] = [
   JUNCTION_SLOPED_TERRAIN_FILL_METHOD,
   HEIGHT_ABOVE_NEAREST_DRAINAGE_FILL_METHOD,
+  FLOWLINE_CHANNEL_RIBBON_METHOD,
 ];
 
 /** Stage 4 runs this method without `--wse-polygon-method=`; the browser opens its newest version. */

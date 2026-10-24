@@ -11,6 +11,8 @@
 import { watch } from '@arcgis/core/core/reactiveUtils';
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { SegmentPolygonPlacement, WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
+import { ribbonDisplayAdjustmentForSlope } from './channel-ribbon-surface';
+import { localBedSlope, withDisplayDepthFloor } from './display-depth-floor';
 import type { ElevationBucket, LonLat, ObservationClock } from './creek-data-contract';
 import type { CreekVisualizationAttachment } from './creek-visualization-library-interface';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
@@ -62,9 +64,13 @@ import {
 } from './visible-flowlines';
 import {
   WSE_POLYGON_METHOD_QUERY_PARAM,
+  drawsDepthBuckets,
+  groupDerivedData,
   readWsePolygonMethodList,
   resolveWsePolygonMethod,
   wsePolygonMethodKey,
+  type DerivedDataGroup,
+  type NotGeneratedDerivedData,
   type WsePolygonMethodList,
   type WsePolygonMethodVersion,
 } from './wse-polygon-generation-methods';
@@ -89,7 +95,40 @@ function drawsSlopedWaterSurfaces(method: WsePolygonMethodVersion): boolean {
  * lifted to its own bed reference plus the depth there.
  */
 function drawsBedParallelDepth(method: WsePolygonMethodVersion): boolean {
-  return method.browserDrawing === 'bed-parallel-depth';
+  return drawsDepthBuckets(method.browserDrawing);
+}
+
+/**
+ * `channel-ribbon-depth` is `bed-parallel-depth` whose buckets are morph targets: the renderer also gets every
+ * rung of the segment and draws the ribbon at each station's own depth (channel-ribbon-surface.ts).
+ */
+function drawsChannelRibbon(method: WsePolygonMethodVersion): boolean {
+  return method.browserDrawing === 'channel-ribbon-depth';
+}
+
+/**
+ * Dev tools WSE override for `bed-parallel-depth`: the pinned value is the WSE at the anchor
+ * point (m NAVD88), so the depth is pinned − anchor bed, clamped at 0, the same at both ends.
+ * Null at depth 0, which draws nothing. No display depth floor applies to a pin.
+ */
+function pinnedWaterDepth(pinnedWseM: number, anchorBedElevationM: number): BedParallelWaterDepth | null {
+  const depthM = Math.max(0, pinnedWseM - anchorBedElevationM);
+  if (depthM <= 0) return null;
+  return {
+    waterSurfaceElevationM: pinnedWseM,
+    anchorBedElevationM,
+    anchorDepthM: depthM,
+    junctionDepth: { upstreamM: depthM, downstreamM: depthM },
+  };
+}
+
+/** The bucket holding a depth; a depth above the ladder's top bucket takes the top bucket (drawn at the pinned depth anyway). */
+function bucketForPinnedDepth(buckets: readonly ElevationBucket[], depthM: number): ElevationBucket | null {
+  const matched = bucketForWaterSurfaceElevation(buckets, depthM);
+  if (matched) return matched;
+  const top = buckets[buckets.length - 1];
+  const hasSurface = top?.ringsWgs84.some((ring) => ring.length >= 3) ?? false;
+  return top && hasSurface && depthM >= top.maxWaterSurfaceElevationM ? top : null;
 }
 
 export interface ModeledExperienceElements {
@@ -177,6 +216,15 @@ export interface ModeledExperienceSeam {
   nearestSegment(lonLat: LonLat, maxDistanceM: number): { segmentId: string; distanceM: number } | null;
   /** Every saved WSE Polygon Generation Method version of this extent, sorted by method id, then version. */
   readonly wsePolygonMethods: readonly WsePolygonMethodVersion[];
+  /**
+   * Dev tools: the extent's derived data products grouped by modeled WSE
+   * version (Time Series), each with the polygon versions built from it.
+   */
+  readonly derivedDataGroups: readonly DerivedDataGroup[];
+  /** Dev tools: registered methods with no saved output in this extent. */
+  readonly notGeneratedDerivedData: NotGeneratedDerivedData;
+  /** The method name the page opens with when no `wsePolygonMethod` is requested. */
+  readonly defaultWsePolygonMethodId: string;
   /** The method version whose polygons are drawn now. */
   readonly wsePolygonMethod: WsePolygonMethodVersion;
   /**
@@ -284,6 +332,12 @@ export async function startModeledCreekExperience(
     },
   });
 
+  /** Straight-line length from the segment path's first to last vertex (its chord), or null without a path. */
+  const segmentChordLengthM = (segmentId: string): number | null => {
+    const path = segmentPaths.get(segmentId)?.path;
+    return path && path.length >= 2 ? equirectangularDistanceM(path[0], path[path.length - 1]) : null;
+  };
+
   const resolvePlacements = (timeUtcMs: number): SegmentPolygonPlacement[] => {
     const placements: SegmentPolygonPlacement[] = [];
     state.transferSegmentIds = new Set();
@@ -299,12 +353,30 @@ export async function startModeledCreekExperience(
         let bucket: ElevationBucket | null = null;
         let junctionWaterSurface: JunctionWaterSurface | null = null;
         let bedParallelWaterDepth: BedParallelWaterDepth | null = null;
-        if (pinned !== undefined) {
+        let channelRibbonLiftM = 0;
+        if (pinned !== undefined && drawsBedParallelDepth(wsePolygonMethod)) {
+          // The pin is the WSE at the anchor point; buckets are depths. Without an anchor bed, nothing is drawn.
+          const anchorBedElevationM = series?.anchorBedElevationMBySegmentId.get(segmentId);
+          const depth = anchorBedElevationM === undefined ? null : pinnedWaterDepth(pinned, anchorBedElevationM);
+          bucket = depth ? bucketForPinnedDepth(buckets, depth.anchorDepthM) : null;
+          if (bucket) bedParallelWaterDepth = depth;
+        } else if (pinned !== undefined) {
           // A test pin asks for one flat height, so no slope.
           bucket = bucketForWaterSurfaceElevation(buckets, pinned);
         } else if (series && (state.showTransferWater || !isTransfer) && drawsBedParallelDepth(wsePolygonMethod)) {
           // Buckets are depths: no held value, no anchor bed, or zero depth draws nothing.
-          const depth = heldWaterDepthAt(series, segmentId, timeUtcMs, holdMs);
+          let depth = heldWaterDepthAt(series, segmentId, timeUtcMs, holdMs, segmentChordLengthM(segmentId));
+          if (depth && drawsChannelRibbon(wsePolygonMethod)) {
+            // The ribbon method's own labeled display exaggeration for steep segments (channel-ribbon-surface.ts); true depth stays in the data.
+            const bedSlope = localBedSlope(
+              series.junctionBedUpstreamMBySegmentId.get(segmentId),
+              series.junctionBedDownstreamMBySegmentId.get(segmentId),
+              segmentChordLengthM(segmentId),
+            );
+            const display = ribbonDisplayAdjustmentForSlope(bedSlope);
+            depth = withDisplayDepthFloor(depth, display.floorM);
+            channelRibbonLiftM = display.liftM;
+          }
           bucket = depth && depth.anchorDepthM > 0 ? bucketForWaterSurfaceElevation(buckets, depth.anchorDepthM) : null;
           if (bucket) bedParallelWaterDepth = depth;
         } else if (series && (state.showTransferWater || !isTransfer)) {
@@ -320,6 +392,7 @@ export async function startModeledCreekExperience(
           drainageAreaRatioTransfer: isTransfer,
           junctionWaterSurface,
           ...(bedParallelWaterDepth ? { bedParallelWaterDepth } : {}),
+          ...(bedParallelWaterDepth && drawsChannelRibbon(wsePolygonMethod) ? { channelRibbonBuckets: buckets, channelRibbonLiftM } : {}),
         });
       }
     }
@@ -587,6 +660,9 @@ export async function startModeledCreekExperience(
     readSegment,
     nearestSegment,
     wsePolygonMethods: methodList.versions,
+    derivedDataGroups: groupDerivedData(methodList),
+    notGeneratedDerivedData: methodList.notGenerated,
+    defaultWsePolygonMethodId: methodList.defaultMethodId,
     get wsePolygonMethod() {
       return wsePolygonMethod;
     },

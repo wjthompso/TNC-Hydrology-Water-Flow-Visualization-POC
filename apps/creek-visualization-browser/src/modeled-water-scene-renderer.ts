@@ -24,6 +24,7 @@ import {
   type SegmentPolygonPlacement,
   type WaterGraphicGeometryIdentity,
 } from './arcgis-scene-renderer';
+import { channelRibbonRingsWgs84 } from './channel-ribbon-surface';
 import type { ElevationBucket } from './creek-data-contract';
 import { segmentSurfaceGeometry, type CreekSegmentPathRecord } from './modeled-water-data-store';
 import {
@@ -100,6 +101,7 @@ export function createModeledWaterSceneRenderer(
       'bed-parallel-depth',
       bucket.minWaterSurfaceElevationM,
       depth.anchorDepthM,
+      placement.channelRibbonLiftM ?? '',
       junctionDepth?.upstreamM ?? '',
       junctionDepth?.downstreamM ?? '',
       geometry ? 'geometry' : 'no-geometry',
@@ -115,9 +117,12 @@ export function createModeledWaterSceneRenderer(
     const graphic = existing ?? new Graphic({ symbol, visible: false });
     graphicsBySegmentId.set(segmentId, graphic);
     if (graphic.symbol !== symbol) graphic.symbol = symbol;
+    // `channel-ribbon-depth` water morphs between all the segment's depth rungs at each station's own depth; anything
+    // that is not a usable ribbon (or any other method) draws the picked bucket parallel to the bed.
+    const ribbonRings = placement.channelRibbonBuckets ? channelRibbonRingsWgs84(placement.channelRibbonBuckets, depth, placement.channelRibbonLiftM ?? 0) : null;
     graphic.geometry = new Polygon({
       hasZ: true,
-      rings: bedParallelRingsWgs84(bucket.ringsWgs84, geometry, depth),
+      rings: ribbonRings ?? bedParallelRingsWgs84(bucket.ringsWgs84, geometry, depth),
       spatialReference: { wkid: 4326 },
     });
     // Bucket bounds are depths for this method, so they are named as depths; the elevation is the anchor WSE.

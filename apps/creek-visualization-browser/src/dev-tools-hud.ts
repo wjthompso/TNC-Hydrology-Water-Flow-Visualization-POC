@@ -11,10 +11,11 @@
 // - View: Simple shows headline numbers and a 3D camera attitude indicator.
 //   Detailed shows the raw JSON readouts.
 // Both toggles share one data feed, so switching never loses state.
-// Dataset and time sits above both views. In the modeled experience it also
-// holds the 'Polygon method' select, which switches the drawn WSE Polygon
-// Generation Method version live. Copy all JSON bundles that readout (with the
-// drawn method), the camera pose, and the last click capture.
+// Dataset and time sits above both views. In the modeled experience the
+// 'Derived data products' section below it picks the modeled WSE version and
+// the WSE polygon version drawn on the map, live, and lists which versions are
+// saved and which are not generated yet. Copy all JSON bundles the dataset
+// readout (with the drawn versions), the camera pose, and the last click capture.
 
 import 'overlayscrollbars/overlayscrollbars.css';
 import './dev-tools-hud.css';
@@ -54,7 +55,15 @@ import type { StationMarkerGallery } from './station-marker-gallery';
 import type { DevToolsClickMarker } from './dev-tools-click-marker';
 import { createDevToolsClickMarker } from './dev-tools-click-marker';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
-import { wsePolygonMethodKey, type WsePolygonMethodVersion } from './wse-polygon-generation-methods';
+import { displayDepthFloorDescription } from './display-depth-floor';
+import { ribbonDisplayRuleDescription } from './channel-ribbon-surface';
+import {
+  derivedDataGroupOf,
+  drawsDepthBuckets,
+  preferredPolygonVersionOf,
+  wsePolygonMethodKey,
+  type WsePolygonMethodVersion,
+} from './wse-polygon-generation-methods';
 
 interface DevToolsHudOptions {
   view: SceneView;
@@ -110,6 +119,8 @@ interface DatasetAndTimeCapture {
   /** Modeled only: the WSE Polygon Generation Method version drawn, e.g. `junction-sloped-terrain-fill@v1`. */
   wsePolygonMethod: string | null;
   wsePolygonMethodLabel: string | null;
+  /** Modeled only: the modeled WSE version folder the drawn polygons pair with, e.g. `m2-multi-section-manning-depth/v1`. */
+  modeledWseVersionPath: string | null;
 }
 
 interface SeamShape {
@@ -311,9 +322,11 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   const datasetSection = buildSection('Dataset and time', '01', 2);
   const datasetReadout = createElement('pre', [READOUT_BLOCK_CLASS], '{}');
   const copyDatasetButton = buildCopyButton('Copy JSON');
-  if (modeledSeam) datasetSection.body.appendChild(buildWsePolygonMethodPicker(modeledSeam));
   datasetSection.body.append(datasetReadout, copyDatasetButton);
   scrollHost.appendChild(datasetSection.root);
+
+  // --- Derived data products: which modeled WSE version and polygons are drawn ---
+  if (modeledSeam) scrollHost.appendChild(buildDerivedDataProductsTools(modeledSeam));
 
   // --- Simple view: boarding-pass headline numbers -------------------------
   const simpleView = createElement('div', []);
@@ -821,6 +834,13 @@ function buildWseOverrideTools(
   status.setAttribute('aria-live', 'polite');
   actionRow.append(applyButton, clearButton, status);
   section.body.append(target, row, actionRow);
+  const displayFloorDescription = displayDepthFloorDescription();
+  if (displayFloorDescription) {
+    section.body.append(createElement('p', ['text-[11px]', 'font-bold', 'text-hud-label'], displayFloorDescription));
+  }
+
+  /** Bed-parallel-depth methods read the typed value as the WSE at the segment's anchor point. */
+  const pinIsAnchorWse = (): boolean => (modeledSeam ? drawsDepthBuckets(modeledSeam.wsePolygonMethod.browserDrawing) : false);
 
   /**
    * The one override in effect. It belongs to the Selected Creek Segment only:
@@ -865,7 +885,10 @@ function buildWseOverrideTools(
       input.value = start === null ? '' : start.toFixed(2);
     }
     const pinned = pins.get(segmentId);
-    status.textContent = pinned === undefined ? 'Dataset value' : `Pinned at ${pinned.toFixed(2)} m`;
+    const anchorWse = pinIsAnchorWse();
+    unitLabel.textContent = anchorWse ? 'm NAVD88 · anchor WSE' : 'm NAVD88';
+    status.textContent =
+      pinned === undefined ? 'Dataset value' : `Pinned at ${pinned.toFixed(2)} m${anchorWse ? ' (anchor WSE)' : ''}`;
   };
 
   const apply = async (elevationM: number | null): Promise<void> => {
@@ -1686,19 +1709,129 @@ function datasetAndTimeCapture(
     selectedTimeLocal: hasTime ? formatObservationTime(timeUtcMs) : null,
     wsePolygonMethod: wsePolygonMethod ? wsePolygonMethodKey(wsePolygonMethod) : null,
     wsePolygonMethodLabel: wsePolygonMethod?.label ?? null,
+    modeledWseVersionPath: wsePolygonMethod?.builtFromModeledWsePath ?? null,
   };
 }
 
-// --- Polygon method (modeled experience only) --------------------------------
+// --- Derived data products (modeled experience only) --------------------------
 
 /**
- * 'Polygon method' select: every saved WSE Polygon Generation Method version
- * of the extent. Choosing one redraws the water live with that version's
- * polygons; the label and description of the drawn version show underneath.
+ * 'Derived data products': pick the modeled WSE version (the Time Series) and
+ * the WSE polygon version drawn on the map, live, with no URL parameter to
+ * remember. A polygon version is only drawn with the Time Series it was built
+ * from, so choosing a modeled WSE version draws its newest polygon version, and
+ * the polygon select lists only the versions built from the chosen Time Series.
+ * The readout underneath answers "do we have it?": what is saved, what is
+ * drawn, and which registered methods have no output in this extent yet.
  */
-function buildWsePolygonMethodPicker(seam: ModeledExperienceSeam): HTMLElement {
-  const root = createElement('div', ['flex', 'flex-col', 'gap-1']);
-  const label = createElement('label', [FIELD_LABEL_CLASS], 'WSE Polygon Generation Method');
+function buildDerivedDataProductsTools(seam: ModeledExperienceSeam): HTMLElement {
+  const section = buildSection('Derived data products', '01b', 1, 'Modeled WSE · WSE polygons · switches live');
+  section.root.id = 'dev-tools-derived-data-products';
+
+  const groups = seam.derivedDataGroups;
+
+  const wseLabel = createElement('label', [FIELD_LABEL_CLASS], 'Modeled WSE version');
+  const wseSelect = buildHudSelect('dev-tools-modeled-wse-version');
+  // Linked so each label names its control for assistive technology.
+  wseLabel.htmlFor = wseSelect.id;
+  for (const group of groups) {
+    const hasPolygons = group.polygonVersions.length > 0;
+    const option = createElement('option', [], hasPolygons ? group.label : `${group.label} · no polygons yet`);
+    option.value = group.key;
+    // Drawing needs polygons: the Time Series alone has nothing to put on the map.
+    option.disabled = !hasPolygons;
+    wseSelect.appendChild(option);
+  }
+
+  const polygonLabel = createElement('label', [FIELD_LABEL_CLASS], 'WSE polygon version');
+  const polygonSelect = buildHudSelect('dev-tools-wse-polygon-method');
+  polygonLabel.htmlFor = polygonSelect.id;
+
+  const description = createElement('p', ['text-[11px]', 'font-semibold', 'leading-snug', 'text-hud-label']);
+  description.setAttribute('aria-live', 'polite');
+  const inventory = createElement('pre', [READOUT_BLOCK_CLASS]);
+  inventory.id = 'dev-tools-derived-data-inventory';
+
+  const render = (status?: string): void => {
+    const drawn = seam.wsePolygonMethod;
+    const drawnKey = wsePolygonMethodKey(drawn);
+    const group = derivedDataGroupOf(groups, drawn);
+    wseSelect.value = group?.key ?? '';
+    polygonSelect.replaceChildren(
+      ...(group?.polygonVersions ?? [drawn]).map((entry) => {
+        const option = createElement('option', [], `${entry.label} · v${entry.version}`);
+        option.value = wsePolygonMethodKey(entry);
+        return option;
+      }),
+    );
+    polygonSelect.value = drawnKey;
+    description.textContent = [
+      `${drawn.label} (${drawnKey}, ${describeBrowserDrawing(drawn)}).`,
+      group ? `Time Series: ${group.label}.` : null,
+      drawn.description,
+      status ?? null,
+    ]
+      .filter((line): line is string => line !== null && line.length > 0)
+      .join(' ');
+    inventory.textContent = describeDerivedDataInventory(seam, drawnKey);
+  };
+
+  const switchTo = (key: string): void => {
+    wseSelect.disabled = true;
+    polygonSelect.disabled = true;
+    render('Loading…');
+    seam
+      .setWsePolygonMethod(key)
+      .then(() => render())
+      .catch((error: unknown) => {
+        console.error('[dev-tools-hud] derived data switch failed', error);
+        render(`Switch failed: ${error instanceof Error ? error.message : String(error)}`);
+      })
+      .finally(() => {
+        wseSelect.disabled = false;
+        polygonSelect.disabled = false;
+      });
+  };
+
+  wseSelect.addEventListener('change', () => {
+    const group = groups.find((candidate) => candidate.key === wseSelect.value);
+    const target = group ? preferredPolygonVersionOf(group, seam.defaultWsePolygonMethodId) : null;
+    if (target) switchTo(wsePolygonMethodKey(target));
+    else render();
+  });
+  polygonSelect.addEventListener('change', () => switchTo(polygonSelect.value));
+
+  render();
+  section.body.append(wseLabel, wseSelect, polygonLabel, polygonSelect, description, inventory);
+  return section.root;
+}
+
+/**
+ * Every modeled WSE version with the polygon versions built from it, the one
+ * drawn now marked, then the registered methods that have no saved output.
+ */
+function describeDerivedDataInventory(seam: ModeledExperienceSeam, drawnKey: string): string {
+  const lines: string[] = [];
+  for (const group of seam.derivedDataGroups) {
+    lines.push(group.label);
+    lines.push(`  Time Series: ${group.wseVersion ? '✓ saved' : '— not listed by this data source'}`);
+    if (group.polygonVersions.length === 0) lines.push('  Polygons: ✗ none yet');
+    for (const entry of group.polygonVersions) {
+      const drawnMark = wsePolygonMethodKey(entry) === drawnKey ? '  ◀ drawn' : '';
+      lines.push(`  Polygons: ✓ ${entry.label} v${entry.version}${drawnMark}`);
+    }
+  }
+  const { modeledWse, wsePolygon } = seam.notGeneratedDerivedData;
+  if (modeledWse.length > 0 || wsePolygon.length > 0) {
+    lines.push('Not generated for this extent');
+    for (const method of modeledWse) lines.push(`  Time Series: ${method.versionLabel} · ${method.label}`);
+    for (const method of wsePolygon) lines.push(`  Polygons: ${method.label}`);
+  }
+  return lines.join('\n');
+}
+
+/** Select styled like the HUD's other wells. */
+function buildHudSelect(id: string): HTMLSelectElement {
   const select = createElement('select', [
     'w-full',
     'cursor-pointer',
@@ -1719,55 +1852,15 @@ function buildWsePolygonMethodPicker(seam: ModeledExperienceSeam): HTMLElement {
     'disabled:cursor-wait',
     'disabled:opacity-60',
   ]);
-  // Linked so the label names the control for assistive technology.
-  select.id = 'dev-tools-wse-polygon-method';
-  label.htmlFor = select.id;
-  for (const entry of seam.wsePolygonMethods) {
-    const option = createElement('option', [], `${entry.label} · v${entry.version}`);
-    option.value = wsePolygonMethodKey(entry);
-    select.appendChild(option);
-  }
-  const description = createElement('p', ['text-[11px]', 'font-semibold', 'leading-snug', 'text-hud-label']);
-  description.setAttribute('aria-live', 'polite');
-
-  const render = (status?: string): void => {
-    const drawn = seam.wsePolygonMethod;
-    select.value = wsePolygonMethodKey(drawn);
-    const drawing = describeBrowserDrawing(drawn);
-    description.textContent = [
-      `${drawn.label} (${wsePolygonMethodKey(drawn)}, ${drawing}).`,
-      drawn.description,
-      status ?? null,
-    ]
-      .filter((line): line is string => line !== null && line.length > 0)
-      .join(' ');
-  };
-
-  select.addEventListener('change', () => {
-    const key = select.value;
-    select.disabled = true;
-    render('Loading…');
-    seam
-      .setWsePolygonMethod(key)
-      .then(() => render())
-      .catch((error: unknown) => {
-        console.error('[dev-tools-hud] polygon method switch failed', error);
-        render(`Switch failed: ${error instanceof Error ? error.message : String(error)}`);
-      })
-      .finally(() => {
-        select.disabled = false;
-      });
-  });
-
-  render();
-  root.append(label, select, description);
-  return root;
+  select.id = id;
+  return select;
 }
 
 function describeBrowserDrawing(method: WsePolygonMethodVersion): string {
   if (method.browserDrawing === 'sloped-between-junctions') return 'drawn sloped between junctions';
-  if (method.browserDrawing === 'bed-parallel-depth') {
+  if (drawsDepthBuckets(method.browserDrawing)) {
     const source = method.builtFromModeledWsePath ? `, Time Series from ${method.builtFromModeledWsePath}` : '';
+    if (method.browserDrawing === 'channel-ribbon-depth') return `drawn as a ribbon morphed to each station's water depth${source}; ${ribbonDisplayRuleDescription()}`;
     return `drawn at a water depth above the creek bed${source}`;
   }
   return 'drawn flat';

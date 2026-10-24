@@ -221,6 +221,39 @@ def git_last_commit(paths: Iterable[Path | str], before_iso: str | None = None) 
     return {"commit": commit, "date_utc": _git_iso_to_utc_z(date)}
 
 
+def git_first_commit_with_method_code(code_sha256_by_file: dict[str, str]) -> tuple[dict, str]:
+    """The earliest commit holding exactly the method code a stage recorded, and a sentence saying so.
+
+    `code_sha256_by_file` maps repository-relative paths to the SHA-256 the stage manifest recorded.
+    Walks the commits that touched those files from newest to oldest and stops at the first one whose
+    copy of any file differs; the oldest commit before that point is returned. Unlike
+    git_last_commit(before_iso=...), this still finds the right commit when the method was
+    committed only after the stage ran (it was uncommitted work then), and it is not pulled back to an
+    older commit that touched only a shared file.
+    """
+    log_output = _run_git(["log", "--format=%H", "--", *code_sha256_by_file])
+    matching_commit = None
+    for commit in log_output.splitlines():
+        if not all(
+            _file_sha256_at_commit(commit, path) == recorded_sha256 for path, recorded_sha256 in code_sha256_by_file.items()
+        ):
+            break
+        matching_commit = commit
+    if matching_commit is None:
+        raise RuntimeError("No git commit holds exactly the method code files the stage recorded.")
+    return git_commit(matching_commit), (
+        "committer date of the earliest git commit whose copies of every method code file equal the SHA-256 the stage "
+        "manifest recorded (the method code may have been committed after the stage ran)"
+    )
+
+
+def _file_sha256_at_commit(commit: str, relative_path: str) -> str | None:
+    try:
+        return sha256_of_bytes(_run_git_bytes(["show", f"{commit}:{relative_path}"]))
+    except subprocess.CalledProcessError:
+        return None  # the file did not exist in that commit
+
+
 def git_last_commit_date(paths: Iterable[Path | str], before_iso: str | None = None) -> str | None:
     found = git_last_commit(paths, before_iso)
     return found["date_utc"] if found else None

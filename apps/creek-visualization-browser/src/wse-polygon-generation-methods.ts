@@ -17,7 +17,18 @@ export const WSE_POLYGON_METHODS_PATH = 'wse-polygon-methods.json';
  * each ring vertex carries its creek-bed elevation as z, so the water sits that
  * depth above the bed at every vertex.
  */
-export type WsePolygonBrowserDrawing = 'sloped-between-junctions' | 'flat-at-bucket-minimum' | 'bed-parallel-depth';
+export type WsePolygonBrowserDrawing =
+  | 'sloped-between-junctions'
+  | 'flat-at-bucket-minimum'
+  | 'bed-parallel-depth'
+  // `channel-ribbon-depth`: depth buckets like `bed-parallel-depth`, but they are vertex-aligned morph targets
+  // of one ribbon that the browser slides between at each station's own depth (channel-ribbon-surface.ts).
+  | 'channel-ribbon-depth';
+
+/** True for the drawings whose buckets are water depths and whose ring vertices carry a bed elevation. */
+export function drawsDepthBuckets(browserDrawing: WsePolygonBrowserDrawing): boolean {
+  return browserDrawing === 'bed-parallel-depth' || browserDrawing === 'channel-ribbon-depth';
+}
 
 export interface WsePolygonMethodVersion {
   methodId: string;
@@ -35,10 +46,34 @@ export interface WsePolygonMethodVersion {
   builtFromModeledWsePath?: string;
 }
 
+/**
+ * One saved modeled WSE version (Data-Product Version, e.g. `m2-v1`) of the
+ * extent. Local dev middleware only; hosted data lists none.
+ */
+export interface SavedModeledWseVersion {
+  methodId: string;
+  version: number;
+  /** Data-Product Version label, e.g. `m2-v1`. */
+  versionLabel: string;
+  label: string;
+  description: string;
+  /** Relative to `03-time-series/`, e.g. `m2-multi-section-manning-depth/v1`. */
+  path: string;
+}
+
+/** A registered method with no saved output for this extent: the answer to "do we have it yet?". */
+export interface NotGeneratedDerivedData {
+  modeledWse: readonly { label: string; versionLabel: string }[];
+  wsePolygon: readonly { label: string }[];
+}
+
 export interface WsePolygonMethodList {
   defaultMethodId: string;
   /** Sorted by method id, then version. */
   versions: readonly WsePolygonMethodVersion[];
+  /** Saved modeled WSE versions, sorted by method id, then version. Empty for hosted data. */
+  modeledWseVersions: readonly SavedModeledWseVersion[];
+  notGenerated: NotGeneratedDerivedData;
 }
 
 /** `junction-sloped-terrain-fill@v1`: the URL and dev tools form of one method version. */
@@ -74,7 +109,112 @@ export function readWsePolygonMethodList(value: unknown): WsePolygonMethodList {
   return {
     defaultMethodId: typeof record.defaultMethodId === 'string' ? record.defaultMethodId : '',
     versions,
+    modeledWseVersions: readSavedModeledWseVersions(record.modeledWseVersions),
+    notGenerated: readNotGenerated(record.notGenerated),
   };
+}
+
+/** Optional in the file: older middleware output and hosted data carry none. */
+function readSavedModeledWseVersions(value: unknown): SavedModeledWseVersion[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): SavedModeledWseVersion[] => {
+    const entry = (typeof item === 'object' && item !== null ? item : {}) as Record<string, unknown>;
+    const { methodId, version, versionLabel, path } = entry;
+    if (
+      typeof methodId !== 'string' ||
+      typeof version !== 'number' ||
+      typeof versionLabel !== 'string' ||
+      typeof path !== 'string'
+    ) {
+      return [];
+    }
+    return [
+      {
+        methodId,
+        version,
+        versionLabel,
+        label: typeof entry.label === 'string' ? entry.label : methodId,
+        description: typeof entry.description === 'string' ? entry.description : '',
+        path,
+      },
+    ];
+  });
+}
+
+function readNotGenerated(value: unknown): NotGeneratedDerivedData {
+  const record = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const labelled = (items: unknown): Record<string, unknown>[] =>
+    Array.isArray(items)
+      ? items.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+      : [];
+  return {
+    modeledWse: labelled(record.modeledWse).flatMap((item) =>
+      typeof item.label === 'string' && typeof item.versionLabel === 'string'
+        ? [{ label: item.label, versionLabel: item.versionLabel }]
+        : [],
+    ),
+    wsePolygon: labelled(record.wsePolygon).flatMap((item) =>
+      typeof item.label === 'string' ? [{ label: item.label }] : [],
+    ),
+  };
+}
+
+/**
+ * Every polygon version of one modeled WSE version, which is the pairing the
+ * dev tools offer: a polygon version is only drawn with the Time Series it was
+ * built from. `wseVersion` is null for a pairing the extent has no saved
+ * version for (hosted data, or a manifest that predates the pairing record).
+ */
+export interface DerivedDataGroup {
+  /** `builtFromModeledWsePath`, or '' when polygons name no modeled WSE version. */
+  key: string;
+  /** Short select label, e.g. `m2-v1 · Multi-section Manning depth`. */
+  label: string;
+  wseVersion: SavedModeledWseVersion | null;
+  /** Sorted by method id, then version. Empty when only the Time Series exists. */
+  polygonVersions: readonly WsePolygonMethodVersion[];
+}
+
+/** Saved modeled WSE versions first (oldest first), then polygon pairings no saved version covers. */
+export function groupDerivedData(list: WsePolygonMethodList): DerivedDataGroup[] {
+  const groups: DerivedDataGroup[] = list.modeledWseVersions.map((wseVersion) => ({
+    key: wseVersion.path,
+    label: `${wseVersion.versionLabel} · ${wseVersion.label}`,
+    wseVersion,
+    polygonVersions: list.versions.filter((entry) => entry.builtFromModeledWsePath === wseVersion.path),
+  }));
+  const covered = new Set(groups.map((group) => group.key));
+  for (const entry of list.versions) {
+    const key = entry.builtFromModeledWsePath ?? '';
+    if (covered.has(key)) continue;
+    covered.add(key);
+    groups.push({
+      key,
+      label: key === '' ? 'Catalog default' : key,
+      wseVersion: null,
+      polygonVersions: list.versions.filter((candidate) => (candidate.builtFromModeledWsePath ?? '') === key),
+    });
+  }
+  return groups;
+}
+
+/** The group whose polygons a method version belongs to. */
+export function derivedDataGroupOf(
+  groups: readonly DerivedDataGroup[],
+  method: Pick<WsePolygonMethodVersion, 'builtFromModeledWsePath'>,
+): DerivedDataGroup | null {
+  return groups.find((group) => group.key === (method.builtFromModeledWsePath ?? '')) ?? null;
+}
+
+/**
+ * The polygon version to draw when a group is chosen: the default method's
+ * newest version in it, else the group's newest. Null when it has no polygons yet.
+ */
+export function preferredPolygonVersionOf(
+  group: DerivedDataGroup,
+  defaultMethodId: string,
+): WsePolygonMethodVersion | null {
+  return group.polygonVersions.filter((entry) => entry.methodId === defaultMethodId).at(-1) ?? group.polygonVersions.at(-1) ?? null;
 }
 
 /**
@@ -103,7 +243,7 @@ export function resolveWsePolygonMethod(
 
 /** Unknown or missing values keep the original default, `sloped-between-junctions`. */
 function readBrowserDrawing(value: unknown): WsePolygonBrowserDrawing {
-  if (value === 'flat-at-bucket-minimum' || value === 'bed-parallel-depth') return value;
+  if (value === 'flat-at-bucket-minimum' || value === 'bed-parallel-depth' || value === 'channel-ribbon-depth') return value;
   return 'sloped-between-junctions';
 }
 
