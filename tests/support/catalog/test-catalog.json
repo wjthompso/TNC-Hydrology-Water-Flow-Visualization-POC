@@ -218,7 +218,7 @@
       "rootCauseAnalysis": "Symptom: zooming far out clears the scene to an all-white frame, and zooming back in does not reliably recover it. Root cause: the old local SceneView constraints.clipDistance.far of 80000 cleared the frame once view rays exceeded the 80 km far clip. Red evidence: baseline commit cac781c; the optimized crop measured 92% flat white. Fix: a global SceneView with no 80 km far clip. Future triage: compare camera altitude with the view clipping constraints before investigating an imagery outage.",
       "enforcement": "required",
       "enforcementChange": null,
-      "durationBudgetMs": 20000,
+      "durationBudgetMs": 30000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-120-creek-scene-imagery-and-terrain-navigation/behavior/FBT-008.live.spec.ts"
     },
@@ -294,7 +294,7 @@
       "rootCauseAnalysis": "Symptom: at the 2023-01-10T01:00Z flood peak a wall of water stands across the boundary between neighbouring Creek Segments; the 27714637-046 and 047 surfaces differ by 3.05 m against a 1.42 m bed drop, and 015 and 016 by 2.05 m. On side creek 27714669 in the Dangermond Preserve at 2023-01-01T11:00Z the developer saw a dark seam line and a dry gap across high water near Creek Segment 007 and clicked it with no water-surface hit (screenshot on Linear UCS-271). Root cause: Stage 3 solves normal depth for each Creek Segment on its own representative cross-section with no longitudinal continuity, so neighbours' depths disagree (0.08 m at the 90th percentile in normal flow but up to 1.6 m at the peak, with 18% of pairs inverted so downstream water stands higher), and the flat per-segment terraces then meet at different heights. The corridor slabs are also clipped at each segment's own perpendicular, so at a bend (median 16 degrees, 27 degrees at the 90th percentile) the outer side leaves a wedge gap and the inner side overlaps, and the higher terrace shows as a lip. Bucket quantization is at most 0.05 m and is not a cause. Future triage: when this fails, compare the two segments' Stage 3 elevations at that hour with their bed drop before suspecting rendering; one junction elevation shared by both neighbours with a monotone-downstream pass, and corridors clipped at the bend bisector so neighbours share one boundary, is the fix direction (diagnosis options 2 and 3).",
       "enforcement": "required",
       "enforcementChange": null,
-      "durationBudgetMs": 20000,
+      "durationBudgetMs": 30000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-140-modeled-creek-water-surface-elevation/behavior/FBT-012.live.spec.ts"
     },

@@ -54,7 +54,10 @@ export default defineConfig<DeterministicProjectOptions>({
     {
       name: 'live',
       testMatch: '**/*.live.spec.ts',
-      timeout: 20000,
+      // 30s so a scene test can finish its 15s "done drawing" wait after the opening
+      // frame. Three scenes share one GPU, and 20s left FBT-008 and FBT-012 with
+      // about half a second to spare on a passing run.
+      timeout: 30000,
       retries: 1,
       workers: 3,
       // The chromium channel draws WebGL on the GPU. The default headless shell uses
