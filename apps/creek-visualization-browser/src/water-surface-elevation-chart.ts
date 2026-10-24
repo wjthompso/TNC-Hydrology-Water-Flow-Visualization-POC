@@ -497,18 +497,57 @@ export function createWaterSurfaceElevationChart(
     return nearestReading(timeForX(event.clientX - rect.left));
   };
 
+  /** Commits a plotted time. The same time again would redraw the map for nothing. */
+  const selectPlottedTime = (timeUtcMs: number | null): void => {
+    if (timeUtcMs === null || timeUtcMs === selectedTimeUtcMs) return;
+    onSelectTime(timeUtcMs);
+  };
+
+  // Set while the primary button is down on the plot, so a drag scrubs the
+  // selected time. A move with the button up only draws the hover mark.
+  let plotScrubPointerId: number | null = null;
+
+  const endPlotScrub = (event: PointerEvent): void => {
+    if (plotScrubPointerId !== event.pointerId) return;
+    plotScrubPointerId = null;
+    if (elements.plot.hasPointerCapture(event.pointerId)) {
+      elements.plot.releasePointerCapture(event.pointerId);
+    }
+    const rect = elements.plot.getBoundingClientRect();
+    const overPlot =
+      event.clientX >= rect.left &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom;
+    if (!overPlot) clearHover();
+  };
+
+  elements.plot.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    plotScrubPointerId = event.pointerId;
+    elements.plot.setPointerCapture(event.pointerId);
+    const reading = readingAtPointer(event);
+    if (reading) {
+      drawHover(reading);
+      selectPlottedTime(reading.timeUtcMs);
+    }
+  }, listening);
   elements.plot.addEventListener('pointermove', (event) => {
     const reading = readingAtPointer(event);
     if (reading) drawHover(reading);
-    else clearHover();
+    else if (plotScrubPointerId === null) clearHover();
+    if (plotScrubPointerId !== null) selectPlottedTime(reading?.timeUtcMs ?? null);
   }, listening);
-  elements.plot.addEventListener('pointerleave', clearHover, listening);
+  elements.plot.addEventListener('pointerleave', () => {
+    if (plotScrubPointerId === null) clearHover();
+  }, listening);
+  elements.plot.addEventListener('pointerup', endPlotScrub, listening);
+  elements.plot.addEventListener('pointercancel', endPlotScrub, listening);
   elements.plot.addEventListener('click', (event) => {
     // Select the reading the hover readout shows. Chrome reports whole-pixel
     // click coordinates but fractional pointer coordinates, and one pixel spans
     // many readings, so recomputing here could pick a different reading.
-    const timeUtcMs = hoverTimeUtcMs ?? readingAtPointer(event)?.timeUtcMs ?? null;
-    if (timeUtcMs !== null) onSelectTime(timeUtcMs);
+    selectPlottedTime(hoverTimeUtcMs ?? readingAtPointer(event)?.timeUtcMs ?? null);
   }, listening);
   // Plotly convention: double-click resets the zoom.
   elements.plot.addEventListener('dblclick', resetView, listening);

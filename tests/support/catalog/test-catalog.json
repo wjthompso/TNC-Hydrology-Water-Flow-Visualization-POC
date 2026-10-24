@@ -466,6 +466,27 @@
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-190-control-panel-layout/behavior/FBT-020.deterministic.spec.ts"
     },
     {
+      "id": "FBT-021",
+      "name": "Pressing on the water-surface elevation chart and dragging left or right moves the selected timestamp with the pointer.",
+      "methodology": "Why it matters: a person presses on the Water-Surface Elevation Chart and drags left or right to scrub the record, the same way they drag the time slider, and expects the selected timestamp to move. How it checks: opens the locally served observed page in test mode, moves the camera instantly to a fixed straight-down pose 150 m above gauge Creek Segment 27714637-026's water, settles the frame, and clicks that segment's water with the real mouse at a pixel where SceneView.hitTest reports it. It resolves two screen points on the chart plot whose readings differ: the opening time, and the committed 2026-01-03T15:15Z flood peak. It moves the real mouse to the opening-time point, presses and holds, and records the selected timestamp. It drags, button still down, to the flood-peak point and reads the selected timestamp again before release. The test fails unless that timestamp differs from the timestamp recorded at the press. What is real: the browser page, the chart, the committed gauge series, the real mouse, and Esri World Imagery, Esri World Elevation, and USGS 3DEP (3D Elevation Program) responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. What is test-only: the camera command and the read-only seam that reports the selected timestamp and the chart point for a time. What it does not check: that the timestamp equals the reading under the pointer, the timestamp after release, the water-surface elevation label, whether the creek polygons repaint, hover with the button up (FBT-017), a click without a drag (FBT-013), the overview strip's zoom drag, modeled water, or chart styling.",
+      "category": "feature-behavior",
+      "owner": "F-160",
+      "additionalFeatureAssociations": [
+        "F-110"
+      ],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": true,
+      "bugReference": "Observed Oct 24, 2026: press-drag on the Water-Surface Elevation Chart does not scrub the selected timestamp",
+      "rootCauseAnalysis": "Symptom: pressing on the chart line and dragging updates the hover readout, and the selected timestamp stays put until release. On Oct 24, 2026 a check that compared the timestamp only after mouse-up passed, because the browser still emits click at the release point and that click commits one new time. The cursor does not follow the pointer while the button is held. Root cause: pointermove on the plot only draws the hover mark, and onSelectTime runs only from the plot's click listener. A held drag never takes that path. The strip under the chart does track a drag, and that drag changes the zoom window. Future triage: if this fails after a scrub fix, check that a move with the primary button held commits the reading under the pointer, and that FBT-017 still passes for a move with the button up.",
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-160-water-surface-elevation-chart/behavior/FBT-021.live.spec.ts"
+    },
+    {
       "id": "FBT-131",
       "name": "Playing at 0.5×, 1×, 2×, 5×, and 10× advances the observation slider by about 5, 10, 20, 50, and 100 slots in one second.",
       "methodology": "Opens the local page on the timeline fixture while the test server has VITE_TEST_MODE set. That path runs the real Play button, time slider, and speed buttons through the production timeline control, on a 500-slot stand-in clock. The ArcGIS scene, imagery, terrain, and published gauge series are not loaded, and the test fails if the page requests ArcGIS. For each of 0.5×, 1×, 2×, 5×, and 10×, the test pauses, returns the slider to the first slot, clicks that speed button, clicks Play, and reads the slider index at the start and end of one second inside the page. The slot count must sit within 10% of the target for that elapsed time, and the margin is never tighter than one slot, so 1× passes at 9–11 slots in one second. It does not check water, button highlight color, reverse playback, or a chosen calendar date.",

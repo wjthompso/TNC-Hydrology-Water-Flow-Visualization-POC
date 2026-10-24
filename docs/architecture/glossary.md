@@ -156,7 +156,7 @@ The absolute height of the water surface, expressed in NAVD88 (North American Ve
 
 ## Water-Surface Elevation Chart
 
-Short for Water-Surface Elevation Time Series Chart. A line chart of the Selected Creek Segment's water-surface elevation over time, from the active Dataset, with a time cursor at the selected time. Hovering reads the time and value under the pointer without changing the time; clicking a time moves the time slider there, so the map follows. For an hourly modeled Dataset it shows the water year that holds the selected time (UCS-279).
+Short for Water-Surface Elevation Time Series Chart. A line chart of the Selected Creek Segment's water-surface elevation over time, from the active Dataset, with a time cursor at the selected time. Hovering reads the time and value under the pointer without changing the time; clicking a time moves the time slider there, so the map follows. Holding the button and dragging along the plot scrubs the selected time; a hover with the button up does not. For an hourly modeled Dataset it shows the water year that holds the selected time (UCS-279).
 
 ## WSE Anchor Point
 
