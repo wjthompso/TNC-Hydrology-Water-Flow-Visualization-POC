@@ -71,7 +71,8 @@ interface DevToolsHudOptions {
   container: HTMLElement;
   /**
    * `top` (default) pins the HUD to the top-right corner. `below-dev-tools-toggle`
-   * leaves room above it for the development-server toggle button.
+   * leaves room above it for the development-server toggle button and the
+   * imagery widget stacked under it.
    */
   placement?: 'top' | 'below-dev-tools-toggle';
   /**
@@ -242,7 +243,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     'pointer-events-auto',
     'absolute',
     'right-4',
-    belowToggle ? 'top-14' : 'top-4',
+    belowToggle ? 'top-[6.25rem]' : 'top-4',
     'z-20',
     'w-[min(24rem,calc(100vw-2rem))]',
     'overflow-hidden',
@@ -272,7 +273,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   root.setAttribute('aria-label', 'Developer tools');
 
   const scrollHost = createElement('div', [
-    belowToggle ? 'max-h-[calc(100vh-4.5rem)]' : 'max-h-[calc(100vh-2rem)]',
+    belowToggle ? 'max-h-[calc(100vh-7.25rem)]' : 'max-h-[calc(100vh-2rem)]',
   ]);
   root.appendChild(scrollHost);
 

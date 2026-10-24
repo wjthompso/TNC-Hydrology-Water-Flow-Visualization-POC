@@ -19,12 +19,14 @@ import { createExperienceLifetime, type ExperienceLifetime } from './experience-
 import {
   bindObservationTimelineControls,
   type PlaybackSpeedControl,
+  type TimeRangeControls,
 } from './observation-timeline-controls';
 import {
   DRAINAGE_AREA_RATIO_TRANSFER_LEGEND_LABEL,
   DRAINAGE_AREA_RATIO_TRANSFER_TOGGLE_LABEL,
 } from './drainage-area-ratio-transfer-labels';
-import { renderModeledDatasetInfoPanel } from './modeled-dataset-info-panel';
+import { renderModeledDatasetAbout } from './modeled-dataset-info-panel';
+import { bindDatasetAboutDialog } from './dataset-about-dialog';
 import {
   DATASET_PICKER_OPTIONS,
   datasetHoldMs,
@@ -138,10 +140,10 @@ export interface ModeledExperienceElements {
   timeReadout: HTMLElement;
   status: HTMLElement;
   speedButtons: readonly PlaybackSpeedControl[];
+    timeRangeControls: TimeRangeControls | null;
   modeledPanel: HTMLElement;
   transferToggle: HTMLInputElement;
   transferToggleLabel: HTMLElement;
-  datasetInfo: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
   legendLabel: HTMLElement | null;
@@ -280,7 +282,7 @@ export async function startModeledCreekExperience(
 
   const datasetLabel = datasetLabelFor(selection);
   labelPage(elements, selection, datasetLabel);
-  renderModeledDatasetInfoPanel(elements.datasetInfo, selected);
+  bindDatasetAboutDialog(`About ${datasetLabel}`, (body) => renderModeledDatasetAbout(body, selected));
   elements.transferToggleLabel.textContent = DRAINAGE_AREA_RATIO_TRANSFER_TOGGLE_LABEL;
   elements.transferToggle.checked = true;
   elements.modeledPanel.classList.remove('hidden');
@@ -466,20 +468,11 @@ export async function startModeledCreekExperience(
     return best;
   };
 
+  /** Says only what a reader can act on: water still loading, or a load error. Counts live in the dev tools. */
   const updateStatus = (): void => {
-    const loadedVisible = state.visible.tncComids.filter((comid) => store.loadedFlowline(comid)).length;
-    const parts = [
-      `${state.waterSegmentIds.length} of ${state.identity.length} loaded Creek Segments show water`,
-      `${loadedVisible} of ${state.visible.tncComids.length} flowlines in view loaded`,
-    ];
-    if (state.visible.inRadiusCount > state.visible.tncComids.length) {
-      parts.push(`${state.visible.inRadiusCount - state.visible.tncComids.length} farther flowlines skipped`);
-    }
-    if (store.isLoading) parts.push('loading…');
-    if (store.lastError) parts.push(store.lastError);
-    const statusText = parts.join(' · ');
-    if (store.isLoading) showLoadingMessage(elements.status, statusText);
-    else elements.status.textContent = statusText;
+    if (store.lastError) elements.status.textContent = store.lastError;
+    else if (store.isLoading) showLoadingMessage(elements.status, 'Loading modeled water…');
+    else elements.status.textContent = '';
   };
 
   const applySelectedTime = (timeUtcMs: number): void => {
@@ -508,6 +501,7 @@ export async function startModeledCreekExperience(
       slider: elements.slider,
       timeReadout: elements.timeReadout,
       speedButtons: elements.speedButtons,
+      timeRangeControls: elements.timeRangeControls ?? undefined,
     },
     clock,
     openingGridIndex(clock, selection.openingTimeUtcMs),

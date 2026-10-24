@@ -26,18 +26,12 @@ import {
 import { creekDataSourceConfiguration } from './creek-data-source-configuration';
 import { showModeledDatasetAccuracyNotice } from './modeled-dataset-accuracy-notices';
 import { waitAtMost } from './bounded-startup-wait';
+import { bindDatasetAboutDialog, fillObservedGaugeAbout } from './dataset-about-dialog';
+import { bindSceneImageryWidget } from './scene-imagery-widget';
 import { showLoadingMessage } from './loading-spinner';
 import { installMonitoringStationLocator } from './monitoring-station-locator';
 import { addMonitoringStationMarkers } from './monitoring-station-marker-layer';
-import { readPlaybackSpeedButtons } from './observation-timeline-controls';
-import {
-  SCENE_IMAGERY_OPTIONS,
-  readSceneImageryId,
-  sceneImageryCredit,
-  showSceneImagery,
-  writeSceneImageryToUrl,
-  type SceneImageryId,
-} from './scene-imagery';
+import { readPlaybackSpeedButtons, readTimeRangeControls } from './observation-timeline-controls';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 import type { WaterSurfaceElevationChartState } from './water-surface-elevation-chart';
 
@@ -233,6 +227,7 @@ async function openModeledExperience(
     {
       ...elements,
       speedButtons: readPlaybackSpeedButtons(),
+      timeRangeControls: readTimeRangeControls(),
       ...readModeledPanelElements(),
     },
     { view: sceneView ?? undefined, lifetime: experienceLifetime },
@@ -240,7 +235,7 @@ async function openModeledExperience(
   const firstScene = sceneView === null;
   sceneView = started.view;
   attachment = started.attachment;
-  if (firstScene) bindImageryPicker(sceneView);
+  if (firstScene) bindImageryWidget(sceneView);
 }
 
 async function openObservedExperience(
@@ -257,8 +252,9 @@ async function openObservedExperience(
 
   if (!sceneView) {
     sceneView = await createStandaloneExperienceShell(elements.container, segment.pathWgs84);
-    bindImageryPicker(sceneView);
+    bindImageryWidget(sceneView);
   }
+  bindDatasetAboutDialog('About the observed gauge data', fillObservedGaugeAbout);
   attachment = attachCreekVisualization(sceneView, {
     data,
     playButton: elements.playButton,
@@ -266,6 +262,7 @@ async function openObservedExperience(
     timeReadout: elements.timeReadout,
     status: elements.status,
     speedButtons: readPlaybackSpeedButtons(),
+    timeRangeControls: readTimeRangeControls(),
     openingTimeUtcMs: readOpeningTimeQuery(location.search),
     // The gauge's creek segment opens selected, so the chart is visible before anyone discovers clicking.
     initialSelectedSegmentId: carriedSegmentId ?? data.station.segmentId,
@@ -446,7 +443,6 @@ function readModeledPanelElements(): {
   modeledPanel: HTMLElement;
   transferToggle: HTMLInputElement;
   transferToggleLabel: HTMLElement;
-  datasetInfo: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
   legendLabel: HTMLElement | null;
@@ -456,12 +452,10 @@ function readModeledPanelElements(): {
   const modeledPanel = document.getElementById('modeled-panel');
   const transferToggle = document.getElementById('transfer-water-toggle');
   const transferToggleLabel = document.getElementById('transfer-water-toggle-label');
-  const datasetInfo = document.getElementById('modeled-dataset-info');
   if (
     !(modeledPanel instanceof HTMLElement) ||
     !(transferToggle instanceof HTMLInputElement) ||
-    !(transferToggleLabel instanceof HTMLElement) ||
-    !(datasetInfo instanceof HTMLElement)
+    !(transferToggleLabel instanceof HTMLElement)
   ) {
     throw new Error('The modeled water panel is missing.');
   }
@@ -469,7 +463,6 @@ function readModeledPanelElements(): {
     modeledPanel,
     transferToggle,
     transferToggleLabel,
-    datasetInfo,
     title: document.getElementById('experience-title'),
     subtitle: document.getElementById('experience-subtitle'),
     legendLabel: document.getElementById('legend-water-label'),
@@ -803,37 +796,9 @@ function geographicPoint(point: Point): Point | null {
   return geographic as Point;
 }
 
-/**
- * The shell already drew the URL's imagery. A change swaps the overlay imagery
- * in place, so the camera, time, and water stay put.
- */
-function bindImageryPicker(view: SceneView): void {
-  const selectedId = readSceneImageryId(location.search);
-  setSceneNote(selectedId);
-  const picker = document.getElementById('imagery-picker');
-  if (!(picker instanceof HTMLSelectElement)) return;
-  picker.replaceChildren(
-    ...SCENE_IMAGERY_OPTIONS.map((option) => {
-      const node = document.createElement('option');
-      node.value = option.id;
-      node.textContent = option.label;
-      node.selected = option.id === selectedId;
-      return node;
-    }),
-  );
-  picker.addEventListener('change', () => {
-    const option = SCENE_IMAGERY_OPTIONS.find((item) => item.id === picker.value);
-    if (!option || !view.map) return;
-    showSceneImagery(view.map, option.id);
-    writeSceneImageryToUrl(option.id);
-    setSceneNote(option.id);
-  });
-}
-
-function setSceneNote(imageryId: SceneImageryId): void {
-  const note = document.getElementById('scene-note');
-  if (!note) return;
-  note.textContent = `Imagery: ${sceneImageryCredit(imageryId)}. Terrain: USGS 3DEP, with Esri World Elevation beyond the creek.`;
+/** Development builds stack the imagery widget under the Dev tools button; production has the corner to itself. */
+function bindImageryWidget(view: SceneView): void {
+  bindSceneImageryWidget(view, { belowDevTools: import.meta.env.DEV });
 }
 
 function showExperienceError(message: string): void {

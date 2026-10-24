@@ -6,6 +6,7 @@ import { createExperienceLifetime, type ExperienceLifetime } from './experience-
 import {
   bindObservationTimelineControls,
   type PlaybackSpeedControl,
+  type TimeRangeControls,
 } from './observation-timeline-controls';
 import {
   bindSelectedCreekSegmentChart,
@@ -29,6 +30,8 @@ export interface AttachCreekVisualizationOptions {
   timeReadout: HTMLElement;
   status: HTMLElement;
   speedButtons: readonly PlaybackSpeedControl[];
+  /** Date pickers that narrow the slider; omit on pages without them. */
+  timeRangeControls?: TimeRangeControls | null;
   /** Opens at the grid slot nearest this time (clamped to the record); null opens at the data's opening slot. */
   openingTimeUtcMs?: number | null;
   /** Creek Segment selected on open, so the chart shows without a click. Null opens with no selection. */
@@ -136,6 +139,7 @@ export function attachCreekVisualization(
       slider: options.slider,
       timeReadout: options.timeReadout,
       speedButtons: options.speedButtons,
+      timeRangeControls: options.timeRangeControls ?? undefined,
     },
     options.data.clock,
     openingIndexFor(options.data.clock, options.openingTimeUtcMs ?? null, options.data.openingGridIndex),
