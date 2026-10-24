@@ -23,6 +23,7 @@ import {
   DRAINAGE_AREA_RATIO_TRANSFER_LEGEND_LABEL,
   DRAINAGE_AREA_RATIO_TRANSFER_TOGGLE_LABEL,
 } from './drainage-area-ratio-transfer-labels';
+import { CREEK_CENTERLINE_TOGGLE_LABEL, createCreekCenterlineOverlay } from './creek-centerline-overlay';
 import { renderModeledDatasetAbout } from './modeled-dataset-info-panel';
 import { bindDatasetAboutDialog } from './dataset-about-dialog';
 import {
@@ -105,6 +106,9 @@ export interface ModeledExperienceElements {
   modeledPanel: HTMLElement;
   transferToggle: HTMLInputElement;
   transferToggleLabel: HTMLElement;
+  /** Shows the TNC flowline centerlines and vertex dots; unchecked when the experience starts. */
+  centerlineToggle: HTMLInputElement;
+  centerlineToggleLabel: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
   legendLabel: HTMLElement | null;
@@ -237,6 +241,8 @@ export async function startModeledCreekExperience(
   bindDatasetAboutDialog(`About ${datasetLabel}`, (body) => renderModeledDatasetAbout(body, selected));
   elements.transferToggleLabel.textContent = DRAINAGE_AREA_RATIO_TRANSFER_TOGGLE_LABEL;
   elements.transferToggle.checked = true;
+  elements.centerlineToggleLabel.textContent = CREEK_CENTERLINE_TOGGLE_LABEL;
+  elements.centerlineToggle.checked = false;
   elements.modeledPanel.classList.remove('hidden');
   if (elements.legendTransferRow) {
     elements.legendTransferRow.classList.remove('hidden');
@@ -272,6 +278,15 @@ export async function startModeledCreekExperience(
     selectedCreekSegmentChart?.refresh();
   });
   lifetime.onEnd(() => renderer.dispose());
+
+  // Added after the water layer so the lines draw over it. Hidden until the checkbox is ticked.
+  const centerlines = createCreekCenterlineOverlay(view, segmentPaths);
+  lifetime.onEnd(() => centerlines.dispose());
+  elements.centerlineToggle.addEventListener(
+    'change',
+    () => centerlines.setVisible(elements.centerlineToggle.checked),
+    { signal: lifetime.signal },
+  );
 
   const store = createModeledWaterDataStore({
     extentId,

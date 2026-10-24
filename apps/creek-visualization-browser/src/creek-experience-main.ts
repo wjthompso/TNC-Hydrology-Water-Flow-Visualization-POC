@@ -443,6 +443,8 @@ function readModeledPanelElements(): {
   modeledPanel: HTMLElement;
   transferToggle: HTMLInputElement;
   transferToggleLabel: HTMLElement;
+  centerlineToggle: HTMLInputElement;
+  centerlineToggleLabel: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
   legendLabel: HTMLElement | null;
@@ -452,10 +454,14 @@ function readModeledPanelElements(): {
   const modeledPanel = document.getElementById('modeled-panel');
   const transferToggle = document.getElementById('transfer-water-toggle');
   const transferToggleLabel = document.getElementById('transfer-water-toggle-label');
+  const centerlineToggle = document.getElementById('centerline-toggle');
+  const centerlineToggleLabel = document.getElementById('centerline-toggle-label');
   if (
     !(modeledPanel instanceof HTMLElement) ||
     !(transferToggle instanceof HTMLInputElement) ||
-    !(transferToggleLabel instanceof HTMLElement)
+    !(transferToggleLabel instanceof HTMLElement) ||
+    !(centerlineToggle instanceof HTMLInputElement) ||
+    !(centerlineToggleLabel instanceof HTMLElement)
   ) {
     throw new Error('The modeled water panel is missing.');
   }
@@ -463,6 +469,8 @@ function readModeledPanelElements(): {
     modeledPanel,
     transferToggle,
     transferToggleLabel,
+    centerlineToggle,
+    centerlineToggleLabel,
     title: document.getElementById('experience-title'),
     subtitle: document.getElementById('experience-subtitle'),
     legendLabel: document.getElementById('legend-water-label'),
