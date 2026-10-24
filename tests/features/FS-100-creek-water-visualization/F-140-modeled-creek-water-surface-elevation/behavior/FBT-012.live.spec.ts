@@ -81,6 +81,8 @@ test("No creek segment stitching failures (cracks between water polygons): At th
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try {
+    // (1) Jalama flood peak: junctions 27714637-046/047, then 015/016.
+    // The page opens on the default saved polygon method (no wsePolygonMethod in the URL).
     const timeUtcMs = Date.parse(FLOOD_PEAK_HOUR_UTC);
     const missing = missingLocalPipelineOutput({
       extentId: JALAMA_EXTENT_ID,
@@ -107,6 +109,7 @@ test("No creek segment stitching failures (cracks between water polygons): At th
 
     for (const junction of junctions) {
       const label = `${junction.upstreamSegmentId}/${junction.downstreamSegmentId}`;
+      // Camera straight down on the shared boundary, then wait for that frame's water to finish drawing.
       await moveCameraAndSettle(
         page,
         topDownCameraPose(junction.sharedVertexWgs84, junction.sharedVertexBedElevationM),
@@ -115,6 +118,7 @@ test("No creek segment stitching failures (cracks between water polygons): At th
       await waitForModeledWaterIdle(page);
       await settleScene(page, `${label}-frame`);
 
+      // Both creek segments at this junction have to be showing water.
       const seam = await readSeam(page);
       for (const segmentId of [junction.upstreamSegmentId, junction.downstreamSegmentId]) {
         if (!seam.waterSegmentIds.includes(segmentId)) {
@@ -125,6 +129,7 @@ test("No creek segment stitching failures (cracks between water polygons): At th
         }
       }
 
+      // Hit-test 1 m either side of the shared boundary. The two water heights should meet, with no step or wall.
       const [upstreamPoint, downstreamPoint] = junctionSamplesAt(junction, [-SAMPLE_OFFSET_M, SAMPLE_OFFSET_M]);
       if (!upstreamPoint || !downstreamPoint) {
         throw new Error(`The thalweg polyline at ${label} is too short for ${SAMPLE_OFFSET_M} m samples.`);
@@ -163,6 +168,8 @@ test("No creek segment stitching failures (cracks between water polygons): At th
       }
     }
 
+    // (2) Dangermond Preserve side creek 27714669 at 2023-01-01T11:00Z: replay the developer click near segment 007.
+    // The page opens on the default saved polygon method (no wsePolygonMethod in the URL).
     const seamTimeUtcMs = Date.parse(SEAM_HOUR_UTC);
     const seamMissing = missingLocalPipelineOutput({
       extentId: PRESERVE_EXTENT_ID,

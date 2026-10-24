@@ -44,6 +44,7 @@ test('Clicking the map while DevTools are closed, then opening DevTools, shows a
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try { 
+    // Read the National Water Model hourly elevation for Creek Segment 27714637-046 at the 2023-01-10T01:00Z flood peak.
     const peakUtcMs = Date.parse(PEAK_HOUR_UTC);
     const missing = missingLocalPipelineOutput({
       extentId: JALAMA_EXTENT_ID,
@@ -64,6 +65,7 @@ test('Clicking the map while DevTools are closed, then opening DevTools, shows a
     }
     const bucket = bucketFor({ kind: 'modeled', extentId: JALAMA_EXTENT_ID }, SEGMENT_ID, elevationM);
 
+    // Open that Dataset at 2023-01-10T01:00Z with DevTools closed, and look down on the segment.
     await openModeledWaterPage(
       page,
       watch,
@@ -79,6 +81,7 @@ test('Clicking the map while DevTools are closed, then opening DevTools, shows a
     await moveCameraAndSettle(page, topDownPoseOverBucket(bucket), `${SEGMENT_ID}-top-down`);
     await waitForModeledWaterIdle(page);
     await settleScene(page, `${SEGMENT_ID}-loaded`);
+    // Click the segment's water while DevTools stay closed. The yellow click ring stays hidden.
     const click = await clickSegmentWater(page, { segmentId: SEGMENT_ID, bucket });
     const cdp = await page.context().newCDPSession(page);
 
@@ -89,6 +92,7 @@ test('Clicking the map while DevTools are closed, then opening DevTools, shows a
       })
       .toBe(0);
 
+    // Open DevTools. The yellow ring appears at that click.
     await setDevToolsOpen(page, true);
     await expect
       .poll(() => countClickMarkerPixels(page, cdp, click), {
@@ -97,6 +101,7 @@ test('Clicking the map while DevTools are closed, then opening DevTools, shows a
       })
       .toBeGreaterThanOrEqual(MIN_CLICK_MARKER_PIXELS);
 
+    // Collapse DevTools. The yellow ring leaves the map.
     await setDevToolsOpen(page, false);
     await expect
       .poll(() => countClickMarkerPixels(page, cdp, click), {
@@ -105,6 +110,7 @@ test('Clicking the map while DevTools are closed, then opening DevTools, shows a
       })
       .toBe(0);
 
+    // Open DevTools again. The same yellow ring comes back.
     await setDevToolsOpen(page, true);
     await expect
       .poll(() => countClickMarkerPixels(page, cdp, click), {

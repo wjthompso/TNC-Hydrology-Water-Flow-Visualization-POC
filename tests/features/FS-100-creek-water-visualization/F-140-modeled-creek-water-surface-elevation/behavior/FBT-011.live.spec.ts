@@ -63,6 +63,7 @@ test('No stair-stepping (proper water polygon slanting): Modeled water at a low-
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try {
+    // Low-flow hour on side creek 27714697. Stop if that hour's saved output is missing.
     const timeUtcMs = Date.parse(LOW_FLOW_HOUR_UTC);
     const missing = missingLocalPipelineOutput({
       extentId: PRESERVE_EXTENT_ID,
@@ -72,6 +73,7 @@ test('No stair-stepping (proper water polygon slanting): Modeled water at a low-
     });
     if (missing) throw new Error(`INCONCLUSIVE: ${missing}`);
 
+    // Open modeled water at that hour and let the first frame settle.
     await openModeledWaterPage(
       page,
       watch,
@@ -85,6 +87,7 @@ test('No stair-stepping (proper water polygon slanting): Modeled water at a low-
     expect(await readModeledSelectedTimeUtcMs(page), 'opening time from the URL').toBe(timeUtcMs);
     await settleScene(page, 'opening-frame');
 
+    // Three creek-bed clicks must each hit water.
     failures.push(
       ...(await replayDeveloperClicks(page, CREEK_BED_CLICKS, LOW_FLOW_HOUR_UTC, async (pose, label) => {
         await moveCameraAndSettle(page, pose, label);

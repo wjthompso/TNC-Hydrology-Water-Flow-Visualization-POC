@@ -51,18 +51,28 @@ export function bindCreekSegmentSelection(
 
   let selectedSegmentId: string | null = null;
   let layerView: GraphicsLayerView | null = null;
-  /** Every highlight handle not yet removed, so a leaked highlight shows in the test seam. */
-  const activeHighlights = new Map<Graphic, __esri.Handle>();
+  /**
+   * Every highlight handle not yet removed, so a leaked highlight shows in the test seam. The
+   * geometry is the one the highlight was made for: a renderer redraw replaces a graphic's
+   * geometry in place, and a highlight made for the old geometry would stay behind.
+   */
+  const activeHighlights = new Map<Graphic, { handle: __esri.Handle; geometry: Graphic['geometry'] }>();
 
   const refresh = (): void => {
-    const graphic = selectedSegmentId ? waterGraphics.graphicForSegment(selectedSegmentId) : null;
-    for (const [highlightedGraphic, handle] of activeHighlights) {
-      if (highlightedGraphic === graphic) continue;
-      handle.remove();
+    const selectedGraphic = selectedSegmentId ? waterGraphics.graphicForSegment(selectedSegmentId) : null;
+    // The outline follows drawn water: a hidden graphic (no bucket matches) carries no highlight,
+    // and it returns with the water.
+    const graphic = selectedGraphic?.visible ? selectedGraphic : null;
+    for (const [highlightedGraphic, highlight] of activeHighlights) {
+      if (highlightedGraphic === graphic && highlight.geometry === graphic.geometry) continue;
+      highlight.handle.remove();
       activeHighlights.delete(highlightedGraphic);
     }
     if (!graphic || !layerView || activeHighlights.has(graphic)) return;
-    activeHighlights.set(graphic, layerView.highlight(graphic, { name: SELECTED_CREEK_SEGMENT_HIGHLIGHT_NAME }));
+    activeHighlights.set(graphic, {
+      handle: layerView.highlight(graphic, { name: SELECTED_CREEK_SEGMENT_HIGHLIGHT_NAME }),
+      geometry: graphic.geometry,
+    });
   };
 
   const select = (segmentId: string | null): void => {

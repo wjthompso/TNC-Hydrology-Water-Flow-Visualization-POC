@@ -12,6 +12,7 @@ import {
 } from './creek-data-contract';
 import { waterYearOf, type CatalogTimeSeries } from './modeled-water-catalog';
 import type { ModeledDataSource } from './modeled-data-source';
+import { displayDepthFloorForSlope, localBedSlope, withDisplayDepthFloor } from './display-depth-floor';
 import type {
   BedParallelWaterDepth,
   JunctionWaterSurface,
@@ -567,6 +568,8 @@ export function heldWaterDepthAt(
   segmentId: string,
   timeUtcMs: number,
   holdMs: number,
+  /** The segment's chord length in meters, for the `?displayDepthSlopeFloorM=` slope; null skips the slope floor. */
+  chordLengthM: number | null = null,
 ): BedParallelWaterDepth | null {
   const index = heldIndexAt(series, timeUtcMs, holdMs);
   if (index < 0) return null;
@@ -575,15 +578,26 @@ export function heldWaterDepthAt(
   if (waterSurfaceElevationM === null || anchorBedElevationM === undefined) return null;
   const upstreamM = finiteOrNull(series.junctionDepthUpstreamBySegmentId.get(segmentId)?.[index]);
   const downstreamM = finiteOrNull(series.junctionDepthDownstreamBySegmentId.get(segmentId)?.[index]);
-  return {
-    waterSurfaceElevationM,
-    anchorBedElevationM,
-    anchorDepthM: Math.max(0, waterSurfaceElevationM - anchorBedElevationM),
-    junctionDepth:
-      upstreamM === null || downstreamM === null
-        ? null
-        : { upstreamM: Math.max(0, upstreamM), downstreamM: Math.max(0, downstreamM) },
-  };
+  // `?displayDepthFloorM=` and `?displayDepthSlopeFloorM=` (display-depth-floor.ts) raise thin water
+  // for visibility; with neither parameter the depth is unchanged. A segment without junction bed
+  // elevations has bed slope 0, so only the constant floor applies.
+  const bedSlope = localBedSlope(
+    series.junctionBedUpstreamMBySegmentId.get(segmentId),
+    series.junctionBedDownstreamMBySegmentId.get(segmentId),
+    chordLengthM,
+  );
+  return withDisplayDepthFloor(
+    {
+      waterSurfaceElevationM,
+      anchorBedElevationM,
+      anchorDepthM: Math.max(0, waterSurfaceElevationM - anchorBedElevationM),
+      junctionDepth:
+        upstreamM === null || downstreamM === null
+          ? null
+          : { upstreamM: Math.max(0, upstreamM), downstreamM: Math.max(0, downstreamM) },
+    },
+    displayDepthFloorForSlope(bedSlope),
+  );
 }
 
 /** Index of the value held at the selected time, or -1 beyond the hold or before the first value. */

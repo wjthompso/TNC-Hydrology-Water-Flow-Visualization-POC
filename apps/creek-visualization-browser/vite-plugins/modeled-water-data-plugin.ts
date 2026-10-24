@@ -21,7 +21,10 @@
 // extent-level `flowline-index.json` is the default method's newest version.
 // Each listed version also names the modeled WSE version folder its polygons
 // were built from (`builtFromModeledWsePath`), so the browser can read the
-// matching Time Series.
+// matching Time Series. The same file lists every saved modeled WSE version
+// (`modeledWseVersions`, from the Stage 3 manifests) and the registered
+// methods with no saved output (`notGenerated`), for the dev tools' Derived
+// data products section.
 
 import { createReadStream } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
@@ -34,7 +37,13 @@ import {
   listSavedWsePolygonMethodVersions,
   readSavedBuiltFromModeledWseVersion,
 } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/wse-polygon-generation-method-outputs.ts';
-import { DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/wse-polygon-generation-method-registry.ts';
+import {
+  DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
+  WSE_POLYGON_GENERATION_METHODS,
+} from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/wse-polygon-generation-method-registry.ts';
+import { listSavedModeledWseVersions } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-outputs.ts';
+import { modeledWseVersionLabel } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
+import { MODELED_WSE_DERIVATION_METHODS } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
 
 export const MODELED_WATER_DATA_URL_PREFIX = '/modeled-water-surface-elevation-data/';
 const FLOWLINE_INDEX_FILE = 'flowline-index.json';
@@ -43,6 +52,7 @@ const WSE_POLYGON_METHODS_FILE = 'wse-polygon-methods.json';
 /** Served from the tracked reviewed-assignments folder, not from the pipeline output. */
 const REACH_CROSSWALK_FILE = 'reach-crosswalk.json';
 const WATER_SURFACE_POLYGONS_STAGE_FOLDER = '04-water-surface-polygons';
+const TIME_SERIES_STAGE_FOLDER = '03-time-series';
 const POLYGON_SETS_FOLDER_NAME = 'water-surface-polygon-sets';
 const CROSS_SECTIONS_FILE = '01-cross-sections/cross-sections.json';
 
@@ -225,13 +235,34 @@ interface WsePolygonMethodListEntry {
   builtFromModeledWsePath: string | null;
 }
 
-/** Every saved WSE Polygon Generation Method version of the extent, read from the Stage 4 manifests on each request. */
-async function listWsePolygonMethods(
-  extentRoot: string,
-): Promise<{ defaultMethodId: string; versions: WsePolygonMethodListEntry[] }> {
+interface SavedModeledWseVersionListEntry {
+  methodId: string;
+  version: number;
+  /** Data-Product Version label, e.g. `m2-v1`. */
+  versionLabel: string;
+  label: string;
+  description: string;
+  /** Relative to `03-time-series/`. */
+  path: string;
+}
+
+interface WsePolygonMethodListFile {
+  defaultMethodId: string;
+  versions: WsePolygonMethodListEntry[];
+  /** Saved Stage 3 versions, so the dev tools can pick the Time Series on its own. */
+  modeledWseVersions: SavedModeledWseVersionListEntry[];
+  /** Registered methods with no saved output in this extent. */
+  notGenerated: {
+    modeledWse: { label: string; versionLabel: string }[];
+    wsePolygon: { label: string }[];
+  };
+}
+
+/** Every saved WSE Polygon Generation Method version of the extent, read from the Stage 4 manifests. */
+async function listSavedWsePolygonMethodEntries(extentRoot: string): Promise<WsePolygonMethodListEntry[]> {
   const stageDirectory = path.join(extentRoot, WATER_SURFACE_POLYGONS_STAGE_FOLDER);
   const saved = await listSavedWsePolygonMethodVersions(stageDirectory);
-  const versions = await Promise.all(
+  return Promise.all(
     saved.map(async (entry) => ({
       methodId: entry.methodId,
       version: entry.version,
@@ -244,7 +275,37 @@ async function listWsePolygonMethods(
       ),
     })),
   );
-  return { defaultMethodId: DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID, versions };
+}
+
+/**
+ * `wse-polygon-methods.json`: the saved polygon versions (Stage 4 manifests), the saved modeled WSE
+ * versions (Stage 3 manifests), and the registered methods with no saved output yet. Read on each request.
+ */
+async function listWsePolygonMethods(extentRoot: string): Promise<WsePolygonMethodListFile> {
+  const versions = await listSavedWsePolygonMethodEntries(extentRoot);
+  const savedModeledWse = await listSavedModeledWseVersions(path.join(extentRoot, TIME_SERIES_STAGE_FOLDER));
+  const savedModeledWseMethodIds = new Set(savedModeledWse.map((entry) => entry.methodId));
+  const savedPolygonMethodIds = new Set(versions.map((entry) => entry.methodId));
+  return {
+    defaultMethodId: DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
+    versions,
+    modeledWseVersions: savedModeledWse.map((entry) => ({
+      methodId: entry.methodId,
+      version: entry.version,
+      versionLabel: modeledWseVersionLabel(entry.method),
+      label: entry.method.label,
+      description: entry.method.description,
+      path: entry.relativePath,
+    })),
+    notGenerated: {
+      modeledWse: MODELED_WSE_DERIVATION_METHODS.filter((method) => !savedModeledWseMethodIds.has(method.id)).map(
+        (method) => ({ label: method.label, versionLabel: modeledWseVersionLabel(method) }),
+      ),
+      wsePolygon: WSE_POLYGON_GENERATION_METHODS.filter((method) => !savedPolygonMethodIds.has(method.id)).map(
+        (method) => ({ label: method.label }),
+      ),
+    },
+  };
 }
 
 /** `{ methodId, version }` from a Stage 4 manifest → `<methodId>/v<version>`, the Stage 3 version folder. */
@@ -259,10 +320,10 @@ function modeledWseVersionPath(record: { methodId?: unknown; version?: unknown }
  * `04-water-surface-polygons/<method-id>/v<version>/flowline-index.json` for a saved version.
  */
 async function flowlineIndexMethodFolder(extentRoot: string, folderParts: string[]): Promise<string | null> {
-  const { defaultMethodId, versions } = await listWsePolygonMethods(extentRoot);
+  const versions = await listSavedWsePolygonMethodEntries(extentRoot);
   const requested =
     folderParts.length === 0
-      ? versions.filter((entry) => entry.methodId === defaultMethodId).at(-1)
+      ? versions.filter((entry) => entry.methodId === DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID).at(-1)
       : versions.find((entry) => entry.path === folderParts.join('/'));
   return requested ? path.join(extentRoot, requested.path) : null;
 }

@@ -46,7 +46,9 @@ Stages 0–3 run one **Modeled WSE Derivation Method** and Stage 4 runs one **WS
 | Method | Kind | Stages | Description |
 | --- | --- | --- | --- |
 | `m1-drainage-area-ratio-manning-rating-curve` v1 | Modeled WSE Derivation Method | 0–3 | [METHOD.md](modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/METHOD.md): drainage-area ratio, Manning's equation, roughness sources, Drainage-Area Ratio Transfer, junction WSE |
+| `m2-multi-section-manning-depth` v2 | Modeled WSE Derivation Method | 0–3 | [METHOD.md](modeled-wse-derivation-methods/m2-multi-section-manning-depth/METHOD.md): Manning's equation inverted for water depth at the middle (anchor) cross-section of each Creek Segment with a local bed slope; the junction depth is one smoothed number per shared vertex (mean of the neighbouring anchor depths within ±100 m) and the junction beds come from the first and last sections; drawn by `height-above-nearest-drainage-fill` |
 | `junction-sloped-terrain-fill` v1 (default) | WSE Polygon Generation Method | 4 | [METHOD.md](wse-polygon-generation-methods/junction-sloped-terrain-fill/METHOD.md): polygon ladder, sloped wet threshold, bisector corridor ends, sloped drawing |
+| `height-above-nearest-drainage-fill` v2 (experimental) | WSE Polygon Generation Method | 4 | [METHOD.md](wse-polygon-generation-methods/height-above-nearest-drainage-fill/METHOD.md): bed-parallel fill by height above nearest drainage, measured against a bed line traced on the 1 m lidar; bucket bounds are water depths and ring vertices carry the bed elevation as `[lon, lat, bedReferenceM]`; needs an m2 Time Series |
 
 Each published version of a method becomes a Data-Product Version (`m<N>-v<N>`); see [data/README.md](../../../data/README.md#versioning).
 
@@ -88,6 +90,7 @@ A **WSE Polygon Generation Method** is a named, versioned way to turn modeled wa
 | Method id | Label | Version | Browser drawing |
 | --- | --- | --- | --- |
 | `junction-sloped-terrain-fill` (default) | Junction-sloped terrain fill | 1 | Sloped between junction WSEs |
+| `height-above-nearest-drainage-fill` (experimental) | Height above nearest drainage (bed-parallel) fill | 2 | Bed-parallel: each vertex at its bed reference plus the modeled depth (`bed-parallel-depth`) |
 
 [`junction-sloped-terrain-fill` METHOD.md](wse-polygon-generation-methods/junction-sloped-terrain-fill/METHOD.md) describes what v1 does, its assumptions, and its version history.
 

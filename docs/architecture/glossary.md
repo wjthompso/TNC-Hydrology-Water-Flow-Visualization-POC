@@ -158,6 +158,10 @@ The absolute height of the water surface, expressed in NAVD88 (North American Ve
 
 Short for Water-Surface Elevation Time Series Chart. A line chart of the Selected Creek Segment's water-surface elevation over time, from the active Dataset, with a time cursor at the selected time. Hovering reads the time and value under the pointer without changing the time; clicking a time moves the time slider there, so the map follows. For an hourly modeled Dataset it shows the water year that holds the selected time (UCS-279).
 
+## WSE Anchor Point
+
+The location on a Creek Segment's creek bed (longitude, latitude, and bed elevation) where the modeled water-surface elevation (WSE) is solved and applies. The rest of the segment's water surface is derived from it through the bed's slope and the water depth. The WSE a chart shows for a Creek Segment is the WSE at its WSE Anchor Point, not one level for the whole segment. Method `m2-multi-section-manning-depth` places it at the middle cross-section; method `m1-drainage-area-ratio-manning-rating-curve` has one too (its representative cross-section) but never saved its location.
+
 ## WSE Polygon Generation Method
 
 A named, versioned way to turn modeled water-surface elevations into the water polygons drawn for each Creek Segment. Each version keeps its own saved output, so methods can be compared on the map.

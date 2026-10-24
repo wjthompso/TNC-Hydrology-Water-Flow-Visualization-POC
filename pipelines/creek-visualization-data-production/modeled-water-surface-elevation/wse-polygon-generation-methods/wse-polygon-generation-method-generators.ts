@@ -1,6 +1,8 @@
 import type { ElevationGrid } from '../../water-surface-polygon-generation.ts';
 import type { NetworkCreekSegment } from '../creek-segment-network.ts';
 import type { CrossSectionsFile, PolygonLaddersFile, WaterSurfacePolygonSetsFile } from '../stage-file-formats.ts';
+import { generateFlowlineChannelRibbonPolygons } from './flowline-channel-ribbon/generate-water-surface-polygons.ts';
+import { FLOWLINE_CHANNEL_RIBBON_METHOD } from './flowline-channel-ribbon/method-config.ts';
 import { generateHeightAboveNearestDrainageFillPolygons } from './height-above-nearest-drainage-fill/generate-water-surface-polygons.ts';
 import { HEIGHT_ABOVE_NEAREST_DRAINAGE_FILL_METHOD } from './height-above-nearest-drainage-fill/method-config.ts';
 import { generateJunctionSlopedTerrainFillPolygons } from './junction-sloped-terrain-fill/generate-water-surface-polygons.ts';
@@ -42,6 +44,7 @@ export type WsePolygonMethodGenerator = (inputs: WsePolygonMethodInputs) => Prom
 export const WSE_POLYGON_METHOD_GENERATORS: Readonly<Record<string, WsePolygonMethodGenerator>> = {
   [JUNCTION_SLOPED_TERRAIN_FILL_METHOD.id]: generateJunctionSlopedTerrainFillPolygons,
   [HEIGHT_ABOVE_NEAREST_DRAINAGE_FILL_METHOD.id]: generateHeightAboveNearestDrainageFillPolygons,
+  [FLOWLINE_CHANNEL_RIBBON_METHOD.id]: generateFlowlineChannelRibbonPolygons,
 };
 
 export function wsePolygonMethodGenerator(methodId: string): WsePolygonMethodGenerator {

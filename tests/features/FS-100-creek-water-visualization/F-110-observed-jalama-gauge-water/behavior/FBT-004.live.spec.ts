@@ -29,8 +29,11 @@ test('Select a Jalama gauge time with no observation and show no water on its Cr
 }) => {
   const watch = watchLiveServices(page);
   try {
+    // Open observed Jalama gauge readings on Esri World Imagery.
     await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
 
+    // On the Jalama Near Lompoc gauge readings, a 9 June 2026 gap and a null
+    // reading show no water and "No observation at this time".
     for (const timeUtcMs of [gapSlotOn9June2026(), nullReadingSlot()]) {
       await scrubToTime(page, timeUtcMs);
       await expect.poll(async () => (await readSeam(page)).waterSegmentIds).toEqual([]);

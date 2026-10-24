@@ -26,6 +26,11 @@ import {
   type FailureLog,
 } from '../tests/support/reporting/failure-log.ts';
 import {
+  captureMachineLoad,
+  machineLoadLine,
+  type MachineLoadSnapshot,
+} from '../tests/support/reporting/machine-load.ts';
+import {
   requiredGateDefinitionFingerprint,
   testDefinitionFingerprint,
 } from '../tests/support/reporting/test-definition-fingerprint.ts';
@@ -543,6 +548,15 @@ function recordedTestResult(result: NormalizedResult, timestamp: string) {
   };
 }
 
+/** How busy the machine was before this command launched browsers; null when no browser test was selected. */
+let machineLoadBeforeRun: MachineLoadSnapshot | null = null;
+
+/** Reads and prints machine load once, before any browser launches. Adds about one second. */
+async function announceMachineLoad(): Promise<void> {
+  machineLoadBeforeRun = await captureMachineLoad();
+  console.log(machineLoadLine(machineLoadBeforeRun));
+}
+
 function pruneRetiredTestResults(latestTests: Record<string, unknown>) {
   const permanentTestIds = new Set(testCatalog.tests.map(({ id }) => id));
   for (const storedId of Object.keys(latestTests)) {
@@ -579,6 +593,7 @@ async function recordRun(
     lastSelectedTestIds: selectedTestIds,
     lastCommandStatus: execution.name,
     lastCommandDurationMs: execution.durationMs,
+    lastMachineLoad: machineLoadBeforeRun,
     tests: latestTests,
     ...(gateStatus
       ? {
@@ -605,6 +620,7 @@ async function recordRun(
     selectedTestIds,
     status: execution.name,
     durationMs: execution.durationMs,
+    machineLoad: machineLoadBeforeRun,
     budgetWarnings,
     results: execution.results.map((result) => recordedTestResult(result, timestamp)),
     ...(gateStatus
@@ -700,6 +716,7 @@ try {
     if (commandLine.headed) {
       console.log('Headed release gate: browser windows are visible, so browser tests run slower.');
     }
+    await announceMachineLoad();
     process.exitCode = await runGate();
   } else {
     const selected = selectTests(mode, selector);
@@ -743,6 +760,7 @@ try {
     if (commandLine.ui) {
       process.exitCode = await openUiMode(selected, `${mode}-ui-${Date.now()}`, titlePattern);
     } else {
+      if (selectsBrowserTests) await announceMachineLoad();
       const execution = await execute(selected, `${mode}-${Date.now()}`, titlePattern);
       let lintExitCode = 0;
       if (mode === 'all') {

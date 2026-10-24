@@ -12,6 +12,8 @@ import { timelineOpeningPath } from '../../../../../apps/creek-visualization-bro
 test('Open the Jalama time slider at the first observation slot, not the last.', async ({
   page,
 }) => {
+  // Open the Jalama Near Lompoc gauge 15-minute readings on the time slider
+  // alone. The readout leaves "Loading time…", and the map stays unloaded.
   const arcgisRequests: string[] = [];
   page.on('request', (request) => {
     if (request.url().toLowerCase().includes('arcgis')) arcgisRequests.push(request.url());
@@ -21,6 +23,7 @@ test('Open the Jalama time slider at the first observation slot, not the last.',
   await expect(page.locator('#timeline-readout')).not.toHaveText('Loading time…');
   expect(arcgisRequests, 'The opening-slot check loaded ArcGIS.').toEqual([]);
 
+  // The slider is on the first observation, with later slots still ahead.
   const position = await page.locator('#timeline-slider').evaluate((element) => {
     if (!(element instanceof HTMLInputElement)) throw new Error('The time slider is missing.');
     return { value: Number(element.value), max: Number(element.max) };

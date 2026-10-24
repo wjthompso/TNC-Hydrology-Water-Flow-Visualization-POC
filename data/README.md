@@ -56,7 +56,7 @@ A frozen `version.json` records what a version is. Each method's folder holds it
 | `modeled-wse` | `pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/<method-id>/` | `method-config.ts` | [`METHOD.md`](../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/METHOD.md) |
 | `wse-polygons` | `pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/<pipeline-method-id>/` | `method-config.ts` | [`METHOD.md`](../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/junction-sloped-terrain-fill/METHOD.md) |
 
-The modeled WSE method folder name is its Data-Product Version `method_id`. The WSE polygon `method_id` adds the `m<N>-` prefix to the pipeline method id (`junction-sloped-terrain-fill` → `m1-junction-sloped-terrain-fill`).
+The modeled WSE method folder name is its Data-Product Version `method_id`. The WSE polygon `method_id` adds the `m<N>-` prefix to the pipeline method id (`junction-sloped-terrain-fill` → `m1-junction-sloped-terrain-fill`). The `m2-v1` pair (`m2-multi-section-manning-depth`, `m2-height-above-nearest-drainage-fill`) is frozen with its own scripts, `data-products:freeze-modeled-wse-m2` and `data-products:freeze-wse-polygons-m2` (validated by the matching `validate-…-m2` commands). `m2-v1` is frozen locally and not published to ArcGIS. In the m2 polygon version the bucket bounds are water **depths** (`min_depth_m`, `max_depth_m`), not elevations, and each vertex's Z is the local bed elevation; the browser draws at Z + depth.
 
 ## Versioning
 

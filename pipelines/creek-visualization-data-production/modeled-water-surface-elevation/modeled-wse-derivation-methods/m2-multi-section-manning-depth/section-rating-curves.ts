@@ -4,20 +4,20 @@ import { CROSS_SECTION } from '../m1-drainage-area-ratio-manning-rating-curve/me
 import { buildRatingCurveRecord } from '../../rating-curve-inversion.ts';
 import type { CrossSectionRecord, DownstreamVertexDirection, RatingCurveRecord } from '../../stage-file-formats.ts';
 import type { TerrainSampler } from '../../terrain-tiles.ts';
-import { LOCAL_BED_SLOPE, SOLVED_SECTIONS } from './method-config.ts';
+import { JUNCTION_BED_SECTIONS, LOCAL_BED_SLOPE, SOLVED_SECTIONS } from './method-config.ts';
 
 /**
- * Rating curves at the three solved Stage 1 cross-sections of one Creek Segment (start end, anchor,
- * end end). Stage 1 stores only the representative section's profile, so each solved section's
- * profile is resampled from the terrain at the exact position Stage 1 used, then trimmed to the
- * valley-edge offsets Stage 1 saved for that section. Each section gets its own bed and a local
- * bed slope, and the curve is built with m1's `buildRatingCurveRecord` (same Manning's n, ladder
- * step, cap, and running-maximum rule).
+ * The rating curve at the solved (anchor) Stage 1 cross-section of one Creek Segment, plus the beds of
+ * its first and last sections for the junction beds. Stage 1 stores only the representative section's
+ * profile, so the anchor's profile is resampled from the terrain at the exact position Stage 1 used,
+ * then trimmed to the valley-edge offsets Stage 1 saved for that section. The section gets its own bed
+ * and a local bed slope, and the curve is built with m1's `buildRatingCurveRecord` (same Manning's n,
+ * ladder step, cap, and running-maximum rule). m2-v1 also solved the first and last sections; v2 does not.
  */
 
 type StageOneSection = CrossSectionRecord['sections'][number];
 
-/** One solved section: its Stage 1 bed and its rating curve (null when the section has no usable profile). */
+/** The solved section: its Stage 1 bed and its rating curve (null when the section has no usable profile). */
 export interface SolvedSection {
   sectionIndex: number;
   bedElevationM: number;
@@ -30,11 +30,11 @@ export interface SolvedSection {
 
 export interface SegmentSolvedSections {
   segmentId: string;
-  /** Section at the segment's start vertex end (vertex order, not flow order). */
-  atStart: SolvedSection;
   anchor: SolvedSection;
-  /** Section at the segment's end vertex end. */
-  atEnd: SolvedSection;
+  /** Stage 1 bed of the section at the segment's start vertex end (vertex order, not flow order), m NAVD88. */
+  startEndBedElevationM: number;
+  /** Stage 1 bed of the section at the segment's end vertex end, m NAVD88. */
+  endEndBedElevationM: number;
 }
 
 /** A Stage 1 section's bed and network distance, for the local slope fit. */
@@ -170,11 +170,15 @@ export function solveSegmentSections(input: {
   bedProfile: readonly BedProfilePoint[];
   direction: DownstreamVertexDirection;
 }): SegmentSolvedSections {
-  const solve = (sectionIndex: number): SolvedSection => solveSection({ ...input, sectionIndex });
+  const bedOfSection = (sectionIndex: number): number => {
+    const section = input.record.sections[sectionIndex];
+    if (!section) throw new Error(`Creek Segment ${input.record.segmentId} has no Stage 1 section ${sectionIndex}.`);
+    return section.bedElevationM;
+  };
   return {
     segmentId: input.record.segmentId,
-    atStart: solve(SOLVED_SECTIONS.startEndSectionIndex),
-    anchor: solve(SOLVED_SECTIONS.anchorSectionIndex),
-    atEnd: solve(SOLVED_SECTIONS.endEndSectionIndex),
+    anchor: solveSection({ ...input, sectionIndex: SOLVED_SECTIONS.anchorSectionIndex }),
+    startEndBedElevationM: bedOfSection(JUNCTION_BED_SECTIONS.startEndSectionIndex),
+    endEndBedElevationM: bedOfSection(JUNCTION_BED_SECTIONS.endEndSectionIndex),
   };
 }

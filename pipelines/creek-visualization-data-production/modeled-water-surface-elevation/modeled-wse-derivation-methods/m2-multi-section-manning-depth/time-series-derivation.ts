@@ -6,7 +6,7 @@ import {
   MAXIMUM_TRANSFER_DISTANCE_M,
   RATING_CURVE,
 } from '../m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
-import { LOCAL_BED_SLOPE } from './method-config.ts';
+import { ANCHOR_POSITION_ALONG_SEGMENT, JUNCTION_DEPTH, LOCAL_BED_SLOPE } from './method-config.ts';
 
 /**
  * The machine-readable description of m2 for `catalog.json` and a frozen `version.json`
@@ -27,9 +27,10 @@ export function timeSeriesDerivation(dischargePublisherName: string, derivedBy: 
   return {
     derivedFrom: 'discharge',
     method:
-      `Manning's equation (normal depth, divided channel) at three USGS 3DEP 1 m cross-sections per Creek Segment, each with its own bed and a ` +
+      `Manning's equation (normal depth, divided channel) at the mid-segment (anchor) USGS 3DEP 1 m cross-section of each Creek Segment, with its own bed and a ` +
       `local bed slope, n = ${RATING_CURVE.manningRoughnessN} main channel, ${RATING_CURVE.floodplainManningRoughnessN} floodplain; ` +
-      'the mid-segment section gives the WSE and the end sections give the water depth at each junction; ' +
+      `the water depth at each junction is the mean of the neighbouring raw anchor depths within ±${JUNCTION_DEPTH.smoothingHalfWindowM} m along the flowline, ` +
+      'and the WSE of a segment is the WSE of that smoothed surface at the segment’s anchor point (the raw Manning WSE at the anchor is kept as rawAnchorWseM); ' +
       'reach discharge scaled to each Creek Segment by the USGS drainage-area ratio method (segment drainage area ÷ NHDPlusV2 reach drainage area, capped at 1)',
     derivedBy,
     inputs: [
@@ -43,10 +44,14 @@ export function timeSeriesDerivation(dischargePublisherName: string, derivedBy: 
       `Mark a segment on a creek with no NHDPlusV2 reach of its own as ${DRAINAGE_AREA_RATIO_TRANSFER.fieldName}: it borrows the nearest ` +
         `reach of a neighbouring creek, or gets no discharge when that reach is more than ${MAXIMUM_TRANSFER_DISTANCE_M} m away.`,
       'Scale the reach discharge by the drainage-area ratio, segment area ÷ reach area, capped at 1.',
-      `Fit a local bed slope at the first, middle, and last of the segment's ${CROSS_SECTION.sectionsPerSegment} cross-sections from every section bed within ±${LOCAL_BED_SLOPE.halfWindowM} m along the flowline.`,
-      'Build a divided-channel Manning rating curve at each of those three sections, on its own valley-edge-trimmed 3DEP profile and bed.',
-      'Look up the WSE that carries each discharge at the middle section (the Time Series value) and at both end sections (depth = WSE − that section bed).',
-      'At each shared vertex, give both neighbouring segments the mean of their end-section depths and the mean of their end-section beds.',
+      `Fit a local bed slope at the middle (anchor) one of the segment's ${CROSS_SECTION.sectionsPerSegment} cross-sections from every section bed within ±${LOCAL_BED_SLOPE.halfWindowM} m along the flowline.`,
+      'Build a divided-channel Manning rating curve at the anchor section, on its own valley-edge-trimmed 3DEP profile and bed.',
+      'Look up the WSE that carries each discharge at the anchor section (the raw Manning anchor WSE, saved as rawAnchorWseM; raw anchor depth = WSE − anchor bed).',
+      `At each shared vertex, give both neighbouring segments one depth: the length-weighted mean of the wet raw anchor depths within ±${JUNCTION_DEPTH.smoothingHalfWindowM} m along the flowline. ` +
+        'A flowline end, or a vertex next to a dry or missing segment, keeps the segment’s own raw anchor depth, and a dry segment stays 0.',
+      'Give both neighbouring segments the mean of their end-section beds at each shared vertex.',
+      `Set the segment’s WSE (the Time Series value) to the WSE of the smoothed surface at its anchor point: anchor bed + the junction depths interpolated to ${ANCHOR_POSITION_ALONG_SEGMENT} of the way along the segment, ` +
+        'so the chart shows the water that is drawn there. A dry segment has depth 0 and a WSE equal to its anchor bed.',
       'Clamp any discharge above a rating-curve top to the top water-surface elevation.',
     ],
     parameters: [
@@ -57,6 +62,15 @@ export function timeSeriesDerivation(dischargePublisherName: string, derivedBy: 
         value: LOCAL_BED_SLOPE.halfWindowM,
         unit: 'm',
         basis: 'Short enough to keep a steep drop within one Creek Segment (median length 30.5 m) from being averaged with the flatter reach around it.',
+        citations: [],
+      },
+      {
+        name: 'junction depth smoothing half-window',
+        value: JUNCTION_DEPTH.smoothingHalfWindowM,
+        unit: 'm',
+        basis:
+          'Independent Manning solves at neighbouring sections disagree by metres on flat reaches, so the junction depth averages the raw anchor depths along the flowline. ' +
+          '100 m is the widest window that leaves steep reaches no worse than the end-section solves of m2-v1.',
         citations: [],
       },
       {
@@ -90,6 +104,8 @@ export function timeSeriesDerivation(dischargePublisherName: string, derivedBy: 
       "Runoff per unit area is the same across a reach's catchment (the drainage-area ratio assumption), " +
         `and for a ${DRAINAGE_AREA_RATIO_TRANSFER.label} segment also across the neighbouring creek's catchment it borrows from.`,
       'Water is drawn at a depth above the local bed (height above nearest drainage), so the surface runs parallel to the bed instead of flat.',
+      'The water surface follows the junction bed plus a smoothed depth, so it keeps the bed slope instead of the section-to-section jumps of independent normal depths. ' +
+        'The WSE of a segment (`values`) is that smoothed surface at the anchor point; the raw Manning WSE at the anchor section (`rawAnchorWseM`) can differ from it by up to the depth change along the smoothing window.',
     ],
     sensitivity:
       'Depth scales with n^(3/5) and slope^(−3/10), so ±25% roughness changes depth by about ±15% and a 2× slope error by about ±19%, both smaller than the 2–5× discharge uncertainty. ' +

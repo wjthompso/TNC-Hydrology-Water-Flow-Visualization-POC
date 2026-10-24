@@ -218,8 +218,21 @@ Rules from [data/README.md](../../../data/README.md):
 | `freeze_wse_polygons_version.py` | `PRODUCT`, `METHOD_ID`, `METHOD_NUMBER`, `VERSION_NUMBER`, `VERSION_LABEL`, `ARCGIS_PREFIX`, `CHANGE_NOTE`, `CHANGE_TYPE`, `PIPELINE_METHOD_ID`, `PIPELINE_METHOD_VERSION`, `SERVICE_TITLE` / `SERVICE_NAME`, `UPLOAD_ZIP_NAME`. The modeled WSE version it was built from comes from the Stage 4 manifest. |
 | `validate_wse_polygons_version.py` | `EXPECTED_NON_EMPTY_BUCKETS` (`102_607 - 1_483`) and `GAUGE_CREEK_SEGMENT_EXPECTED_BUCKETS` (137): counts that change when the output changes. |
 | `validate_modeled_wse_version.py` | `EXPECTED_SEGMENT_COUNT` (3,338) through the layout file. |
-| `publish_data_products_to_arcgis.py` | The `PRODUCTS` table fixes each product's `method_id` to the `m1-…` method. Another `v` of the same method works with `--version`; a new method number (`m2`) needs this table edited. |
+| `publish_data_products_to_arcgis.py` | The `PRODUCTS` table fixes each product's `method_id` to the `m1-…` method. Another `v` of the same method works with `--version`; a new method number (`m2`) needs this table edited, so even a dry run of `m2-v1` stops (it looks for the version folder under the `m1-…` method folder). The publish script also assumes the m1 table names and columns. Publishing `m2-v1` is out of scope until [UCS-298](https://linear.app/ucsb-spatial-center/issue/UCS-298/add-a-new-data-product-version-to-an-existing-hosted-service-without). |
 | Browser and checks | `creek-data-source-configuration.ts` holds `m1_v1` table names and fallback layer ids. `scripts/verify-hosted-modeled-data-equivalence.ts` reads the `m1-…/v1` Stage 3 folder and the `junction-sloped-terrain-fill/v1` Stage 4 folder. |
+
+### m2-v1 uses separate scripts (frozen locally, not published)
+
+The table above describes the m1 scripts, which stay hard-coded to `m1-v1` and are unchanged. `m2-v1` (the `m2-multi-section-manning-depth` modeled WSE and the `m2-height-above-nearest-drainage-fill` polygons) is frozen by separate scripts that import the generic helpers from the m1 ones, so nothing m1 depends on moves:
+
+| Command | Script | What differs from m1 |
+| --- | --- | --- |
+| `npm run data-products:freeze-modeled-wse-m2` | `freeze_modeled_wse_m2_version.py` (names in `modeled_wse_m2_version_layout.py`, source reader `modeled_wse_m2_source_series.py`) | Creek Segments layer adds `anchor_longitude`, `anchor_latitude`, `anchor_bed_elevation_m`, `junction_bed_upstream_m`, `junction_bed_downstream_m`. Held WSE Interval tables are per Creek Segment (no junction rows) and hold `wse_m` plus `junction_depth_upstream_m` and `junction_depth_downstream_m`; an interval ends when any of the three changes. Junction WSE is not stored: it is junction bed + junction depth, rounded to 3 decimals. |
+| `npm run data-products:validate-modeled-wse-m2` | `validate_modeled_wse_m2_version.py` | Expected counts come from `version.json` and the Stage 3 manifest. Rebuilds all three time-varying arrays and the junction WSE for every segment and time step. |
+| `npm run data-products:freeze-wse-polygons-m2` | `freeze_wse_polygons_m2_version.py` | Layer `wse_polygons_m2_v1` is `MultiPolygon Z`. Columns are `min_depth_m` / `max_depth_m` (water **depths**, not elevations). Z is the local bed elevation (m NAVD88); the browser draws at Z + depth (`browserDrawing` `bed-parallel-depth`). `version.json` records all three. |
+| `npm run data-products:validate-wse-polygons-m2` | `validate_wse_polygons_m2_version.py` | Expected counts come from the Stage 4 manifest. Compares Z as well as longitude and latitude. |
+
+The m2 method code was committed after Stage 3 and Stage 4 ran, so the freeze records the earliest commit whose copies of the method files match the hashes the stages recorded, not a commit at or before `completedAt`.
 
 ### What the publish script does when the service already exists
 

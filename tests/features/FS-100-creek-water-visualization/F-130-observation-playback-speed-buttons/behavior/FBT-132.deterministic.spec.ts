@@ -22,11 +22,14 @@ const SPEED_BUTTON_IDS = [
 test('Highlight the current playback speed, starting at 1× until another speed is chosen.', async ({
   page,
 }) => {
+  // Open the timeline and wait until the page has painted.
+  // Before any click, 1× is the only speed button that looks selected.
   await page.goto(timelineFixturePath());
   await expect(page.locator('#timeline-readout')).not.toHaveText('Loading time…');
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(2, 6, 23)');
 
   await expectHighlightedSpeed(page, 'timeline-speed-1x');
+  // Choosing 2× moves that highlight onto 2× alone.
   await page.getByRole('button', { name: '2 times speed', exact: true }).click();
   await expectHighlightedSpeed(page, 'timeline-speed-2x');
 });

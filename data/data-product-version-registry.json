@@ -50,6 +50,45 @@
             },
             "sharing": "everyone (public); file geodatabase upload item stays private"
           }
+        },
+        {
+          "version_label": "m2-v1",
+          "method_id": "m2-height-above-nearest-drainage-fill",
+          "method_number": 2,
+          "version_number": 1,
+          "status": "active",
+          "change_type": "new method",
+          "change_note": "First version of the HAND (height above nearest drainage) bed-parallel polygons (experimental): Stage 4 height-above-nearest-drainage-fill v1 built from modeled-wse m2-v1; bucket bounds are water depths and ring vertices carry the bed as Z; output looks fragmented where modeled depth is a few centimeters on 1 m terrain.",
+          "method_date_utc": "2026-10-23T18:19:01Z",
+          "generated_at_utc": "2026-10-23T17:54:16.253Z",
+          "frozen_at_utc": "2026-10-23T19:25:32Z",
+          "frozen_from_commit": "1f8125296233c86d45ec6e96c66cd3f45a16695f",
+          "built_from_modeled_wse_version": {
+            "product": "modeled-wse",
+            "method_id": "m2-multi-section-manning-depth",
+            "version_label": "m2-v1"
+          },
+          "pipeline_method_id": "height-above-nearest-drainage-fill",
+          "pipeline_method_version": 1,
+          "method_sha256": "dd2951a780f458bfad942280bd02ed022da3b09175f57a14b6e8daef9df5cb4b",
+          "browser_drawing": "bed-parallel-depth",
+          "bucket_bounds": "water depth in meters above the local bed reference (min_depth_m / max_depth_m), not elevation",
+          "version_folder": "data/data-product-versions/wse-polygons/m2-height-above-nearest-drainage-fill/m2-v1",
+          "arcgis_upload_sha256": "8830db9290fe2a8626174e4722d49a55ae0b6c4ceb0569805a7cd5044d80291f",
+          "arcgis_prefix": "wse_polygons_m2_v1",
+          "arcgis_table_names": [
+            "wse_polygon_versions",
+            "wse_polygons_m2_v1"
+          ],
+          "feature_count": 117361,
+          "arcgis": {
+            "file_geodatabase_item_id": null,
+            "service_item_id": null,
+            "service_url": null,
+            "versions_table_layer_id": null,
+            "polygon_layer_id": null,
+            "published_at_utc": null
+          }
         }
       ],
       "title": "Dangermond Preserve — Creek Water Outlines",
@@ -116,6 +155,55 @@
               "modeled_wse_versions": 1
             },
             "sharing": "everyone (public); file geodatabase upload item stays private"
+          }
+        },
+        {
+          "product": "modeled-wse",
+          "method_id": "m2-multi-section-manning-depth",
+          "method_number": 2,
+          "version_number": 1,
+          "version_label": "m2-v1",
+          "status": "active",
+          "change_type": "new method",
+          "change_note": "First version of method m2 (experimental): multi-section Manning depth, anchor WSE at the mid section and shared junction depths and beds, for bed-parallel drawing by m2-height-above-nearest-drainage-fill.",
+          "method_date_utc": "2026-10-23T18:19:01Z",
+          "generated_at_utc": "2026-10-23T17:40:19.950Z",
+          "frozen_from_commit": "1f8125296233c86d45ec6e96c66cd3f45a16695f",
+          "code_fingerprint": "22d31310307378ea8f184b8b2aa12e38cf9daa65f2bda1b98267d8089a2e4d19",
+          "segment_network_version": "dangermond-preserve-v1",
+          "extent_id": "dangermond-preserve",
+          "dataset_ids": [
+            "national-water-model-hourly",
+            "california-natural-flows-monthly"
+          ],
+          "water_years": "national-water-model-hourly: WY2021–WY2023 hourly 2020-10-01T00:00:00Z to 2023-02-01T00:00:00Z; california-natural-flows-monthly: monthly 1950-01 to 2024-12",
+          "derivation_summary": "Modeled water-surface elevation (m NAVD88) and junction water depth per Creek Segment. Discharge per NHDPlusV2 reach (NOAA National Water Model v3.0 retrospective, hourly, WY2021–WY2023; California Natural Flows, monthly, 1950–2024) is scaled to each Creek Segment by the USGS drainage-area ratio method (capped at 1; Drainage-Area Ratio Transfer from the nearest reach, and no discharge beyond 1000 m), then inverted on divided-channel Manning's equation rating curves (n = 0.04 main channel, 0.07 floodplain) at the first, middle, and last USGS 3DEP 1 m cross-section of the segment, each with its own bed and a local bed slope. The middle (anchor) section gives the WSE (wse_m); the end sections give the water depth at each junction, shared with the neighbouring segment as the mean of the two end-section depths. The anchor point and the junction beds are static columns of the Creek Segments layer. Time-varying values are stored as Held WSE Intervals: a new interval starts when the anchor WSE or either junction depth changes.",
+          "arcgis_table_names": [
+            "modeled_wse_versions",
+            "modeled_wse_m2_v1_creek_segments",
+            "modeled_wse_m2_v1_nwm_hourly_held_intervals",
+            "modeled_wse_m2_v1_cnf_monthly_held_intervals",
+            "modeled_wse_m2_v1_cnf_monthly_values"
+          ],
+          "version_folder": "data/data-product-versions/modeled-wse/m2-multi-section-manning-depth/m2-v1",
+          "arcgis_upload_sha256": "e473bf8ca0a02012c8f17c80f011e694206c68d860244c8f648ca9165148c1d2",
+          "arcgis": {
+            "service_item_id": null,
+            "service_url": null,
+            "file_geodatabase_item_id": null,
+            "layer_ids": {
+              "modeled_wse_versions": null,
+              "modeled_wse_m2_v1_creek_segments": null,
+              "modeled_wse_m2_v1_nwm_hourly_held_intervals": null,
+              "modeled_wse_m2_v1_cnf_monthly_held_intervals": null,
+              "modeled_wse_m2_v1_cnf_monthly_values": null
+            },
+            "raw_hourly_csv_item_ids": {
+              "WY2021": null,
+              "WY2022": null,
+              "WY2023": null
+            },
+            "published_at_utc": null
           }
         }
       ],

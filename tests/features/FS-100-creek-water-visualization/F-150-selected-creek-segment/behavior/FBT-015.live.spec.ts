@@ -41,6 +41,7 @@ test('Clicking a creek segment highlights only that segment and shows its water-
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try {
+    // Flood peak on Jalama. Neighbouring segments 27714637-046 and 27714637-047 both have wide water.
     const peakUtcMs = Date.parse(PEAK_HOUR_UTC);
     const missing = missingLocalPipelineOutput({
       extentId: JALAMA_EXTENT_ID,
@@ -66,6 +67,7 @@ test('Clicking a creek segment highlights only that segment and shows its water-
     const firstBucket = bucketOf(FIRST_SEGMENT_ID);
     const secondBucket = bucketOf(SECOND_SEGMENT_ID);
 
+    // Open that hour. No segment is selected or highlighted, and the chart has no readings.
     await openModeledWaterPage(
       page,
       watch,
@@ -81,6 +83,7 @@ test('Clicking a creek segment highlights only that segment and shows its water-
     expect(before.highlightedSegmentIds, 'nothing is highlighted on open').toEqual([]);
     expect(before.chartPointCount, 'the chart is empty on open').toBe(0);
 
+    // Click 046, then 047. Each click highlights only that segment and moves the chart to it.
     for (const [segmentId, bucket] of [
       [FIRST_SEGMENT_ID, firstBucket],
       [SECOND_SEGMENT_ID, secondBucket],

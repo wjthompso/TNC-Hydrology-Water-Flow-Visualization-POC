@@ -15,8 +15,15 @@
  *   Each ring vertex is `[lon, lat, bedReferenceM]`; the browser draws it at `bedReferenceM` plus the
  *   depth interpolated between the segment's junction depths (`junctionDepthUpstreamM` /
  *   `junctionDepthDownstreamM`), so the water surface runs parallel to the bed.
+ * - `channel-ribbon-depth`: like `bed-parallel-depth` (bucket bounds are depths, vertices are `[lon, lat, bedProfileM]`), but the segment's
+ *   buckets are morph targets: every bucket holds one ring with the same vertices in the same order (left edge stations upstream to downstream,
+ *   then right edge back), and the browser slides each station's two edge vertices between the two depth rungs around that station's own depth.
  */
-export type WsePolygonBrowserDrawing = 'sloped-between-junctions' | 'flat-at-bucket-minimum' | 'bed-parallel-depth';
+export type WsePolygonBrowserDrawing =
+  | 'sloped-between-junctions'
+  | 'flat-at-bucket-minimum'
+  | 'bed-parallel-depth'
+  | 'channel-ribbon-depth';
 
 export interface WsePolygonGenerationMethodConfig {
   /** Plain descriptive kebab-case id; also the output folder name. Never reused for a different method. */
