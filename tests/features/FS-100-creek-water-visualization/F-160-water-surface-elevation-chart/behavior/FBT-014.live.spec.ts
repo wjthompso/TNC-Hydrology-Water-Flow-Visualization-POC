@@ -53,6 +53,7 @@ test("Clicking a time on a modeled creek segment's water-surface elevation chart
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try {
+    // Read the National Water Model hourly elevation for the Jalama gauge Creek Segment at 2022-10-01T00:00Z, the low-flow start of water year 2023.
     const openingUtcMs = Date.parse(OPENING_HOUR_UTC);
     const peakUtcMs = Date.parse(PEAK_HOUR_UTC);
     const missing = missingLocalPipelineOutput({
@@ -74,6 +75,7 @@ test("Clicking a time on a modeled creek segment's water-surface elevation chart
     const modeled = { kind: 'modeled', extentId: JALAMA_EXTENT_ID } as const;
     const openingBucket = bucketFor(modeled, SEGMENT_ID, openingElevationM);
 
+    // Open that Dataset on the Jalama extent at 2022-10-01T00:00Z and look down on the segment.
     await openModeledWaterPage(
       page,
       watch,
@@ -89,9 +91,11 @@ test("Clicking a time on a modeled creek segment's water-surface elevation chart
     await waitForModeledWaterIdle(page);
     await settleScene(page, 'segment-top-down-loaded');
 
+    // Click the segment's water so its Water-Surface Elevation Chart appears.
     await clickSegmentWater(page, { segmentId: SEGMENT_ID, bucket: openingBucket });
     await expect.poll(async () => (await readSelection(page)).chartPointCount).toBeGreaterThan(0);
 
+    // Aim at the 2023-01-10T01:00Z flood peak on the chart, then click the reading under the pointer.
     const target = await chartPointFor(page, peakUtcMs);
     await page.mouse.move(target.x, target.y);
     await expect.poll(async () => (await readSelection(page)).chartHoverTimeUtcMs).not.toBeNull();
@@ -111,12 +115,14 @@ test("Clicking a time on a modeled creek segment's water-surface elevation chart
       24 * HOUR_MS,
     );
 
+    // The time slider and the readout show that clicked hour in Pacific time.
     const slider = await readTimeSlider(page);
     const label = formatPacificTime(pointed.timeUtcMs);
     expect(slider.valueText, 'time slider spoken value').toBe(label);
     expect(slider.readout, 'time readout').toBe(label);
     expect(Number(slider.value), 'time slider slot').toBe(Math.round((pointed.timeUtcMs - Date.parse('2017-10-01T00:00:00Z')) / HOUR_MS));
 
+    // The segment's modeled water redraws at the charted elevation, and the chart cursor sits on that hour.
     await waitForModeledWaterIdle(page);
     expect(await readModeledElevationM(page, SEGMENT_ID), 'modeled elevation the page holds').toBe(pointed.valueM);
     const expectedBucket = bucketFor(modeled, SEGMENT_ID, pointed.valueM);

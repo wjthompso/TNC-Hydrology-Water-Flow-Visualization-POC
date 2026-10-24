@@ -32,6 +32,8 @@ test('Scrub to a different observation time and replace the shown water without 
 }) => {
   const watch = watchLiveServices(page);
   try {
+    // Open Jalama Creek on the Jalama Near Lompoc gauge 15-minute readings and
+    // note the gauge Creek Segment's starting water height.
     await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     const opening = await readSeam(page);
     const gaugeBucket = (snapshot: typeof opening) =>
@@ -42,11 +44,15 @@ test('Scrub to a different observation time and replace the shown water without 
     expect(openingBucket, 'gauge segment water at the opening time').not.toBeNull();
     const peak = floodPeakObservation();
 
+    // Move the slider to the 15:15 UTC flood peak on 3 January 2026. The gauge
+    // segment's water height changes.
     await scrubToTime(page, peak.timeUtcMs);
     await expect
       .poll(async () => gaugeBucket(await readSeam(page)))
       .not.toBe(openingBucket);
 
+    // The peak stays selected, the new water is drawn, and only the gauge
+    // segment plus its inferred neighbours remain.
     const scrubbed = await readSeam(page);
     expect(scrubbed.selectedTimeUtcMs).toBe(peak.timeUtcMs);
     expect(gaugeBucket(scrubbed)).not.toBe(openingBucket);

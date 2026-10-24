@@ -136,13 +136,17 @@ test('Zoom across the Jalama creek scene without raising tile-shaped terrain sla
   const failures: string[] = [];
 
   try {
+    // Open the creek page on Esri World Imagery and wait for the opening view.
     await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     await settleScene(page, 'opening');
     const grid = centralGrid(await sidebarMask(page));
 
+    // Opening frame. Fail on missed ground hits or a raised tile slab.
     await inspectFrame(page, testInfo, 'opening', grid, notes, failures, evidenceDir);
     for (const { step, pose } of CHECKED_CAMERAS) {
+      // Slab view (~1.2 km up), then the wide view (~12 km).
       await moveCameraAndSettle(page, pose, step);
+      // Same ground check at that pose, for a flat tile lifted off the land.
       await inspectFrame(page, testInfo, step, grid, notes, failures, evidenceDir);
     }
 

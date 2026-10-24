@@ -61,19 +61,25 @@ test('Zoom far out from the Jalama Creek Segment and back in without the scene c
   const failures: string[] = [];
 
   try {
+    // Open the creek page, wait for a still opening view, and keep that camera.
     await openObservedWaterPage(page, watch);
     await settleScene(page, 'opening');
     const openingCamera = await readCameraPose(page);
     const sidebar = await sidebarMask(page);
     const cdp = await page.context().newCDPSession(page);
 
+    // Opening frame. Fail if one flat color already fills the view.
     await sampleFlatFrame(page, cdp, testInfo, 'opening', samples, failures, evidenceDir, sidebar);
+    // Far zoom, about 340 km up.
     await moveCameraAndSettle(page, FAR_CAMERA, 'far');
+    // Far frame. Fail on flat white, or if the camera never gets past 100 km.
     const farAltitudeM = await sampleFlatFrame(page, cdp, testInfo, 'far', samples, failures, evidenceDir, sidebar);
     if (farAltitudeM === null || farAltitudeM <= FAR_ZOOM_ALTITUDE_M) {
       failures.push(`The far camera stopped at ${formatAltitude(farAltitudeM)}, which is not beyond 100 km.`);
     }
+    // Return to the opening camera.
     await moveCameraAndSettle(page, openingCamera, 'return');
+    // Return frame. Fail if the view stays cleared after coming back.
     await sampleFlatFrame(page, cdp, testInfo, 'return', samples, failures, evidenceDir, sidebar);
 
     await cdp.detach();

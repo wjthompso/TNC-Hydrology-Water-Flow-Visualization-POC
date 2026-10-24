@@ -27,14 +27,17 @@ const QUIET_PERIOD_MS = 300;
 test('Pressing the pause icon itself at 10× speed pauses playback, the same as pressing the button edge.', async ({
   page,
 }) => {
+  // Open the local timeline and wait until its clock is ready.
   await page.goto(timelineFixturePath());
   await expect(page.locator('#timeline-readout')).not.toHaveText('Loading time…');
 
+  // Pick 10× and start playback, so the button is showing the pause icon.
   await page.getByRole('button', { name: '10 times speed', exact: true }).click();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   const button = page.locator('#timeline-play-btn');
   await expect(button).toHaveAttribute('aria-label', 'Pause');
 
+  // The press point is the centre of that icon, not the padding around it.
   const box = await button.boundingBox();
   if (!box) throw new Error('The play button has no box.');
   const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -44,11 +47,13 @@ test('Pressing the pause icon itself at 10× speed pauses playback, the same as 
   );
   expect(onIcon, 'The press point is not on the icon, so this would not test the icon.').toBe(true);
 
+  // Press and hold the icon briefly, the way a person clicks, then release.
   await page.mouse.move(centre.x, centre.y);
   await page.mouse.down();
   await page.waitForTimeout(HOLD_MS);
   await page.mouse.up();
 
+  // Playback stops: the button offers Play again, and the slider does not keep moving.
   // One immediate read. A retrying assertion would pass once playback reached its last slot by itself.
   await page.waitForTimeout(SETTLE_MS);
   expect(await button.getAttribute('aria-label'), 'Pressing the pause icon did not pause playback.').toBe('Play');

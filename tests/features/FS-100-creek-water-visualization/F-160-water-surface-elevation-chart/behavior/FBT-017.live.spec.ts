@@ -28,6 +28,7 @@ test('Hovering over the chart shows the time and elevation under the pointer wit
 }) => {
   const watch = watchLiveServices(page);
   try {
+    // Open the Observed gauge Dataset and look down on the Jalama gauge Creek Segment at the time the page opens on.
     await openObservedWaterPage(page, watch);
     const opening = await readSeam(page);
     const openingReading = opening.selectedTimeUtcMs === null ? null : readingAt(opening.selectedTimeUtcMs);
@@ -37,9 +38,11 @@ test('Hovering over the chart shows the time and elevation under the pointer wit
     const bucket = bucketFor({ kind: 'observed' }, GAUGE_SEGMENT_ID, openingReading);
     await settleScene(page, 'opening-frame');
     await moveCameraAndSettle(page, topDownPoseOverBucket(bucket), 'gauge-segment-top-down');
+    // Click that segment's water so the chart draws.
     await clickSegmentWater(page, { segmentId: GAUGE_SEGMENT_ID, bucket });
     await expect.poll(async () => (await readSelection(page)).chartPointCount).toBeGreaterThan(0);
 
+    // Hover the chart at the 2026-01-03T15:15Z flood peak. The readout shows the time and elevation under the pointer.
     const sliderBefore = await readTimeSlider(page);
     const identityBefore = (await readSeam(page)).waterGraphicGeometryIdentity;
     const target = await chartPointFor(page, floodPeakObservation().timeUtcMs);

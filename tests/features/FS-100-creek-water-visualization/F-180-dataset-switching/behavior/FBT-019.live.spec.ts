@@ -48,6 +48,7 @@ test('Switching the Dataset in the picker replaces the creek water on the same m
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try {
+    // The Jalama extent needs its National Water Model hourly output on disk before the Dataset switch can be checked.
     const missing = missingLocalPipelineOutput({
       extentId: JALAMA_EXTENT_ID,
       datasetId: NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
@@ -56,6 +57,7 @@ test('Switching the Dataset in the picker replaces the creek water on the same m
     });
     if (missing) throw new Error(`INCONCLUSIVE: ${missing}`);
 
+    // Open the Observed gauge Dataset on the Jalama extent and park the camera over the Jalama gauge Creek Segment. The live map is remembered so a later switch can show a reload or a rebuilt scene.
     await openObservedWaterPage(
       page,
       watch,

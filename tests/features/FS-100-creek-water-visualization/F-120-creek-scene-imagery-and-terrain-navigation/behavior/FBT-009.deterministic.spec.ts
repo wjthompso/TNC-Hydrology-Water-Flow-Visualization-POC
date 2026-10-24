@@ -26,15 +26,18 @@ import { expect, test } from '../../../../support/browser/deterministic-network.
 test('Clicking the creek scene does not draw a (usually light blue) focus frame around the view.', async ({
   page,
 }) => {
+  // Open the local page that styles the scene with the Esri theme, then the app.
   await page.goto('/scene-focus-frame-harness.html');
   const surface = page.locator('.esri-view-surface');
   const view = page.locator('.esri-view');
 
+  // Confirm the Esri theme loaded, so a missing stylesheet cannot hide the frame.
   const themeOutline = (
     await view.evaluate((element) => getComputedStyle(element).getPropertyValue('--esri-view-outline'))
   ).trim();
   expect(themeOutline, 'The Esri theme did not load on the scene view.').toContain('2px');
 
+  // Click the scene, the gesture that used to paint a light-blue frame around it.
   const box = await surface.boundingBox();
   if (!box || box.width < 10 || box.height < 10) {
     throw new Error(`The scene surface has no clickable area: ${JSON.stringify(box)}`);
@@ -44,6 +47,7 @@ test('Clicking the creek scene does not draw a (usually light blue) focus frame 
   const focusedClass = await page.evaluate(() => document.activeElement?.className ?? '');
   expect(focusedClass, 'The click did not focus the scene surface.').toContain('esri-view-surface');
 
+  // After the click, fail if a frame is still painted around the view.
   const frame = await surface.evaluate((element) => {
     const style = getComputedStyle(element, '::after');
     return {

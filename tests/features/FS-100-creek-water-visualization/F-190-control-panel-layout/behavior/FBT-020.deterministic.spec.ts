@@ -24,6 +24,7 @@ const HIDDEN_THUMB_COLOR = 'rgba(0, 0, 0, 0) rgba(0, 0, 0, 0)';
 test('Zooming the browser in makes the control panel scroll to its last line, and a thin scrollbar shows only while the pointer is over the panel.', async ({
   page,
 }) => {
+  // Open the timeline fixture in a 1280×300 window, as if the browser were zoomed in, with the ArcGIS scene left unloaded.
   const arcgisRequests: string[] = [];
   page.on('request', (request) => {
     if (request.url().toLowerCase().includes('arcgis')) arcgisRequests.push(request.url());

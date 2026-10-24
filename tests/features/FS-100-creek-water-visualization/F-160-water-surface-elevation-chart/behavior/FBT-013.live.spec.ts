@@ -45,6 +45,7 @@ test("Clicking a time on the Jalama gauge water-surface elevation chart moves th
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try {
+    // Open the Observed gauge Dataset and look down on the Jalama gauge Creek Segment at the time the page opens on.
     await openObservedWaterPage(page, watch);
     const opening = await readSeam(page);
     const openingTimeUtcMs = opening.selectedTimeUtcMs;
@@ -56,9 +57,11 @@ test("Clicking a time on the Jalama gauge water-surface elevation chart moves th
     await settleScene(page, 'opening-frame');
     await moveCameraAndSettle(page, topDownPoseOverBucket(openingBucket), 'gauge-segment-top-down');
 
+    // Click that segment's water so the Water-Surface Elevation Chart appears.
     await clickSegmentWater(page, { segmentId: GAUGE_SEGMENT_ID, bucket: openingBucket });
     await expect.poll(async () => (await readSelection(page)).chartPointCount).toBeGreaterThan(0);
 
+    // Aim at the 2026-01-03T15:15Z flood peak on the chart, then click the reading under the pointer.
     const peak = floodPeakObservation();
     const target = await chartPointFor(page, peak.timeUtcMs);
     await page.mouse.move(target.x, target.y);
@@ -86,12 +89,14 @@ test("Clicking a time on the Jalama gauge water-surface elevation chart moves th
     );
     expect(pointedTimeUtcMs, 'the click moved the time away from the opening').not.toBe(openingTimeUtcMs);
 
+    // The time slider and the readout show that clicked time in Pacific time.
     const slider = await readTimeSlider(page);
     const label = formatPacificTime(pointedTimeUtcMs);
     expect(slider.value, 'time slider slot').toBe(String(gridIndexForTime(pointedTimeUtcMs)));
     expect(slider.valueText, 'time slider spoken value').toBe(label);
     expect(slider.readout, 'time readout').toBe(label);
 
+    // The gauge Creek Segment's water redraws at the clicked reading, and the chart cursor sits on that time.
     const expectedBucket = bucketFor(OBSERVED, GAUGE_SEGMENT_ID, pointedReading);
     await expect
       .poll(async () => bucketMinOf((await readSeam(page)).waterGraphicGeometryIdentity, GAUGE_SEGMENT_ID), {

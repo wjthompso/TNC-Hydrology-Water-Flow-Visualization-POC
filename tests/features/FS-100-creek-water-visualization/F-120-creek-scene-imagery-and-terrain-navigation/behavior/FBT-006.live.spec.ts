@@ -55,13 +55,17 @@ test('Zoom out from the Jalama Creek Segment without exposing an empty flat-colo
   const failures: string[] = [];
 
   try {
+    // Open the creek page and wait until the opening view has finished loading.
     await openObservedWaterPage(page, watch);
     await settleScene(page, 'opening');
     const sidebar = await sidebarMask(page);
     const cdp = await page.context().newCDPSession(page);
 
+    // Opening frame. Fail if one flat color fills the coast.
     await sampleFlatFrame(page, cdp, testInfo, 'opening', samples, failures, evidenceDir, sidebar);
+    // Coast view, about 12 km up, where three wheel notches land.
     await moveCameraAndSettle(page, COAST_CAMERA, 'coast');
+    // Coast frame. Fail if that zoom leaves an empty flat-color void.
     await sampleFlatFrame(page, cdp, testInfo, 'coast', samples, failures, evidenceDir, sidebar);
 
     await cdp.detach();

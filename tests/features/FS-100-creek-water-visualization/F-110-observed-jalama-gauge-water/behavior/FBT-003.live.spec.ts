@@ -29,10 +29,13 @@ test('Play the Jalama gauge observations in chronological order, and stop that a
 }) => {
   const watch = watchLiveServices(page);
   try {
+    // Open Jalama Creek on the Jalama Near Lompoc gauge 15-minute readings,
+    // then move to a reading midway through the record.
     await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     const midRecord = midRecordObservation();
     await scrubToTime(page, midRecord);
 
+    // Press Play. The selected time steps forward through later 15-minute readings.
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     // A poll can land twice in one 15-minute slot. Keep each new slot.
     // Every new slot must be a later multiple of 15 minutes.
@@ -59,6 +62,7 @@ test('Play the Jalama gauge observations in chronological order, and stop that a
       expect(step % OBSERVATION_STEP_MS).toBe(0);
     }
 
+    // Press Pause. Play returns, and the selected time holds still for a second.
     await page.getByRole('button', { name: 'Pause', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
     const held = (await readSeam(page)).selectedTimeUtcMs;

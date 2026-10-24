@@ -31,8 +31,10 @@ test('Looking up from below the water surface, the water-surface polygon fills t
 }) => {
   const watch = watchLiveServices(page);
   try {
+    // Open observed Jalama gauge readings on Esri World Imagery.
     await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
 
+    // The gauge Creek Segment's water is held at 26.50 m.
     await pinSegmentWaterSurfaceElevationM(page, GAUGE_SEGMENT_ID, PINNED_WSE_M);
     await settleScene(page, 'pin-wse');
 
@@ -42,14 +44,17 @@ test('Looking up from below the water surface, the water-surface polygon fills t
     );
     expect(pinnedPlacement?.bucketMinElevationM).toBe(PINNED_WSE_M);
 
+    // Look up at the bank from just below the water.
     await moveCameraAndSettle(page, BANK_OVERLAP_CAMERA_POSE, 'bank-overlap-camera');
 
+    // A point on the water still hits the water surface.
     const knownGoodResult = await hitTestAtGroundPoint(page, KNOWN_GOOD_GROUND_POINT_WGS84);
     expect(
       knownGoodResult.ok,
       knownGoodResult.ok ? '' : knownGoodResult.failureMessage,
     ).toBe(true);
 
+    // The former hole over the bank now hits the water surface too.
     const holeResult = await hitTestAtGroundPoint(page, HOLE_GROUND_POINT_WGS84);
     expect(holeResult.ok, holeResult.ok ? '' : holeResult.failureMessage).toBe(true);
   } catch (error) {

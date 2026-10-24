@@ -35,19 +35,24 @@ test('Open the page on measured water for the Jalama Near Lompoc gauge Creek Seg
 }) => {
   const watch = watchLiveServices(page);
   try {
+    // Open Jalama Creek on the Jalama Near Lompoc gauge 15-minute readings,
+    // over Esri World Imagery.
     await openObservedWaterPage(page, watch, FAST_TEST_SCENE_IMAGERY_ID);
     const seam = await readSeam(page);
     const midpoint = gaugeSegmentMidpointWgs84();
 
+    // The gauge Creek Segment shows measured water, and only its inferred neighbours join it.
     expectGaugeMeasuredWaterAndInferredNeighboursOnly(seam);
     const gaugeWater = seam.waterGraphicGeometryIdentity.find(
       (item) => item.segmentId === GAUGE_SEGMENT_ID,
     );
     expect(gaugeWater?.bucketMinElevationM).not.toBeNull();
+    // The camera is framed on that gauge Creek Segment.
     const cameraTarget = seam.cameraTargetWgs84;
     if (!cameraTarget) throw new Error('The camera target is missing.');
     expect(distanceMeters(cameraTarget, midpoint)).toBeLessThanOrEqual(300);
 
+    // The old stage slider, renderer toggle, and extra 3D view are gone.
     await expect(page.locator('#stage-slider')).toHaveCount(0);
     await expect(page.locator('#renderer-toggle')).toHaveCount(0);
     await expect(page.locator('#three-view')).toHaveCount(0);

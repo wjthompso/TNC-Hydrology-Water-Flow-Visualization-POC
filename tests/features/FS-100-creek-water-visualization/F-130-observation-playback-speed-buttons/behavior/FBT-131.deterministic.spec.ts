@@ -36,16 +36,19 @@ test('Playing at 0.5×, 1×, 2×, 5×, and 10× advances the observation slider 
     if (request.url().toLowerCase().includes('arcgis')) arcgisRequests.push(request.url());
   });
 
+  // Open the local timeline and wait until its clock is ready. The map stays unloaded.
   await page.goto(timelineFixturePath());
   await expect(page.locator('#timeline-readout')).not.toHaveText('Loading time…');
   expect(arcgisRequests, 'The speed check loaded ArcGIS.').toEqual([]);
 
   for (const speed of SPEEDS) {
+    // Pause, return the slider to the first slot, pick this speed, and press Play.
     await pauseIfPlaying(page);
     await scrubToFirstSlot(page);
     await page.getByRole('button', { name: speed.label, exact: true }).click();
     await page.getByRole('button', { name: 'Play', exact: true }).click();
 
+    // One second of playback should move the slider by about that speed's slot count.
     const sample = await sampleSliderAdvance(page);
     const band = slotBand(speed.slotsPerSecond, sample.elapsedSeconds);
     const detail = `${speed.label} moved ${sample.slots} slots in ${sample.elapsedSeconds.toFixed(3)} s (${sample.slotsPerSecond.toFixed(1)} slots/s). Expected ${band.min.toFixed(1)}–${band.max.toFixed(1)} slots.`;
