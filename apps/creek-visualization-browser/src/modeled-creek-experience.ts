@@ -48,6 +48,7 @@ import {
   type FlowlineIndex,
 } from './modeled-water-data-store';
 import { createModeledWaterSceneRenderer } from './modeled-water-scene-renderer';
+import { buildModeledSegmentInspection, type ModeledSegmentInspection } from './modeled-segment-inspection';
 import { modeledDataSource } from './modeled-data-source';
 import { loadReachCrosswalk } from './reach-crosswalk';
 import {
@@ -220,6 +221,11 @@ export interface ModeledExperienceSeam {
   readSegment(segmentId: string): ModeledSegmentReading | null;
   /** Dev tools: the Creek Segment whose prepared polygons center nearest the point, within the distance. */
   nearestSegment(lonLat: LonLat, maxDistanceM: number): { segmentId: string; distanceM: number } | null;
+  /**
+   * Dev tools water click inspector: one Creek Segment's Time Series values, drawn water, anchor, and
+   * polygon vertices at the selected time. Null when the segment is not in the extent. Cheap enough to poll.
+   */
+  inspectSegment(segmentId: string): ModeledSegmentInspection | null;
   /** Every saved WSE Polygon Generation Method version of this extent, sorted by method id, then version. */
   readonly wsePolygonMethods: readonly WsePolygonMethodVersion[];
   /**
@@ -483,6 +489,29 @@ export async function startModeledCreekExperience(
     return best;
   };
 
+  const inspectSegment = (segmentId: string): ModeledSegmentInspection | null => {
+    if (!segmentCenters.has(segmentId)) return null;
+    const tncComid = segmentId.split('-')[0];
+    const flowline = store.loadedFlowline(tncComid);
+    const path = segmentPaths.get(segmentId)?.path;
+    const chordLengthM = segmentChordLengthM(segmentId);
+    return buildModeledSegmentInspection({
+      segmentId,
+      timeUtcMs: state.selectedTimeUtcMs,
+      holdMs,
+      method: wsePolygonMethod,
+      series: store.seriesAt(tncComid, state.selectedTimeUtcMs),
+      buckets: flowline?.polygonBucketsBySegmentId.get(segmentId) ?? null,
+      ribbonSummary: flowline?.channelRibbonBySegmentId.get(segmentId) ?? null,
+      graphic: renderer.graphicForSegment(segmentId),
+      chord:
+        path && path.length >= 2 && chordLengthM !== null
+          ? { first: path[0], last: path[path.length - 1], lengthM: chordLengthM }
+          : null,
+      pinnedWseM: pinnedBySegmentId.get(segmentId) ?? null,
+    });
+  };
+
   /** Says only what a reader can act on: water still loading, or a load error. Counts live in the dev tools. */
   const updateStatus = (): void => {
     if (store.lastError) elements.status.textContent = store.lastError;
@@ -668,6 +697,7 @@ export async function startModeledCreekExperience(
     },
     readSegment,
     nearestSegment,
+    inspectSegment,
     wsePolygonMethods: methodList.versions,
     derivedDataGroups: groupDerivedData(methodList),
     notGeneratedDerivedData: methodList.notGenerated,

@@ -136,6 +136,8 @@ export function createModeledWaterSceneRenderer(
       drainageAreaRatioTransfer: drainageAreaRatioTransfer === true,
       junctionDepthUpstreamM: junctionDepth?.upstreamM ?? null,
       junctionDepthDownstreamM: junctionDepth?.downstreamM ?? null,
+      // Dev tools click inspector: the ribbon's display lift (0 for true water and other methods).
+      displayLiftM: placement.channelRibbonLiftM ?? 0,
     };
     graphic.visible = true;
     writtenElevationM.set(segmentId, depth.waterSurfaceElevationM);

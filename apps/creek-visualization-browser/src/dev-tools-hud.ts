@@ -57,6 +57,19 @@ import { createDevToolsClickMarker } from './dev-tools-click-marker';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { displayDepthFloorDescription } from './display-depth-floor';
 import { ribbonDisplayRuleDescription } from './channel-ribbon-surface';
+import { sampleBrowserTerrain } from './browser-terrain-sampler';
+import { createWaterAnchorMarker, type WaterAnchorMarkerPosition } from './dev-tools-water-anchor-marker';
+import type { ModeledSegmentInspection } from './modeled-segment-inspection';
+import { readWaterLevelUnit, saveWaterLevelUnit, type WaterLevelUnit } from './water-level-units';
+import {
+  buildWaterClickReadout,
+  readoutRowGroups,
+  sampleDrawnPolygon,
+  type ClickedPoint,
+  type InspectorRow,
+  type TerrainSample,
+  type WaterClickReadout,
+} from './water-click-readout';
 import {
   derivedDataGroupOf,
   drawsDepthBuckets,
@@ -488,6 +501,18 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   detailedView.appendChild(placementsSection.root);
   scrollHost.appendChild(detailedView);
 
+  // --- Water click inspector: the numbers behind a click on modeled water ------
+  // Shown in both views. Marks the selected segment's WSE Anchor Point in the scene.
+  const waterInspector = buildWaterClickInspector({
+    view: options.view,
+    attachment: options.attachment,
+    modeledSeam,
+    lifetime,
+    copyJson: (text) => void copyWithFeedback(text, copyFeedback, 'Water click readout copied.'),
+  });
+  waterInspector.setOpen(panelStartsOpen);
+  scrollHost.appendChild(waterInspector.root);
+
   // --- WSE override: draw the Selected Creek Segment at a chosen elevation ---
   // Shown in both views. Lets you compare how observed and modeled polygons
   // look at the same water-surface elevation.
@@ -614,6 +639,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
       dataset: readDatasetAndTime(modeledSeam, options.attachment.selectedTimeUtcMs),
       cameraPose: seam.cameraPose,
       clickCapture: lastCapture,
+      waterClickInspector: waterInspector.snapshot(),
     };
     void copyWithFeedback(JSON.stringify(capture, null, 2), copyFeedback, 'All JSON copied.');
   };
@@ -643,6 +669,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
           renderWaterReadouts();
         }
         lastClickValue.textContent = summarizeClickCapture(capture, selectedModeledSegment);
+        waterInspector.noteClick(capture, selectedModeledSegment);
         for (const button of captureCopyButtons) button.disabled = false;
       })
       .catch((error: unknown) => {
@@ -771,6 +798,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     },
     setOpen(open) {
       clickMarker.setVisible(open);
+      waterInspector.setOpen(open);
       root.hidden = !open;
     },
     captureScreenClick,
@@ -932,6 +960,290 @@ function buildWseOverrideTools(
   // Polled so a selection change clears the override within half a second, even with the HUD closed.
   lifetime.every(render, WSE_OVERRIDE_REFRESH_MS);
   return section.root;
+}
+
+// --- Water click inspector -----------------------------------------------------
+
+const WATER_INSPECTOR_REFRESH_MS = 250;
+const WATER_INSPECTOR_EMPTY_TEXT =
+  'Click a water polygon to read its drawn height, depth, and the terrain under it.';
+const WATER_INSPECTOR_NO_SELECTION_TEXT =
+  'Anchor flag: the selected Creek Segment gets a pink flag at its anchor point (click its water).';
+
+interface WaterClickInspectorOptions {
+  view: SceneView;
+  attachment: CreekVisualizationAttachment;
+  /** Null in the observed experience, which has no modeled segments to inspect. */
+  modeledSeam: ModeledExperienceSeam | null;
+  lifetime: ExperienceLifetime;
+  copyJson(text: string): void;
+}
+
+interface WaterClickInspectorHandle {
+  root: HTMLElement;
+  /** Fills or clears the readout for a click the HUD just hit-tested. */
+  noteClick(capture: HitTestCapture, picked: SelectedModeledSegment | null): void;
+  /** Shows the anchor marker and refreshes while the panel is open; hides the marker otherwise. */
+  setOpen(open: boolean): void;
+  /** The readout for the last click, for Copy all JSON; null before any click or without a modeled Dataset. */
+  snapshot(): WaterClickReadout | null;
+}
+
+/** The last click on water: where it landed, the segment it belongs to, and the ground sampled under it. */
+interface InspectedClick {
+  point: ClickedPoint;
+  segmentId: string;
+  terrain: TerrainSample | null;
+}
+
+/** Same layer id the modeled and observed renderers give their water graphics. */
+const WATER_POLYGON_LAYER_ID = 'water-surface-elevation-polygons';
+
+/** The water polygon under a screen point, tested against the water layer alone, as the segment selection does. */
+async function hitWaterLayer(
+  view: SceneView,
+  screen: { x: number; y: number },
+): Promise<{ segmentId: string; point: { longitude: number; latitude: number; z: number | null } } | null> {
+  const layer = view.map?.findLayerById(WATER_POLYGON_LAYER_ID);
+  if (!layer) return null;
+  try {
+    const result = await view.hitTest(screen, { include: [layer] });
+    for (const hit of result.results) {
+      if (hit.type !== 'graphic') continue;
+      const segmentId: unknown = hit.graphic?.attributes?.segmentId;
+      const mapPoint = hit.mapPoint;
+      if (typeof segmentId !== 'string' || !mapPoint) continue;
+      const geographic =
+        mapPoint.spatialReference?.wkid === 4326
+          ? mapPoint
+          : (webMercatorUtils.webMercatorToGeographic(mapPoint) as Point | null);
+      if (!geographic || typeof geographic.longitude !== 'number' || typeof geographic.latitude !== 'number') continue;
+      const z = typeof geographic.z === 'number' && Number.isFinite(geographic.z) ? geographic.z : null;
+      return { segmentId, point: { longitude: geographic.longitude, latitude: geographic.latitude, z } };
+    }
+  } catch (error) {
+    console.warn('[dev-tools-hud] water layer hit test failed', error);
+  }
+  return null;
+}
+
+/**
+ * 'Water click inspector': clicking water fills a labeled table of the drawn water height and polygon
+ * bottom at the click, the browser terrain under it, and the segment's modeled values at the selected
+ * time. The selected segment's WSE Anchor Point is marked in the scene with a pink flag. The map layer
+ * and the 4 Hz refresh only act while the panel is open. Modeled Datasets only.
+ */
+function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterClickInspectorHandle {
+  const { view, attachment, modeledSeam, lifetime } = options;
+  const section = buildSection('Water click inspector', '04a', 1, 'Click water · heights m or ft NAVD88');
+  section.root.id = 'dev-tools-water-click-inspector';
+
+  if (!modeledSeam) {
+    section.body.append(
+      createElement(
+        'p',
+        ['text-[11px]', 'font-bold', 'text-hud-label'],
+        'Needs a modeled Dataset, for example ?dataset=national-water-model-hourly.',
+      ),
+    );
+    return { root: section.root, noteClick() {}, setOpen() {}, snapshot: () => null };
+  }
+
+  const marker = createWaterAnchorMarker(view, lifetime);
+  const status = createElement('p', ['text-[11px]', 'font-bold'], WATER_INSPECTOR_EMPTY_TEXT);
+  status.id = 'dev-tools-water-click-status';
+  status.setAttribute('aria-live', 'polite');
+  const markerNote = createElement('p', ['text-[11px]', 'font-semibold', 'text-hud-label'], WATER_INSPECTOR_NO_SELECTION_TEXT);
+  markerNote.id = 'dev-tools-water-anchor-note';
+  const unitToggle = buildSegmentedToggle('Units', 'Height unit', ['m', 'ft']);
+  const unitRow = createElement('div', ['grid', 'grid-cols-[auto_1fr]', 'items-center', 'gap-x-3']);
+  unitRow.append(unitToggle.labelEl, unitToggle.groupEl);
+  const rowsHost = createElement('div', ['flex', 'flex-col', 'gap-2']);
+  rowsHost.id = 'dev-tools-water-click-rows';
+  const copyButton = buildCopyButton('Copy JSON');
+  copyButton.disabled = true;
+  section.body.append(status, markerNote, unitRow, rowsHost, copyButton);
+
+  let open = false;
+  let unit: WaterLevelUnit = readWaterLevelUnit();
+  let clicked: InspectedClick | null = null;
+  let latestReadout: WaterClickReadout | null = null;
+  let markerKey = '';
+  let renderedKey = '';
+  /** Bumped when ground sampling lands, so the table redraws with the terrain rows. */
+  let terrainVersion = 0;
+  /** Bumped on every click, so a slow hit test from an earlier click is dropped. */
+  let clickToken = 0;
+
+  const renderRows = (rows: readonly { heading: string; rows: readonly InspectorRow[] }[]): void => {
+    rowsHost.replaceChildren(
+      ...rows.map((group) => {
+        const block = createElement('div', ['flex', 'flex-col']);
+        block.appendChild(createElement('h4', [MICRO_LABEL_CLASS, 'mb-0.5'], group.heading));
+        for (const item of group.rows) {
+          const line = createElement('div', [
+            'flex',
+            'items-baseline',
+            'justify-between',
+            'gap-3',
+            'border-b',
+            'border-hud-well-edge',
+            'py-0.5',
+          ]);
+          line.title = item.hint;
+          const toneClasses =
+            item.tone === 'alert'
+              ? ['text-red-700', 'group-data-[hud-style=classic]:text-red-300']
+              : item.tone === 'muted'
+                ? ['text-hud-label']
+                : ['text-hud-ink'];
+          line.append(
+            createElement('span', ['text-[11px]', 'font-semibold', 'text-hud-label'], item.label),
+            createElement(
+              'span',
+              ['max-w-[58%]', 'break-words', 'text-right', 'font-mono', 'text-[11px]', 'font-bold', 'tabular-nums', ...toneClasses],
+              item.value,
+            ),
+          );
+          block.appendChild(line);
+        }
+        return block;
+      }),
+    );
+  };
+
+  /** The drawn water height at the anchor (falls back to the Time Series value when nothing is drawn). */
+  const markerPositionOf = (inspection: ModeledSegmentInspection): WaterAnchorMarkerPosition | null => {
+    const lonLat = inspection.anchor.lonLat;
+    if (!lonLat) return null;
+    const drawn = sampleDrawnPolygon(inspection, lonLat[0], lonLat[1]);
+    const waterSurfaceM = drawn?.waterSurfaceM ?? inspection.timeSeriesWseM;
+    if (waterSurfaceM === null) return null;
+    return { longitude: lonLat[0], latitude: lonLat[1], waterSurfaceM, bedM: inspection.anchor.bedElevationM };
+  };
+
+  const describeMarker = (inspection: ModeledSegmentInspection | null, position: WaterAnchorMarkerPosition | null): string => {
+    if (!inspection) return WATER_INSPECTOR_NO_SELECTION_TEXT;
+    if (!inspection.anchor.lonLat) {
+      return `No flag: ${inspection.wsePolygonMethod} never saved where segment ${inspection.segmentId}'s anchor point is.`;
+    }
+    if (!position) return `No flag: segment ${inspection.segmentId} has no modeled water value at this time.`;
+    const source =
+      inspection.anchor.positionSource === 'ribbon-polygon-file'
+        ? 'position saved with the ribbon'
+        : 'position estimated at the chord midpoint';
+    return `Pink flag: segment ${inspection.segmentId}'s anchor point (${source}). The white dot is the Time Series' anchor bed height.`;
+  };
+
+  /** The marker follows the Selected Creek Segment: it stays across time changes and goes when the selection clears. */
+  const refreshMarker = (): void => {
+    const selectedId = attachment.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null;
+    const inspection = selectedId ? modeledSeam.inspectSegment(selectedId) : null;
+    const key = inspection ? inspection.revisionKey : 'none';
+    if (key === markerKey) return;
+    markerKey = key;
+    const position = inspection ? markerPositionOf(inspection) : null;
+    marker.show(position);
+    markerNote.textContent = describeMarker(inspection, position);
+  };
+
+  const refreshReadout = (): void => {
+    if (!clicked) {
+      if (renderedKey === 'empty') return;
+      renderedKey = 'empty';
+      latestReadout = null;
+      copyButton.disabled = true;
+      status.textContent = WATER_INSPECTOR_EMPTY_TEXT;
+      rowsHost.replaceChildren();
+      return;
+    }
+    const inspection = modeledSeam.inspectSegment(clicked.segmentId);
+    if (!inspection) {
+      renderedKey = 'not-in-extent';
+      latestReadout = null;
+      copyButton.disabled = true;
+      status.textContent = `Segment ${clicked.segmentId} is not in this extent.`;
+      rowsHost.replaceChildren();
+      return;
+    }
+    const key = `${inspection.revisionKey}|${terrainVersion}|${unit}`;
+    if (key === renderedKey) return;
+    renderedKey = key;
+    latestReadout = buildWaterClickReadout(inspection, clicked.point, clicked.terrain);
+    copyButton.disabled = false;
+    status.textContent =
+      clicked.point.landedOn === 'water-polygon'
+        ? `Segment ${inspection.segmentId} · ${inspection.selectedTimeUtc}`
+        : `Missed the water: showing the nearest segment, ${inspection.segmentId}.`;
+    renderRows(readoutRowGroups(latestReadout, unit));
+  };
+
+  const refresh = (): void => {
+    if (!open) return;
+    unit = readWaterLevelUnit();
+    unitToggle.setPressed(unit === 'wse-navd88-m' ? 0 : 1);
+    refreshMarker();
+    refreshReadout();
+  };
+
+  /** Goes through the page's own m/ft buttons when they exist, so the chart follows. */
+  const chooseUnit = (next: WaterLevelUnit): void => {
+    const pageButton = document.querySelector<HTMLButtonElement>(`[data-water-level-unit="${next}"]`);
+    if (pageButton) pageButton.click();
+    else saveWaterLevelUnit(next);
+    refresh();
+  };
+  unitToggle.buttons[0].addEventListener('click', () => chooseUnit('wse-navd88-m'));
+  unitToggle.buttons[1].addEventListener('click', () => chooseUnit('wse-navd88-ft'));
+  copyButton.addEventListener('click', () => {
+    if (latestReadout) options.copyJson(JSON.stringify(latestReadout, null, 2));
+  });
+  lifetime.every(refresh, WATER_INSPECTOR_REFRESH_MS);
+
+  return {
+    root: section.root,
+    noteClick(capture, picked) {
+      const thisToken = (clickToken += 1);
+      // The scene's all-layer hit test can miss water that the segment selection (water layer only) finds, so ask the water layer.
+      void hitWaterLayer(view, capture.screenPoint).then((waterHit) => {
+        if (thisToken !== clickToken) return;
+        const segmentId = waterHit?.segmentId ?? picked?.segmentId ?? null;
+        const point = waterHit?.point ?? capture.mapHitWgs84;
+        if (!segmentId || !point) {
+          clicked = null;
+        } else {
+          const thisClick: InspectedClick = {
+            point: {
+              longitude: point.longitude,
+              latitude: point.latitude,
+              landedOn: waterHit ? 'water-polygon' : 'ground-near-segment',
+              distanceFromSegmentCenterM: waterHit ? null : (picked?.nearDistanceM ?? null),
+              arcgisWaterHitZM: waterHit?.point.z ?? null,
+            },
+            segmentId,
+            terrain: null,
+          };
+          clicked = thisClick;
+          void sampleBrowserTerrain(view, point.longitude, point.latitude).then((terrain) => {
+            if (clicked !== thisClick) return;
+            thisClick.terrain = terrain;
+            terrainVersion += 1;
+            refresh();
+          });
+        }
+        renderedKey = '';
+        refresh();
+      });
+    },
+    setOpen(next) {
+      open = next;
+      marker.setVisible(next);
+      markerKey = '';
+      renderedKey = '';
+      refresh();
+    },
+    snapshot: () => latestReadout,
+  };
 }
 
 // --- Drainage-Area Ratio Transfer camera tools --------------------------------
