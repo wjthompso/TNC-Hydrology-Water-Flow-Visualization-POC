@@ -487,6 +487,25 @@
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-160-water-surface-elevation-chart/behavior/FBT-021.live.spec.ts"
     },
     {
+      "id": "FBT-022",
+      "name": "Water on neighbouring creek segments is drawn with no outline layer, so no dark line appears where segments meet.",
+      "methodology": "Why it matters: each Creek Segment is its own water polygon, and a symbol outline on it also traces the edge it shares with its neighbour, drawing a dark line across the creek. How it checks: opens the locally served observed page, waits until the test seam reports ready, and sets the real time slider to the committed 2026-01-03T15:15Z flood peak so gauge Creek Segment 27714637-026 and its inferred neighbours all have water. It makes no clicks and moves no camera, so the gauge segment stays selected as it is on open. The read-only seam lists, for every drawn water graphic, the type of each ArcGIS symbol layer on it. The test fails unless the gauge segment and at least one inferred neighbour are drawn, and fails if any drawn graphic has a symbol layer other than water, which is how a symbol outline (a fill layer) shows up. The selection highlight is a view highlight and not a symbol layer, so the selected segment's amber outline is allowed. What is real: the browser page, ArcGIS SceneView and its water graphics, the committed published creek data, the real time slider, and Esri World Imagery and Esri World Elevation responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. What is test-only: the read-only seam field that reports each drawn graphic's symbol layer types. What it does not check: pixels or colors, gaps between neighbouring polygon footprints, the selection highlight itself (FBT-015), or modeled water.",
+      "category": "feature-behavior",
+      "owner": "F-110",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": true,
+      "bugReference": "Observed Oct 26, 2026: dark seam line across the creek where inferred neighbouring Creek Segments meet (UCS-300 follow-up; no Linear ticket yet)",
+      "rootCauseAnalysis": "Symptom: a thin dark line crosses the creek at each junction between inferred (teal) neighbouring Creek Segments. Root cause: each Creek Segment is a separate polygon graphic, and the inferred water symbol added a transparent FillSymbol3DLayer whose 1 pt outline traces every polygon edge, including the edge shared with the next segment, so the shared edge is drawn as a line. The outline was added in the UCS-300 commit edfdca75 to mark inferred water apart from measured water. Water heights matched at the junction (a click there hit both segments at z 25.898 m), so the line was not a geometry step. Fix: the inferred symbol is a plain water layer with no outline; the teal color alone marks inferred water. Future triage: if a dark line returns at a junction, read each drawn graphic's symbol layer types first; a fill layer means an outline was added back. If the types are only water, check for a gap or overlap between neighbouring polygon footprints, which is a different bug.",
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-022.live.spec.ts"
+    },
+    {
       "id": "FBT-131",
       "name": "Playing at 0.5×, 1×, 2×, 5×, and 10× advances the observation slider by about 5, 10, 20, 50, and 100 slots in one second.",
       "methodology": "Opens the local page on the timeline fixture while the test server has VITE_TEST_MODE set. That path runs the real Play button, time slider, and speed buttons through the production timeline control, on a 500-slot stand-in clock. The ArcGIS scene, imagery, terrain, and published gauge series are not loaded, and the test fails if the page requests ArcGIS. For each of 0.5×, 1×, 2×, 5×, and 10×, the test pauses, returns the slider to the first slot, clicks that speed button, clicks Play, and reads the slider index at the start and end of one second inside the page. The slot count must sit within 10% of the target for that elapsed time, and the margin is never tighter than one slot, so 1× passes at 9–11 slots in one second. It does not check water, button highlight color, reverse playback, or a chosen calendar date.",

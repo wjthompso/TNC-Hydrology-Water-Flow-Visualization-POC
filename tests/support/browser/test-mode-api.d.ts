@@ -9,6 +9,8 @@ declare global {
         bucketMinElevationM: number | null;
         /** True when the drawn water is inferred by Creek Segment Observed WSE Propagation. */
         inferred?: boolean;
+        /** Observed page: symbol layer types on the drawn water graphic, e.g. ["water"]. Empty when hidden. */
+        symbolLayerTypes?: readonly string[];
       }[];
       /** SceneView center as longitude, latitude. Null before the view exists. */
       readonly cameraTargetWgs84: readonly [number, number] | null;
