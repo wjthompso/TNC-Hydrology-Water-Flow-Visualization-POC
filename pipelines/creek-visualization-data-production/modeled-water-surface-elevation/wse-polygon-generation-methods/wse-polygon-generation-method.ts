@@ -18,12 +18,15 @@
  * - `channel-ribbon-depth`: like `bed-parallel-depth` (bucket bounds are depths, vertices are `[lon, lat, bedProfileM]`), but the segment's
  *   buckets are morph targets: every bucket holds one ring with the same vertices in the same order (left edge stations upstream to downstream,
  *   then right edge back), and the browser slides each station's two edge vertices between the two depth rungs around that station's own depth.
+ * - `channel-ribbon-pool-filled`: the rings of `channel-ribbon-depth`, drawn on a water surface pool-filled along the run (m3's
+ *   `pool-filled-water-surface.ts`, the rule its Time Series values follow): each station's z is that surface and its depth is surface − bed.
  */
 export type WsePolygonBrowserDrawing =
   | 'sloped-between-junctions'
   | 'flat-at-bucket-minimum'
   | 'bed-parallel-depth'
-  | 'channel-ribbon-depth';
+  | 'channel-ribbon-depth'
+  | 'channel-ribbon-pool-filled';
 
 export interface WsePolygonGenerationMethodConfig {
   /** Plain descriptive kebab-case id; also the output folder name. Never reused for a different method. */

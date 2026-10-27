@@ -56,8 +56,26 @@ import type { DevToolsClickMarker } from './dev-tools-click-marker';
 import { createDevToolsClickMarker } from './dev-tools-click-marker';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { displayDepthFloorDescription } from './display-depth-floor';
-import { ribbonDisplayRuleDescription } from './channel-ribbon-surface';
+import { anchorClearanceRuleDescription, ribbonDisplayRuleDescription } from './channel-ribbon-surface';
 import { sampleBrowserTerrain } from './browser-terrain-sampler';
+import { lidarGroundKey, lookUpLidarGround, type LidarGroundLookup } from './dev-lidar-ground-client';
+import { createDevToolsInfoTips, type DevToolsInfoTips, type InfoTipSource } from './dev-tools-info-tip';
+import {
+  ANCHOR_BED_MARKER_TIP,
+  ANCHOR_LIDAR_GROUND_MARKER_TIP,
+  ANCHOR_WATER_MARKER_TIP,
+  DRAWN_ELEVATION_TIP,
+  SEGMENT_BADGE_TIP,
+  SEGMENT_PLACEMENTS_TIP,
+  WATER_CLICK_INSPECTOR_TIP,
+  WATER_SURFACE_READING_TIP_MODELED,
+  WATER_SURFACE_READING_TIP_OBSERVED,
+  WSE_OVERRIDE_ANCHOR_UNIT_TIP,
+  WSE_OVERRIDE_PLAIN_UNIT_TIP,
+  WSE_OVERRIDE_STATUS_TIP,
+  WSE_OVERRIDE_TARGET_TIP,
+  WSE_OVERRIDE_TIP,
+} from './dev-tools-metric-tips';
 import { createWaterAnchorMarker, type WaterAnchorMarkerPosition } from './dev-tools-water-anchor-marker';
 import type { ModeledSegmentInspection } from './modeled-segment-inspection';
 import { readWaterLevelUnit, saveWaterLevelUnit, type WaterLevelUnit } from './water-level-units';
@@ -66,12 +84,16 @@ import {
   readoutRowGroups,
   sampleDrawnPolygon,
   type ClickedPoint,
+  type GroundSamples,
+  type InspectorGroup,
   type InspectorRow,
   type TerrainSample,
   type WaterClickReadout,
 } from './water-click-readout';
 import {
   derivedDataGroupOf,
+  derivedDataSelectionKey,
+  drawnModeledWsePathOf,
   drawsDepthBuckets,
   preferredPolygonVersionOf,
   wsePolygonMethodKey,
@@ -284,6 +306,8 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   root.id = 'dev-tools-hud';
   root.hidden = !panelStartsOpen;
   root.setAttribute('aria-label', 'Developer tools');
+  // One shared popover for every "(i)" button; it lives on the root so the scrolling body never clips it.
+  const infoTips = createDevToolsInfoTips(root);
 
   const scrollHost = createElement('div', [
     belowToggle ? 'max-h-[calc(100vh-7.25rem)]' : 'max-h-[calc(100vh-2rem)]',
@@ -364,7 +388,9 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     '—',
   );
   segmentBadge.setAttribute('aria-label', 'Segment suffix');
-  segmentBadgeGroup.append(segmentBadge, createElement('span', [MICRO_LABEL_CLASS], 'Segment'));
+  const segmentCaption = createElement('span', [MICRO_LABEL_CLASS], 'Segment');
+  segmentCaption.append(infoTips.create({ subject: 'Segment', text: SEGMENT_BADGE_TIP }));
+  segmentBadgeGroup.append(segmentBadge, segmentCaption);
   headingRow.appendChild(segmentBadgeGroup);
   headingBand.appendChild(headingRow);
   headingBand.appendChild(createElement('div', [HEAVY_RULE_CLASS, 'mt-2']));
@@ -401,7 +427,15 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
 
   const waterBand = buildBand(0);
   waterBand.id = 'dev-tools-water-band';
-  waterBand.appendChild(createElement('p', ['text-sm', 'font-bold'], 'Water surface:'));
+  const waterSurfaceLabel = createElement('p', ['text-sm', 'font-bold'], 'Water surface:');
+  waterSurfaceLabel.append(
+    infoTips.create({
+      subject: 'Water surface',
+      text: modeledSeam ? WATER_SURFACE_READING_TIP_MODELED : WATER_SURFACE_READING_TIP_OBSERVED,
+      source: modeledSeam ? 'model' : null,
+    }),
+  );
+  waterBand.appendChild(waterSurfaceLabel);
   const waterReadingValue = createElement(
     'p',
     ['text-5xl', 'font-extrabold', 'leading-none', 'tracking-tight', 'tabular-nums'],
@@ -423,7 +457,13 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     ['shrink-0', 'text-sm', 'font-bold', 'tabular-nums'],
     'Not drawn',
   );
-  waterCaptionRow.appendChild(drawnElevationValue);
+  // The value's text is replaced on every refresh, so its "(i)" sits beside it, not inside it.
+  const drawnElevationGroup = createElement('span', ['flex', 'shrink-0', 'items-baseline', 'gap-1']);
+  drawnElevationGroup.append(
+    infoTips.create({ subject: 'Drawn elevation', text: DRAWN_ELEVATION_TIP, source: 'drawn' }),
+    drawnElevationValue,
+  );
+  waterCaptionRow.appendChild(drawnElevationGroup);
   waterBand.appendChild(waterCaptionRow);
   // Modeled only: which Creek Segment the reading belongs to, and whether its flow is borrowed.
   const waterDetailLine = createElement('p', ['mt-1', 'text-[11px]', 'font-bold', 'text-hud-label']);
@@ -464,7 +504,13 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   clickSection.body.append(clickSummary, detailedCopyCaptureButton);
   detailedView.appendChild(clickSection.root);
 
-  const placementsSection = buildSection('Current segment placements', '04', 1);
+  const placementsSection = buildSection(
+    'Current segment placements',
+    '04',
+    1,
+    undefined,
+    infoTips.create({ subject: 'Current segment placements', text: SEGMENT_PLACEMENTS_TIP }),
+  );
   // Wrapper box: text rows on top, optional toggle footer inside the same well.
   const placementsBox = createElement('div', [READOUT_BLOCK_CLASS, 'flex', 'flex-col', 'gap-0', '!p-0', 'overflow-hidden']);
   const placementsList = createElement('div', ['px-2', 'py-2', 'font-mono', 'text-[11px]', 'font-semibold', 'leading-relaxed', 'whitespace-pre-wrap', 'break-all'], '(none)');
@@ -508,6 +554,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     attachment: options.attachment,
     modeledSeam,
     lifetime,
+    infoTips,
     copyJson: (text) => void copyWithFeedback(text, copyFeedback, 'Water click readout copied.'),
   });
   waterInspector.setOpen(panelStartsOpen);
@@ -516,7 +563,7 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
   // --- WSE override: draw the Selected Creek Segment at a chosen elevation ---
   // Shown in both views. Lets you compare how observed and modeled polygons
   // look at the same water-surface elevation.
-  scrollHost.appendChild(buildWseOverrideTools(options.attachment, modeledSeam, lifetime));
+  scrollHost.appendChild(buildWseOverrideTools(options.attachment, modeledSeam, lifetime, infoTips));
 
   // --- Drainage-Area Ratio Transfer tools (modeled experience only) --------
   // Shown in both views: it is a camera tool, not a readout.
@@ -822,11 +869,21 @@ function buildWseOverrideTools(
   attachment: CreekVisualizationAttachment,
   modeledSeam: ModeledExperienceSeam | null,
   lifetime: ExperienceLifetime,
+  infoTips: DevToolsInfoTips,
 ): HTMLElement {
-  const section = buildSection('WSE override', '04b', 2, 'Selected Creek Segment · temporary');
+  const section = buildSection(
+    'WSE override',
+    '04b',
+    2,
+    'Selected Creek Segment · temporary',
+    infoTips.create({ subject: 'WSE override', text: WSE_OVERRIDE_TIP }),
+  );
   section.root.id = 'dev-tools-wse-override';
 
   const target = createElement('p', ['text-sm', 'font-bold'], 'Click creek water to select a segment.');
+  // The target's text is replaced on every render, so its "(i)" sits beside it, not inside it.
+  const targetRow = createElement('div', ['flex', 'items-baseline']);
+  targetRow.append(target, infoTips.create({ subject: 'Creek Segment', text: WSE_OVERRIDE_TARGET_TIP }));
   const row = createElement('div', ['flex', 'items-center', 'gap-1.5']);
   const input = createElement('input', [
     'w-24',
@@ -850,19 +907,25 @@ function buildWseOverrideTools(
   input.inputMode = 'decimal';
   input.setAttribute('aria-label', 'Override water-surface elevation, meters NAVD88');
   const unitLabel = createElement('span', [FIELD_LABEL_CLASS], 'm NAVD88');
+  // Its wording depends on the active method, so the "(i)" is swapped in render.
+  const unitTipHost = createElement('span', []);
+  const anchorUnitTip = infoTips.create({ subject: 'anchor WSE', text: WSE_OVERRIDE_ANCHOR_UNIT_TIP, source: 'model' });
+  const plainUnitTip = infoTips.create({ subject: 'm NAVD88', text: WSE_OVERRIDE_PLAIN_UNIT_TIP });
   const downButton = buildCopyButton('−');
   downButton.setAttribute('aria-label', `Lower by ${WSE_OVERRIDE_NUDGE_M} m`);
   const upButton = buildCopyButton('+');
   upButton.setAttribute('aria-label', `Raise by ${WSE_OVERRIDE_NUDGE_M} m`);
-  row.append(input, unitLabel, downButton, upButton);
+  row.append(input, unitLabel, unitTipHost, downButton, upButton);
 
   const actionRow = createElement('div', ['flex', 'items-center', 'gap-1.5']);
   const applyButton = buildCopyButton('Apply');
   const clearButton = buildCopyButton('Clear');
-  const status = createElement('p', ['ml-auto', 'text-[11px]', 'font-bold', 'text-hud-label']);
+  const status = createElement('p', ['text-[11px]', 'font-bold', 'text-hud-label']);
   status.setAttribute('aria-live', 'polite');
-  actionRow.append(applyButton, clearButton, status);
-  section.body.append(target, row, actionRow);
+  const statusGroup = createElement('div', ['ml-auto', 'flex', 'items-baseline']);
+  statusGroup.append(status, infoTips.create({ subject: 'WSE override status', text: WSE_OVERRIDE_STATUS_TIP }));
+  actionRow.append(applyButton, clearButton, statusGroup);
+  section.body.append(targetRow, row, actionRow);
   const displayFloorDescription = displayDepthFloorDescription();
   if (displayFloorDescription) {
     section.body.append(createElement('p', ['text-[11px]', 'font-bold', 'text-hud-label'], displayFloorDescription));
@@ -896,6 +959,12 @@ function buildWseOverrideTools(
     return attachment.observedWaterSurfaceElevationM;
   };
 
+  /** Only swaps when the wording changes, so a focused "(i)" keeps keyboard focus through the 500 ms refresh. */
+  const showUnitTip = (anchorWse: boolean): void => {
+    const wanted = anchorWse ? anchorUnitTip : plainUnitTip;
+    if (unitTipHost.firstChild !== wanted) unitTipHost.replaceChildren(wanted);
+  };
+
   const render = (): void => {
     const segmentId = selectedSegmentId();
     if (segmentId !== shownSegmentId) clearPinsExcept(segmentId);
@@ -904,6 +973,7 @@ function buildWseOverrideTools(
     clearButton.disabled = !enabled || !pins.has(segmentId ?? '');
     if (!segmentId) {
       target.textContent = 'Click creek water to select a segment.';
+      showUnitTip(false);
       shownSegmentId = null;
       return;
     }
@@ -916,6 +986,7 @@ function buildWseOverrideTools(
     const pinned = pins.get(segmentId);
     const anchorWse = pinIsAnchorWse();
     unitLabel.textContent = anchorWse ? 'm NAVD88 · anchor WSE' : 'm NAVD88';
+    showUnitTip(anchorWse);
     status.textContent =
       pinned === undefined ? 'Dataset value' : `Pinned at ${pinned.toFixed(2)} m${anchorWse ? ' (anchor WSE)' : ''}`;
   };
@@ -976,6 +1047,8 @@ interface WaterClickInspectorOptions {
   /** Null in the observed experience, which has no modeled segments to inspect. */
   modeledSeam: ModeledExperienceSeam | null;
   lifetime: ExperienceLifetime;
+  /** The HUD's shared "(i)" popover, for the tooltip on every row and heading. */
+  infoTips: DevToolsInfoTips;
   copyJson(text: string): void;
 }
 
@@ -994,6 +1067,14 @@ interface InspectedClick {
   point: ClickedPoint;
   segmentId: string;
   terrain: TerrainSample | null;
+  /** 1 m lidar under the click, from the dev server. */
+  lidar: LidarGroundLookup;
+}
+
+/** Ground sampled at one segment's anchor point: the browser terrain and the dev server's 1 m lidar. */
+interface AnchorGroundEntry {
+  terrain: TerrainSample | null;
+  lidar: LidarGroundLookup;
 }
 
 /** Same layer id the modeled and observed renderers give their water graphics. */
@@ -1034,8 +1115,14 @@ async function hitWaterLayer(
  * and the 4 Hz refresh only act while the panel is open. Modeled Datasets only.
  */
 function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterClickInspectorHandle {
-  const { view, attachment, modeledSeam, lifetime } = options;
-  const section = buildSection('Water click inspector', '04a', 1, 'Click water · heights m or ft NAVD88');
+  const { view, attachment, modeledSeam, lifetime, infoTips } = options;
+  const section = buildSection(
+    'Water click inspector',
+    '04a',
+    1,
+    'Click water · heights m or ft NAVD88',
+    infoTips.create({ subject: 'Water click inspector', text: WATER_CLICK_INSPECTOR_TIP }),
+  );
   section.root.id = 'dev-tools-water-click-inspector';
 
   if (!modeledSeam) {
@@ -1055,6 +1142,20 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
   status.setAttribute('aria-live', 'polite');
   const markerNote = createElement('p', ['text-[11px]', 'font-semibold', 'text-hud-label'], WATER_INSPECTOR_NO_SELECTION_TEXT);
   markerNote.id = 'dev-tools-water-anchor-note';
+  // Built once: the note's text is replaced on every refresh, which would drop "(i)" buttons placed inside it.
+  const markerLegend = createElement('p', ['hidden', 'flex', 'flex-wrap', 'items-center', 'gap-x-3', 'gap-y-1', 'text-[11px]', 'font-semibold', 'text-hud-label']);
+  markerLegend.id = 'dev-tools-water-anchor-legend';
+  const legendItem = (swatchClasses: string[], text: string, tip: string, source: InfoTipSource): HTMLElement => {
+    const item = createElement('span', ['inline-flex', 'items-center', 'gap-1']);
+    item.append(decorative(createElement('span', ['inline-block', 'size-2', 'shrink-0', ...swatchClasses])), text);
+    item.append(infoTips.create({ subject: text, text: tip, source }));
+    return item;
+  };
+  markerLegend.append(
+    legendItem(['rounded-full', 'bg-[#ff2d95]', 'ring-1', 'ring-white'], 'Pink dot: water drawn', ANCHOR_WATER_MARKER_TIP, 'drawn'),
+    legendItem(['rounded-full', 'bg-white', 'ring-1', 'ring-[#ff2d95]'], 'White dot: pipeline bed estimate', ANCHOR_BED_MARKER_TIP, 'model'),
+    legendItem(['rotate-45', 'bg-[#22c55e]', 'ring-1', 'ring-white'], 'Green diamond: 1 m lidar ground', ANCHOR_LIDAR_GROUND_MARKER_TIP, 'lidar-ground'),
+  );
   const unitToggle = buildSegmentedToggle('Units', 'Height unit', ['m', 'ft']);
   const unitRow = createElement('div', ['grid', 'grid-cols-[auto_1fr]', 'items-center', 'gap-x-3']);
   unitRow.append(unitToggle.labelEl, unitToggle.groupEl);
@@ -1062,7 +1163,7 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
   rowsHost.id = 'dev-tools-water-click-rows';
   const copyButton = buildCopyButton('Copy JSON');
   copyButton.disabled = true;
-  section.body.append(status, markerNote, unitRow, rowsHost, copyButton);
+  section.body.append(status, markerNote, markerLegend, unitRow, rowsHost, copyButton);
 
   let open = false;
   let unit: WaterLevelUnit = readWaterLevelUnit();
@@ -1072,44 +1173,107 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
   let renderedKey = '';
   /** Bumped when ground sampling lands, so the table redraws with the terrain rows. */
   let terrainVersion = 0;
+  /**
+   * Ground sampled at anchor points, by rounded position, so a redraw never asks the map or the dev server twice.
+   * Emptied on every click: the drawn terrain mesh refines as tiles load, so a click re-reads it (the lidar client
+   * keeps its own answers, so the dev server is not asked again).
+   */
+  const anchorGroundByKey = new Map<string, AnchorGroundEntry>();
+  const extentId = modeledSeam.extentId;
   /** Bumped on every click, so a slow hit test from an earlier click is dropped. */
   let clickToken = 0;
 
-  const renderRows = (rows: readonly { heading: string; rows: readonly InspectorRow[] }[]): void => {
+  /** One label · value line with its "(i)" tip. */
+  const buildRowLine = (item: InspectorRow): HTMLElement => {
+    const line = createElement('div', [
+      'flex',
+      'items-baseline',
+      'justify-between',
+      'gap-3',
+      'border-b',
+      'border-hud-well-edge',
+      'py-0.5',
+    ]);
+    const toneClasses =
+      item.tone === 'alert'
+        ? ['text-red-700', 'group-data-[hud-style=classic]:text-red-300']
+        : item.tone === 'muted'
+          ? ['text-hud-label']
+          : ['text-hud-ink'];
+    const labelEl = createElement('span', ['text-[11px]', 'font-semibold', 'text-hud-label'], item.label);
+    labelEl.append(infoTips.create({ subject: item.label, text: item.hint, source: item.source, focusKey: `row-${item.label}` }));
+    line.append(
+      labelEl,
+      createElement(
+        'span',
+        ['max-w-[58%]', 'shrink-0', 'break-words', 'text-right', 'font-mono', 'text-[11px]', 'font-bold', 'tabular-nums', ...toneClasses],
+        item.value,
+      ),
+    );
+    return line;
+  };
+
+  const renderRows = (groups: readonly InspectorGroup[]): void => {
+    // The rows are rebuilt on every change (unit, time, terrain), so keep a focused "(i)" focused.
+    const focusedTipKey = rowsHost.querySelector<HTMLElement>('[data-info-tip-focus-key]:focus')?.dataset.infoTipFocusKey;
+    infoTips.hide();
     rowsHost.replaceChildren(
-      ...rows.map((group) => {
+      ...groups.map((group, groupIndex) => {
         const block = createElement('div', ['flex', 'flex-col']);
-        block.appendChild(createElement('h4', [MICRO_LABEL_CLASS, 'mb-0.5'], group.heading));
-        for (const item of group.rows) {
-          const line = createElement('div', [
-            'flex',
-            'items-baseline',
-            'justify-between',
-            'gap-3',
-            'border-b',
-            'border-hud-well-edge',
-            'py-0.5',
-          ]);
-          line.title = item.hint;
-          const toneClasses =
-            item.tone === 'alert'
-              ? ['text-red-700', 'group-data-[hud-style=classic]:text-red-300']
-              : item.tone === 'muted'
-                ? ['text-hud-label']
-                : ['text-hud-ink'];
-          line.append(
-            createElement('span', ['text-[11px]', 'font-semibold', 'text-hud-label'], item.label),
-            createElement(
-              'span',
-              ['max-w-[58%]', 'break-words', 'text-right', 'font-mono', 'text-[11px]', 'font-bold', 'tabular-nums', ...toneClasses],
-              item.value,
-            ),
+        const headingRow = createElement('div', ['mb-0.5', 'flex', 'items-center']);
+        headingRow.append(
+          createElement('h4', [MICRO_LABEL_CLASS], group.heading),
+          infoTips.create({ subject: group.heading, text: group.hint, focusKey: `group-${groupIndex}` }),
+        );
+        block.appendChild(headingRow);
+        if (group.intro) block.appendChild(createElement('p', ['mb-1', 'text-[10px]', 'font-semibold', 'leading-snug', 'text-hud-label'], group.intro));
+        group.rows.forEach((item) => block.appendChild(buildRowLine(item)));
+        (group.subGroups ?? []).forEach((subGroup, subIndex) => {
+          const subBlock = createElement('div', ['mt-2', 'flex', 'flex-col', 'border-l-2', 'border-hud-well-edge', 'pl-2']);
+          const subHeading = createElement('div', ['mb-0.5', 'flex', 'items-center']);
+          subHeading.append(
+            createElement('h5', [MICRO_LABEL_CLASS], subGroup.heading),
+            infoTips.create({ subject: subGroup.heading, text: subGroup.hint, focusKey: `group-${groupIndex}-sub-${subIndex}` }),
           );
-          block.appendChild(line);
-        }
+          subBlock.appendChild(subHeading);
+          subGroup.rows.forEach((item) => subBlock.appendChild(buildRowLine(item)));
+          block.appendChild(subBlock);
+        });
         return block;
       }),
     );
+    if (focusedTipKey) {
+      // Not a selector string: row labels hold quotes and parentheses.
+      const sameTip = [...rowsHost.querySelectorAll<HTMLElement>('[data-info-tip-focus-key]')].find(
+        (button) => button.dataset.infoTipFocusKey === focusedTipKey,
+      );
+      sameTip?.focus({ preventScroll: true });
+    }
+  };
+
+  /**
+   * The ground sampled at an anchor point. The first call for a position starts the browser-terrain sample and the
+   * dev lidar lookup (only while the panel is open, since callers are the open panel's refresh); each answer redraws.
+   */
+  const anchorGroundAt = (lonLat: readonly [number, number]): AnchorGroundEntry => {
+    const key = lidarGroundKey(extentId, lonLat[0], lonLat[1]);
+    const known = anchorGroundByKey.get(key);
+    if (known) return known;
+    const entry: AnchorGroundEntry = { terrain: null, lidar: { status: 'pending' } };
+    anchorGroundByKey.set(key, entry);
+    const noteSampled = (): void => {
+      terrainVersion += 1;
+      refresh();
+    };
+    void sampleBrowserTerrain(view, lonLat[0], lonLat[1]).then((terrain) => {
+      entry.terrain = terrain;
+      noteSampled();
+    });
+    void lookUpLidarGround(extentId, lonLat[0], lonLat[1]).then((lidar) => {
+      entry.lidar = lidar;
+      noteSampled();
+    });
+    return entry;
   };
 
   /** The drawn water height at the anchor (falls back to the Time Series value when nothing is drawn). */
@@ -1119,7 +1283,14 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
     const drawn = sampleDrawnPolygon(inspection, lonLat[0], lonLat[1]);
     const waterSurfaceM = drawn?.waterSurfaceM ?? inspection.timeSeriesWseM;
     if (waterSurfaceM === null) return null;
-    return { longitude: lonLat[0], latitude: lonLat[1], waterSurfaceM, bedM: inspection.anchor.bedElevationM };
+    const lidar = anchorGroundAt(lonLat).lidar;
+    return {
+      longitude: lonLat[0],
+      latitude: lonLat[1],
+      waterSurfaceM,
+      bedM: inspection.anchor.bedElevationM,
+      groundM: lidar.status === 'found' ? (lidar.heights.bilinearM ?? lidar.heights.nearestCellM) : null,
+    };
   };
 
   const describeMarker = (inspection: ModeledSegmentInspection | null, position: WaterAnchorMarkerPosition | null): string => {
@@ -1132,19 +1303,20 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
       inspection.anchor.positionSource === 'ribbon-polygon-file'
         ? 'position saved with the ribbon'
         : 'position estimated at the chord midpoint';
-    return `Pink flag: segment ${inspection.segmentId}'s anchor point (${source}). The white dot is the Time Series' anchor bed height.`;
+    return `Pink flag: segment ${inspection.segmentId}'s anchor point (${source}).`;
   };
 
   /** The marker follows the Selected Creek Segment: it stays across time changes and goes when the selection clears. */
   const refreshMarker = (): void => {
     const selectedId = attachment.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null;
     const inspection = selectedId ? modeledSeam.inspectSegment(selectedId) : null;
-    const key = inspection ? inspection.revisionKey : 'none';
+    const key = inspection ? `${inspection.revisionKey}|${terrainVersion}` : 'none';
     if (key === markerKey) return;
     markerKey = key;
     const position = inspection ? markerPositionOf(inspection) : null;
     marker.show(position);
     markerNote.textContent = describeMarker(inspection, position);
+    markerLegend.classList.toggle('hidden', position === null);
   };
 
   const refreshReadout = (): void => {
@@ -1169,7 +1341,14 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
     const key = `${inspection.revisionKey}|${terrainVersion}|${unit}`;
     if (key === renderedKey) return;
     renderedKey = key;
-    latestReadout = buildWaterClickReadout(inspection, clicked.point, clicked.terrain);
+    const anchorLonLat = inspection.anchor.lonLat;
+    const anchorGround = anchorLonLat ? anchorGroundAt(anchorLonLat) : null;
+    const ground: GroundSamples = {
+      lidarAtClick: clicked.lidar,
+      anchorTerrain: anchorGround?.terrain ?? null,
+      anchorLidar: anchorGround?.lidar ?? { status: 'pending' },
+    };
+    latestReadout = buildWaterClickReadout(inspection, clicked.point, clicked.terrain, ground);
     copyButton.disabled = false;
     status.textContent =
       clicked.point.landedOn === 'water-polygon'
@@ -1222,8 +1401,16 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
             },
             segmentId,
             terrain: null,
+            lidar: { status: 'pending' },
           };
           clicked = thisClick;
+          anchorGroundByKey.clear();
+          void lookUpLidarGround(modeledSeam.extentId, point.longitude, point.latitude).then((lidar) => {
+            if (clicked !== thisClick) return;
+            thisClick.lidar = lidar;
+            terrainVersion += 1;
+            refresh();
+          });
           void sampleBrowserTerrain(view, point.longitude, point.latitude).then((terrain) => {
             if (clicked !== thisClick) return;
             thisClick.terrain = terrain;
@@ -1885,11 +2072,21 @@ function buildSection(
   indexLabel: string,
   tintIndex: 0 | 1 | 2,
   subtitle?: string,
+  /** An "(i)" button (`DevToolsInfoTips.create`) that explains the section; placed after its title. */
+  infoTip?: HTMLElement,
 ): { root: HTMLElement; body: HTMLElement } {
   const section = createElement('section', [BAND_CLASS, BAND_TINT_CLASSES[tintIndex]]);
   const headingRow = createElement('div', ['mb-2', 'flex', 'items-baseline', 'justify-between', 'gap-2']);
   const headingGroup = createElement('div', ['min-w-0']);
-  headingGroup.appendChild(createElement('h3', ['text-sm', 'font-extrabold'], label));
+  const title = createElement('h3', ['text-sm', 'font-extrabold'], label);
+  if (infoTip) {
+    // The button sits beside the heading, not inside it, so the heading's own name stays just its title.
+    const titleRow = createElement('div', ['flex', 'items-center']);
+    titleRow.append(title, infoTip);
+    headingGroup.appendChild(titleRow);
+  } else {
+    headingGroup.appendChild(title);
+  }
   if (subtitle) headingGroup.appendChild(createElement('p', [MICRO_LABEL_CLASS, 'mt-0.5'], subtitle));
   headingRow.appendChild(headingGroup);
   headingRow.appendChild(decorative(createElement('span', [MICRO_LABEL_CLASS, 'shrink-0'], indexLabel)));
@@ -2022,7 +2219,7 @@ function datasetAndTimeCapture(
     selectedTimeLocal: hasTime ? formatObservationTime(timeUtcMs) : null,
     wsePolygonMethod: wsePolygonMethod ? wsePolygonMethodKey(wsePolygonMethod) : null,
     wsePolygonMethodLabel: wsePolygonMethod?.label ?? null,
-    modeledWseVersionPath: wsePolygonMethod?.builtFromModeledWsePath ?? null,
+    modeledWseVersionPath: (wsePolygonMethod && drawnModeledWsePathOf(wsePolygonMethod)) ?? null,
   };
 }
 
@@ -2031,9 +2228,10 @@ function datasetAndTimeCapture(
 /**
  * 'Derived data products': pick the modeled WSE version (the Time Series) and
  * the WSE polygon version drawn on the map, live, with no URL parameter to
- * remember. A polygon version is only drawn with the Time Series it was built
- * from, so choosing a modeled WSE version draws its newest polygon version, and
- * the polygon select lists only the versions built from the chosen Time Series.
+ * remember. A polygon version is drawn with the Time Series it was built from,
+ * or with one solved on the same channel (a channel pairing: m4 and m5 on
+ * ribbon v2), so choosing a modeled WSE version draws its newest polygon
+ * version, and the polygon select lists only the versions that can draw it.
  * The readout underneath answers "do we have it?": what is saved, what is
  * drawn, and which registered methods have no output in this extent yet.
  */
@@ -2067,19 +2265,19 @@ function buildDerivedDataProductsTools(seam: ModeledExperienceSeam): HTMLElement
 
   const render = (status?: string): void => {
     const drawn = seam.wsePolygonMethod;
-    const drawnKey = wsePolygonMethodKey(drawn);
+    const drawnKey = derivedDataSelectionKey(drawn);
     const group = derivedDataGroupOf(groups, drawn);
     wseSelect.value = group?.key ?? '';
     polygonSelect.replaceChildren(
       ...(group?.polygonVersions ?? [drawn]).map((entry) => {
-        const option = createElement('option', [], `${entry.label} · v${entry.version}`);
-        option.value = wsePolygonMethodKey(entry);
+        const option = createElement('option', [], polygonVersionOptionLabel(entry));
+        option.value = derivedDataSelectionKey(entry);
         return option;
       }),
     );
     polygonSelect.value = drawnKey;
     description.textContent = [
-      `${drawn.label} (${drawnKey}, ${describeBrowserDrawing(drawn)}).`,
+      `${drawn.label} (${wsePolygonMethodKey(drawn)}, ${describeBrowserDrawing(drawn)}).`,
       group ? `Time Series: ${group.label}.` : null,
       drawn.description,
       status ?? null,
@@ -2109,7 +2307,7 @@ function buildDerivedDataProductsTools(seam: ModeledExperienceSeam): HTMLElement
   wseSelect.addEventListener('change', () => {
     const group = groups.find((candidate) => candidate.key === wseSelect.value);
     const target = group ? preferredPolygonVersionOf(group, seam.defaultWsePolygonMethodId) : null;
-    if (target) switchTo(wsePolygonMethodKey(target));
+    if (target) switchTo(derivedDataSelectionKey(target));
     else render();
   });
   polygonSelect.addEventListener('change', () => switchTo(polygonSelect.value));
@@ -2130,8 +2328,9 @@ function describeDerivedDataInventory(seam: ModeledExperienceSeam, drawnKey: str
     lines.push(`  Time Series: ${group.wseVersion ? '✓ saved' : '— not listed by this data source'}`);
     if (group.polygonVersions.length === 0) lines.push('  Polygons: ✗ none yet');
     for (const entry of group.polygonVersions) {
-      const drawnMark = wsePolygonMethodKey(entry) === drawnKey ? '  ◀ drawn' : '';
-      lines.push(`  Polygons: ✓ ${entry.label} v${entry.version}${drawnMark}`);
+      const drawnMark = derivedDataSelectionKey(entry) === drawnKey ? '  ◀ drawn' : '';
+      const pairing = entry.drawnWithModeledWsePath ? ` (built from ${entry.builtFromModeledWsePath ?? '?'}, same channel)` : '';
+      lines.push(`  Polygons: ✓ ${entry.label} v${entry.version}${pairing}${drawnMark}`);
     }
   }
   const { modeledWse, wsePolygon } = seam.notGeneratedDerivedData;
@@ -2141,6 +2340,12 @@ function describeDerivedDataInventory(seam: ModeledExperienceSeam, drawnKey: str
     for (const method of wsePolygon) lines.push(`  Polygons: ${method.label}`);
   }
   return lines.join('\n');
+}
+
+/** `Flowline channel ribbon · v2`, plus where the polygons came from on a channel pairing. */
+function polygonVersionOptionLabel(entry: WsePolygonMethodVersion): string {
+  const label = `${entry.label} · v${entry.version}`;
+  return entry.drawnWithModeledWsePath ? `${label} · channel of ${entry.builtFromModeledWsePath ?? '?'}` : label;
 }
 
 /** Select styled like the HUD's other wells. */
@@ -2172,8 +2377,13 @@ function buildHudSelect(id: string): HTMLSelectElement {
 function describeBrowserDrawing(method: WsePolygonMethodVersion): string {
   if (method.browserDrawing === 'sloped-between-junctions') return 'drawn sloped between junctions';
   if (drawsDepthBuckets(method.browserDrawing)) {
-    const source = method.builtFromModeledWsePath ? `, Time Series from ${method.builtFromModeledWsePath}` : '';
+    const timeSeriesPath = drawnModeledWsePathOf(method);
+    const pairing = method.drawnWithModeledWsePath ? ` on polygons built from ${method.builtFromModeledWsePath ?? '?'} (same channel)` : '';
+    const source = timeSeriesPath ? `, Time Series from ${timeSeriesPath}${pairing}` : '';
     if (method.browserDrawing === 'channel-ribbon-depth') return `drawn as a ribbon morphed to each station's water depth${source}; ${ribbonDisplayRuleDescription()}`;
+    if (method.browserDrawing === 'channel-ribbon-pool-filled') {
+      return `drawn as a ribbon on the water surface smoothed over a window scaled by its depth and pool-filled along the creek (deep water drowns bumps of the bed; pools behind steps stand level)${source}; ${ribbonDisplayRuleDescription(false)}; ${anchorClearanceRuleDescription()}`;
+    }
     return `drawn at a water depth above the creek bed${source}`;
   }
   return 'drawn flat';

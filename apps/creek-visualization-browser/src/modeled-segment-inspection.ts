@@ -4,14 +4,15 @@
 // 1988) and all depths and widths are meters. The inspector's math and its
 // readout rows live in water-click-readout.ts.
 //
-// Three drawings exist (WSE Polygon Generation Method `browserDrawing`):
-// - `channel-ribbon-depth` (flowline-channel-ribbon): a ribbon whose vertices sit at bed profile + depth + lift;
+// Four drawings exist (WSE Polygon Generation Method `browserDrawing`):
+// - `channel-ribbon-depth` (flowline-channel-ribbon v1): a ribbon whose vertices sit at bed profile + depth + lift;
+// - `channel-ribbon-pool-filled` (flowline-channel-ribbon v2): the same ribbon at the water surface pool-filled along the run;
 // - `bed-parallel-depth` (height-above-nearest-drainage-fill): ring vertices at bed reference + depth;
 // - `sloped-between-junctions` / `flat-at-bucket-minimum` (junction-sloped-terrain-fill): elevation buckets,
 //   water drawn at the bucket's elevation with no bed under it.
 
 import type Graphic from '@arcgis/core/Graphic';
-import { ribbonDisplayAdjustmentForSlope } from './channel-ribbon-surface';
+import { ribbonDisplayAdjustmentForSlope, ribbonRingJoinedFromSplit, ribbonRingJoinedFromStationIntervals } from './channel-ribbon-surface';
 import type { ElevationBucket, LonLat } from './creek-data-contract';
 import { localBedSlope } from './display-depth-floor';
 import {
@@ -21,7 +22,13 @@ import {
   type ChannelRibbonSummary,
   type LoadedTimeSeries,
 } from './modeled-water-data-store';
-import { drawsDepthBuckets, wsePolygonMethodKey, type WsePolygonMethodVersion } from './wse-polygon-generation-methods';
+import {
+  drawnModeledWsePathOf,
+  drawsChannelRibbonRungs,
+  drawsDepthBuckets,
+  wsePolygonMethodKey,
+  type WsePolygonMethodVersion,
+} from './wse-polygon-generation-methods';
 
 type Rings = number[][][];
 
@@ -42,7 +49,7 @@ export interface ModeledSegmentInspection {
   selectedTimeUtc: string;
   /** `flowline-channel-ribbon@v1` */
   wsePolygonMethod: string;
-  /** `m3-flowline-profile-manning-depth/v1`, or null for hosted data and older manifests. */
+  /** The Time Series drawn, e.g. `m3-flowline-profile-manning-depth/v1` (a channel pairing's: `m4-…/v1`); null for hosted data and older manifests. */
   modeledWseVersionPath: string | null;
   browserDrawing: WsePolygonMethodVersion['browserDrawing'];
   /** The Time Series value at the selected time: the number the chart shows. Null when none. */
@@ -54,6 +61,11 @@ export interface ModeledSegmentInspection {
     positionSource: AnchorPositionSource;
     /** Creek-bed elevation at the anchor. Null for methods that do not save one. */
     bedElevationM: number | null;
+    /**
+     * Ribbon v2 only: the drawn water height at the anchor station, read from the drawn ring (the station's two edge vertices
+     * share it). Null for other drawings, without a drawn ribbon, or when the ring does not match the saved station count.
+     */
+    waterDrawnAtStationM: number | null;
   };
   /** Depth above the bed from the Time Series, with no display exaggeration. Null for methods without depths. */
   trueDepth: { anchorM: number; upstreamJunctionM: number | null; downstreamJunctionM: number | null } | null;
@@ -78,9 +90,41 @@ export interface ModeledSegmentInspection {
     trueTopWidthAtAnchorM: number | null;
     /** Width drawn at the anchor at the drawn depth. */
     displayTopWidthAtAnchorM: number | null;
+    /**
+     * Ribbon v2 only: the anchor clearance lift that keeps the drawn water at the anchor at or above the browser ground plus the margin
+     * (channel-ribbon-surface.ts). Null when the lift is off, for pinned water, and for other drawings.
+     */
+    anchorClearance: {
+      /** This segment's own lift at its anchor, m (0 when the drawn water already clears the ground). */
+      liftM: number;
+      marginM: number;
+      /** The browser ground the lift cleared, as sampled when the water was drawn; null when the map had no ground there yet. */
+      browserGroundM: number | null;
+    } | null;
+    /**
+     * Ribbon v2 only: the station drape that keeps thin water between anchors at or above the browser ground plus the margin, and what
+     * it did on this segment (channel-ribbon-surface.ts). Null when the drape or the whole lift is off, for pinned water, and for other drawings.
+     */
+    stationDrape: {
+      /** Stations at least this deep (true depth) are not draped, m. */
+      depthCapM: number;
+      /** A draped station's lift fades to nothing over this distance along the creek on each side, m. */
+      taperM: number;
+      /** Stations the drape raised above the anchor blend. */
+      drapedStationCount: number;
+      /** Stations at or above the depth cap. */
+      cappedStationCount: number;
+      /** The largest clearance lift (anchor blend or drape) at any of the segment's stations, m. */
+      maxStationLiftM: number;
+    } | null;
   } | null;
-  /** The drawn polygon, z = drawn water surface at each vertex. Null when nothing is drawn. */
+  /**
+   * The drawn polygon, z = drawn water surface at each vertex. Null when nothing is drawn. A ribbon v2 drawn one quad per station
+   * interval, or as two rings split at its anchor station, is given back as the one ring it was cut from, with the same vertices.
+   */
   drawnRingsWgs84: Rings | null;
+  /** Ribbon v2 only: the clearance lift (anchor blend and station drape) at each station, upstream to downstream, m; null when off. */
+  drawnStationLiftsM: readonly number[] | null;
   /** Same shape as the drawn rings; z = polygon bottom. Null when the drawing has no per-vertex bottom. */
   bottomRingsWgs84: Rings | null;
   bottomKind: PolygonBottomKind | null;
@@ -107,7 +151,8 @@ export interface ModeledSegmentInspectionInput {
 export function buildModeledSegmentInspection(input: ModeledSegmentInspectionInput): ModeledSegmentInspection {
   const { segmentId, timeUtcMs, holdMs, method, series, buckets, ribbonSummary, graphic, chord } = input;
   const methodKey = wsePolygonMethodKey(method);
-  const isRibbon = method.browserDrawing === 'channel-ribbon-depth';
+  const isRibbon = drawsChannelRibbonRungs(method.browserDrawing);
+  const isPoolFilledRibbon = method.browserDrawing === 'channel-ribbon-pool-filled';
   const hasDepths = drawsDepthBuckets(method.browserDrawing);
 
   const timeSeriesWseM = series ? heldValueAt(series, segmentId, timeUtcMs, holdMs) : null;
@@ -146,7 +191,8 @@ export function buildModeledSegmentInspection(input: ModeledSegmentInspectionInp
   const drawnBucketMinElevationM = hasDepths ? null : finiteOrNull(attributes.bucketMinElevationM);
   const junctionWse = !hasDepths && series ? heldJunctionWaterSurfaceAt(series, segmentId, timeUtcMs, holdMs) : null;
 
-  const drawnRings = polygonRingsOf(drawnGraphic);
+  const drawnRings = joinedRibbonRing(polygonRingsOf(drawnGraphic), isPoolFilledRibbon ? ribbonSummary : null);
+  const drawnStationLiftsM = stationLiftsOf(attributes, ribbonSummary?.stationCount ?? null);
   const { bottomRings, bottomKind } = bottomOf(
     method,
     buckets,
@@ -167,7 +213,7 @@ export function buildModeledSegmentInspection(input: ModeledSegmentInspectionInp
 
   const ribbon = isRibbon
     ? (() => {
-        const rule = ribbonDisplayAdjustmentForSlope(bedSlope ?? 0);
+        const rule = ribbonDisplayAdjustmentForSlope(bedSlope ?? 0, !isPoolFilledRibbon);
         const rungDepthsM = (buckets ?? []).map((bucket) => bucket.minWaterSurfaceElevationM);
         return {
           appliedLiftM,
@@ -181,6 +227,8 @@ export function buildModeledSegmentInspection(input: ModeledSegmentInspectionInp
             ribbonSummary && drawnDepth
               ? valueAtDepth(rungDepthsM, ribbonSummary.displayTopWidthAtAnchorM, drawnDepth.anchorM)
               : null,
+          anchorClearance: anchorClearanceOf(attributes),
+          stationDrape: stationDrapeOf(attributes, drawnStationLiftsM),
         };
       })()
     : null;
@@ -189,11 +237,16 @@ export function buildModeledSegmentInspection(input: ModeledSegmentInspectionInp
     segmentId,
     selectedTimeUtc: new Date(timeUtcMs).toISOString(),
     wsePolygonMethod: methodKey,
-    modeledWseVersionPath: method.builtFromModeledWsePath ?? null,
+    modeledWseVersionPath: drawnModeledWsePathOf(method) ?? null,
     browserDrawing: method.browserDrawing,
     timeSeriesWseM,
     pinnedWseM: input.pinnedWseM,
-    anchor: { lonLat: anchorLonLat, positionSource, bedElevationM: anchorBedM },
+    anchor: {
+      lonLat: anchorLonLat,
+      positionSource,
+      bedElevationM: anchorBedM,
+      waterDrawnAtStationM: isPoolFilledRibbon ? drawnStationHeight(drawnRings, ribbonSummary) : null,
+    },
     trueDepth,
     drawnDepth,
     junctionWse,
@@ -203,6 +256,7 @@ export function buildModeledSegmentInspection(input: ModeledSegmentInspectionInp
     junctionBedDownstreamM,
     ribbon,
     drawnRingsWgs84: drawnRings,
+    drawnStationLiftsM,
     bottomRingsWgs84: bottomRings,
     bottomKind,
     revisionKey: [
@@ -216,6 +270,60 @@ export function buildModeledSegmentInspection(input: ModeledSegmentInspectionInp
       ribbonSummary ? 'ribbon-file' : 'no-ribbon-file',
     ].join('|'),
   };
+}
+
+/**
+ * The ribbon's one ring when the drawn polygon is its quads, one per station interval, or its two halves split at the anchor station;
+ * the rings as drawn otherwise.
+ */
+function joinedRibbonRing(drawnRings: Rings | null, ribbonSummary: ChannelRibbonSummary | null): Rings | null {
+  if (!drawnRings || !ribbonSummary) return drawnRings;
+  const joined =
+    ribbonRingJoinedFromStationIntervals(drawnRings, ribbonSummary.stationCount) ??
+    (ribbonSummary.anchorStation === null ? null : ribbonRingJoinedFromSplit(drawnRings, ribbonSummary.anchorStation, ribbonSummary.stationCount));
+  return joined ? [joined] : drawnRings;
+}
+
+/** The anchor clearance attributes the renderer wrote on ribbon v2 water; null when the lift was not applied. */
+function anchorClearanceOf(attributes: Record<string, unknown>): NonNullable<ModeledSegmentInspection['ribbon']>['anchorClearance'] {
+  const liftM = finiteOrNull(attributes.anchorClearanceLiftM);
+  const marginM = finiteOrNull(attributes.anchorClearanceMarginM);
+  if (liftM === null || marginM === null) return null;
+  return { liftM, marginM, browserGroundM: finiteOrNull(attributes.anchorClearanceGroundM) };
+}
+
+/** The clearance lift the renderer wrote for each station of ribbon v2 water; null when off or not one value per saved station. */
+function stationLiftsOf(attributes: Record<string, unknown>, stationCount: number | null): number[] | null {
+  const lifts = attributes.stationClearanceLiftsM;
+  if (!Array.isArray(lifts) || lifts.length !== stationCount || !lifts.every((liftM) => finiteOrNull(liftM) !== null)) return null;
+  return lifts as number[];
+}
+
+/** The station drape the renderer wrote on ribbon v2 water, with the largest station lift; null when the drape was not applied. */
+function stationDrapeOf(
+  attributes: Record<string, unknown>,
+  stationLiftsM: readonly number[] | null,
+): NonNullable<ModeledSegmentInspection['ribbon']>['stationDrape'] {
+  const drape = attributes.stationDrape as Record<string, unknown> | null | undefined;
+  const depthCapM = finiteOrNull(drape?.depthCapM);
+  const taperM = finiteOrNull(drape?.taperM);
+  if (!drape || depthCapM === null || taperM === null) return null;
+  return {
+    depthCapM,
+    taperM,
+    drapedStationCount: finiteOrNull(drape.drapedStationCount) ?? 0,
+    cappedStationCount: finiteOrNull(drape.cappedStationCount) ?? 0,
+    maxStationLiftM: stationLiftsM && stationLiftsM.length > 0 ? Math.max(...stationLiftsM) : 0,
+  };
+}
+
+/** The z of the anchor station's left edge vertex in the drawn ribbon ring (left edge stations 0…n−1 come first). */
+function drawnStationHeight(drawnRings: Rings | null, ribbonSummary: ChannelRibbonSummary | null): number | null {
+  const ring = drawnRings?.[0];
+  if (!ring || !ribbonSummary || ribbonSummary.anchorStation === null) return null;
+  // A closed drawn ring repeats its first vertex: 2n + 1 vertices for n stations.
+  if (ring.length !== 2 * ribbonSummary.stationCount + 1) return null;
+  return finiteOrNull(ring[ribbonSummary.anchorStation]?.[2]);
 }
 
 /** The polygon's rings (lon, lat, z), or null when the graphic has none. */
@@ -244,7 +352,7 @@ function bottomOf(
   if (!drawsDepthBuckets(method.browserDrawing)) {
     return { bottomRings: null, bottomKind: drawnBucketMinElevationM === null ? null : 'bucket-minimum-elevation' };
   }
-  const isRibbon = method.browserDrawing === 'channel-ribbon-depth';
+  const isRibbon = drawsChannelRibbonRungs(method.browserDrawing);
   const source = isRibbon
     ? buckets?.[0]
     : buckets?.find((bucket) => bucket.minWaterSurfaceElevationM === drawnBucketMinDepthM);

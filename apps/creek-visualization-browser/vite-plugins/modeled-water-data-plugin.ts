@@ -22,7 +22,9 @@
 // Each listed version also names the modeled WSE version folder its polygons
 // were built from (`builtFromModeledWsePath`), so the browser can read the
 // matching Time Series. The same file lists every saved modeled WSE version
-// (`modeledWseVersions`, from the Stage 3 manifests) and the registered
+// (`modeledWseVersions`, from the Stage 3 manifests, each with the version
+// whose channel it was solved on, `channelFromModeledWsePath`, so polygons
+// built from that version can also draw it) and the registered
 // methods with no saved output (`notGenerated`), for the dev tools' Derived
 // data products section.
 
@@ -41,7 +43,10 @@ import {
   DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
   WSE_POLYGON_GENERATION_METHODS,
 } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/wse-polygon-generation-methods/wse-polygon-generation-method-registry.ts';
-import { listSavedModeledWseVersions } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-outputs.ts';
+import {
+  listSavedModeledWseVersions,
+  type SavedModeledWseVersion,
+} from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-outputs.ts';
 import { modeledWseVersionLabel } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
 import { MODELED_WSE_DERIVATION_METHODS } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
 
@@ -244,6 +249,12 @@ interface SavedModeledWseVersionListEntry {
   description: string;
   /** Relative to `03-time-series/`. */
   path: string;
+  /**
+   * The saved version (relative to `03-time-series/`) whose channel this version was solved on, e.g.
+   * `m3-flowline-profile-manning-depth/v2` for m4 and m5: polygons built from it can draw this Time Series.
+   * Null when the version names none, or that version is no longer saved with the fingerprint it recorded.
+   */
+  channelFromModeledWsePath: string | null;
 }
 
 interface WsePolygonMethodListFile {
@@ -296,6 +307,7 @@ async function listWsePolygonMethods(extentRoot: string): Promise<WsePolygonMeth
       label: entry.method.label,
       description: entry.method.description,
       path: entry.relativePath,
+      channelFromModeledWsePath: channelSourcePath(entry, savedModeledWse),
     })),
     notGenerated: {
       modeledWse: MODELED_WSE_DERIVATION_METHODS.filter((method) => !savedModeledWseMethodIds.has(method.id)).map(
@@ -306,6 +318,14 @@ async function listWsePolygonMethods(extentRoot: string): Promise<WsePolygonMeth
       ),
     },
   };
+}
+
+/** The saved version whose channel `entry` was solved on, while that version still has the fingerprint `entry` recorded. */
+function channelSourcePath(entry: SavedModeledWseVersion, saved: readonly SavedModeledWseVersion[]): string | null {
+  const source = entry.channelFromModeledWseVersion;
+  if (!source) return null;
+  const sourceVersion = saved.find((candidate) => candidate.methodId === source.methodId && candidate.version === source.version);
+  return sourceVersion?.method.methodSha256 === source.methodSha256 ? sourceVersion.relativePath : null;
 }
 
 /** `{ methodId, version }` from a Stage 4 manifest → `<methodId>/v<version>`, the Stage 3 version folder. */

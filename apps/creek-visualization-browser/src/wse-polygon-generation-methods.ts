@@ -3,6 +3,9 @@
 // polygons drawn for each Creek Segment). The dev middleware lists every
 // saved method version per extent in `wse-polygon-methods.json`; the page
 // picks one from `?wsePolygonMethod=<method-id>@v<version>` or the default.
+// `&modeledWse=<method-id>@v<version>` draws those polygons with another
+// Time Series solved on the same channel (a channel pairing, e.g. m4 on
+// flowline-channel-ribbon v2, which was built from m3 v2).
 
 import { PublishedCreekDataError } from './creek-data-contract';
 
@@ -10,6 +13,8 @@ import { PublishedCreekDataError } from './creek-data-contract';
 export const WSE_POLYGON_METHOD_QUERY_PARAM = 'wsePolygonMethod';
 /** Dev-middleware file listing the saved method versions of one extent. */
 export const WSE_POLYGON_METHODS_PATH = 'wse-polygon-methods.json';
+/** `?modeledWse=m4-flowline-profile-variable-power-depth@v1`: the Time Series to draw, when not the one the polygons were built from. */
+export const MODELED_WSE_QUERY_PARAM = 'modeledWse';
 
 /**
  * How the method's polygons are drawn: lifted between the junction WSEs, flat
@@ -23,11 +28,19 @@ export type WsePolygonBrowserDrawing =
   | 'bed-parallel-depth'
   // `channel-ribbon-depth`: depth buckets like `bed-parallel-depth`, but they are vertex-aligned morph targets
   // of one ribbon that the browser slides between at each station's own depth (channel-ribbon-surface.ts).
-  | 'channel-ribbon-depth';
+  | 'channel-ribbon-depth'
+  // `channel-ribbon-pool-filled`: the same ribbon rungs, drawn on the water surface pool-filled along the run
+  // (m3's pool-filled-water-surface.ts, the rule its Time Series values follow).
+  | 'channel-ribbon-pool-filled';
 
 /** True for the drawings whose buckets are water depths and whose ring vertices carry a bed elevation. */
 export function drawsDepthBuckets(browserDrawing: WsePolygonBrowserDrawing): boolean {
-  return browserDrawing === 'bed-parallel-depth' || browserDrawing === 'channel-ribbon-depth';
+  return browserDrawing === 'bed-parallel-depth' || drawsChannelRibbonRungs(browserDrawing);
+}
+
+/** True for the two channel ribbon drawings (vertex-aligned depth rungs with a `channelRibbon` summary). */
+export function drawsChannelRibbonRungs(browserDrawing: WsePolygonBrowserDrawing): boolean {
+  return browserDrawing === 'channel-ribbon-depth' || browserDrawing === 'channel-ribbon-pool-filled';
 }
 
 export interface WsePolygonMethodVersion {
@@ -44,6 +57,12 @@ export interface WsePolygonMethodVersion {
    * Local dev middleware only; absent for hosted data and older manifests.
    */
   builtFromModeledWsePath?: string;
+  /**
+   * Set only on a channel pairing: the Time Series drawn with these polygons
+   * (relative to `03-time-series/`), solved on the channel of the version they
+   * were built from, e.g. m4 drawn on ribbon v2 built from m3 v2.
+   */
+  drawnWithModeledWsePath?: string;
 }
 
 /**
@@ -59,6 +78,11 @@ export interface SavedModeledWseVersion {
   description: string;
   /** Relative to `03-time-series/`, e.g. `m2-multi-section-manning-depth/v1`. */
   path: string;
+  /**
+   * The saved version whose channel this one was solved on (m4 and m5: m3 v2),
+   * so polygons built from it can draw this Time Series too.
+   */
+  channelFromModeledWsePath?: string;
 }
 
 /** A registered method with no saved output for this extent: the answer to "do we have it yet?". */
@@ -73,12 +97,37 @@ export interface WsePolygonMethodList {
   versions: readonly WsePolygonMethodVersion[];
   /** Saved modeled WSE versions, sorted by method id, then version. Empty for hosted data. */
   modeledWseVersions: readonly SavedModeledWseVersion[];
+  /** Each polygon version paired with every Time Series solved on the channel it was built from. */
+  channelPairings: readonly WsePolygonMethodVersion[];
   notGenerated: NotGeneratedDerivedData;
 }
 
 /** `junction-sloped-terrain-fill@v1`: the URL and dev tools form of one method version. */
 export function wsePolygonMethodKey(entry: Pick<WsePolygonMethodVersion, 'methodId' | 'version'>): string {
   return `${entry.methodId}@v${entry.version}`;
+}
+
+/** The Time Series a polygon version is drawn with: a channel pairing's, else the one it was built from. */
+export function drawnModeledWsePathOf(
+  method: Pick<WsePolygonMethodVersion, 'builtFromModeledWsePath' | 'drawnWithModeledWsePath'>,
+): string | undefined {
+  return method.drawnWithModeledWsePath ?? method.builtFromModeledWsePath;
+}
+
+/** `m4-flowline-profile-variable-power-depth/v1` → `m4-flowline-profile-variable-power-depth@v1`, the `modeledWse` URL form. */
+export function modeledWseKeyOfPath(modeledWsePath: string): string {
+  return modeledWsePath.replace(/\/v(\d+)$/, '@v$1');
+}
+
+/**
+ * The dev tools and `setWsePolygonMethod` identity of a drawn pairing: the
+ * polygon key, plus `+<modeledWse key>` for a channel pairing.
+ */
+export function derivedDataSelectionKey(
+  entry: Pick<WsePolygonMethodVersion, 'methodId' | 'version' | 'drawnWithModeledWsePath'>,
+): string {
+  const polygonKey = wsePolygonMethodKey(entry);
+  return entry.drawnWithModeledWsePath ? `${polygonKey}+${modeledWseKeyOfPath(entry.drawnWithModeledWsePath)}` : polygonKey;
 }
 
 export function readWsePolygonMethodList(value: unknown): WsePolygonMethodList {
@@ -106,12 +155,30 @@ export function readWsePolygonMethodList(value: unknown): WsePolygonMethodList {
       ...(builtFromModeledWsePath ? { builtFromModeledWsePath } : {}),
     } satisfies WsePolygonMethodVersion;
   });
+  const modeledWseVersions = readSavedModeledWseVersions(record.modeledWseVersions);
   return {
     defaultMethodId: typeof record.defaultMethodId === 'string' ? record.defaultMethodId : '',
     versions,
-    modeledWseVersions: readSavedModeledWseVersions(record.modeledWseVersions),
+    modeledWseVersions,
+    channelPairings: channelPairingsOf(versions, modeledWseVersions),
     notGenerated: readNotGenerated(record.notGenerated),
   };
+}
+
+/**
+ * A polygon version's geometry depends only on the channel it was built on,
+ * so it can draw any Time Series solved on that channel. The middleware lists
+ * the channel only while its source version keeps the fingerprint recorded.
+ */
+function channelPairingsOf(
+  versions: readonly WsePolygonMethodVersion[],
+  modeledWseVersions: readonly SavedModeledWseVersion[],
+): WsePolygonMethodVersion[] {
+  return modeledWseVersions.flatMap((wseVersion) =>
+    versions
+      .filter((entry) => wseVersion.channelFromModeledWsePath && entry.builtFromModeledWsePath === wseVersion.channelFromModeledWsePath)
+      .map((entry) => ({ ...entry, drawnWithModeledWsePath: wseVersion.path })),
+  );
 }
 
 /** Optional in the file: older middleware output and hosted data carry none. */
@@ -128,6 +195,10 @@ function readSavedModeledWseVersions(value: unknown): SavedModeledWseVersion[] {
     ) {
       return [];
     }
+    const channelFromModeledWsePath =
+      typeof entry.channelFromModeledWsePath === 'string' && entry.channelFromModeledWsePath.length > 0
+        ? entry.channelFromModeledWsePath
+        : undefined;
     return [
       {
         methodId,
@@ -136,6 +207,7 @@ function readSavedModeledWseVersions(value: unknown): SavedModeledWseVersion[] {
         label: typeof entry.label === 'string' ? entry.label : methodId,
         description: typeof entry.description === 'string' ? entry.description : '',
         path,
+        ...(channelFromModeledWsePath ? { channelFromModeledWsePath } : {}),
       },
     ];
   });
@@ -171,7 +243,11 @@ export interface DerivedDataGroup {
   /** Short select label, e.g. `m2-v1 · Multi-section Manning depth`. */
   label: string;
   wseVersion: SavedModeledWseVersion | null;
-  /** Sorted by method id, then version. Empty when only the Time Series exists. */
+  /**
+   * Sorted by method id, then version; the polygon versions built from this
+   * Time Series, then the channel pairings that draw it. Empty when only the
+   * Time Series exists.
+   */
   polygonVersions: readonly WsePolygonMethodVersion[];
 }
 
@@ -181,7 +257,10 @@ export function groupDerivedData(list: WsePolygonMethodList): DerivedDataGroup[]
     key: wseVersion.path,
     label: `${wseVersion.versionLabel} · ${wseVersion.label}`,
     wseVersion,
-    polygonVersions: list.versions.filter((entry) => entry.builtFromModeledWsePath === wseVersion.path),
+    polygonVersions: [
+      ...list.versions.filter((entry) => entry.builtFromModeledWsePath === wseVersion.path),
+      ...list.channelPairings.filter((entry) => entry.drawnWithModeledWsePath === wseVersion.path),
+    ],
   }));
   const covered = new Set(groups.map((group) => group.key));
   for (const entry of list.versions) {
@@ -201,9 +280,9 @@ export function groupDerivedData(list: WsePolygonMethodList): DerivedDataGroup[]
 /** The group whose polygons a method version belongs to. */
 export function derivedDataGroupOf(
   groups: readonly DerivedDataGroup[],
-  method: Pick<WsePolygonMethodVersion, 'builtFromModeledWsePath'>,
+  method: Pick<WsePolygonMethodVersion, 'builtFromModeledWsePath' | 'drawnWithModeledWsePath'>,
 ): DerivedDataGroup | null {
-  return groups.find((group) => group.key === (method.builtFromModeledWsePath ?? '')) ?? null;
+  return groups.find((group) => group.key === (drawnModeledWsePathOf(method) ?? '')) ?? null;
 }
 
 /**
@@ -221,9 +300,30 @@ export function preferredPolygonVersionOf(
  * The version a request names: `<id>@v<n>` exactly, `<id>` as its newest
  * version. Without a request, or when the request matches nothing, the default
  * method's newest version (or the newest of any method when the default has
- * none). `unmatchedRequest` reports a request that fell back.
+ * none). `modeledWseRequest` (`<id>@v<n>`) then picks that version's channel
+ * pairing, or keeps its own Time Series when it names that one.
+ * `unmatchedRequest` reports a request that fell back.
  */
 export function resolveWsePolygonMethod(
+  list: WsePolygonMethodList,
+  request: string | null,
+  modeledWseRequest: string | null = null,
+): { selected: WsePolygonMethodVersion; unmatchedRequest: string | null } {
+  const polygon = resolvePolygonVersion(list, request);
+  if (!modeledWseRequest || polygon.unmatchedRequest) return polygon;
+  const own = polygon.selected.builtFromModeledWsePath;
+  if (own && modeledWseKeyOfPath(own) === modeledWseRequest) return polygon;
+  const pairing = list.channelPairings.find(
+    (entry) =>
+      wsePolygonMethodKey(entry) === wsePolygonMethodKey(polygon.selected) &&
+      modeledWseKeyOfPath(entry.drawnWithModeledWsePath ?? '') === modeledWseRequest,
+  );
+  return pairing
+    ? { selected: pairing, unmatchedRequest: null }
+    : { selected: polygon.selected, unmatchedRequest: `${request ?? wsePolygonMethodKey(polygon.selected)} with ${modeledWseRequest}` };
+}
+
+function resolvePolygonVersion(
   list: WsePolygonMethodList,
   request: string | null,
 ): { selected: WsePolygonMethodVersion; unmatchedRequest: string | null } {
@@ -243,7 +343,14 @@ export function resolveWsePolygonMethod(
 
 /** Unknown or missing values keep the original default, `sloped-between-junctions`. */
 function readBrowserDrawing(value: unknown): WsePolygonBrowserDrawing {
-  if (value === 'flat-at-bucket-minimum' || value === 'bed-parallel-depth' || value === 'channel-ribbon-depth') return value;
+  if (
+    value === 'flat-at-bucket-minimum' ||
+    value === 'bed-parallel-depth' ||
+    value === 'channel-ribbon-depth' ||
+    value === 'channel-ribbon-pool-filled'
+  ) {
+    return value;
+  }
   return 'sloped-between-junctions';
 }
 

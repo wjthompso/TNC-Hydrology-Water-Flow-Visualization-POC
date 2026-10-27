@@ -2,13 +2,15 @@ import type { AdjacentCreekSegments } from '../../../creek-segment-adjacency.ts'
 import type { NetworkCreekSegment } from '../../creek-segment-network.ts';
 import type { CrossSectionRecord, DownstreamVertexDirection } from '../../stage-file-formats.ts';
 import type { LidarWindow } from './lidar-mosaic.ts';
-import { CHANNEL_PROFILE } from './method-config.ts';
-import { fillGaps, gaussianSmooth, isotonicRegression, medianFilter } from './series-smoothing.ts';
+import { ANCHOR_POSITION_ALONG_SEGMENT, CHANNEL_PROFILE } from './method-config.ts';
+import { fillGaps, gaussianSmooth } from './series-smoothing.ts';
 
 /**
  * The channel of one run of joined Creek Segments of m3: a continuous, smooth centerline fitted to the valley bottom of the 1 m lidar,
- * a smooth downstream-monotone bed profile along it, and the lateral ground profile at any station. Everything is in flow order:
- * station 0 is the upstream end, offsets are positive to the LEFT of the flow direction.
+ * the creek's lowest point across every station of it (the thalweg) with the raw lidar there as the bed, and the lateral ground profile
+ * at any station. Everything is in flow order: station 0 is the upstream end, offsets are positive to the LEFT of the flow direction.
+ * The centerline only orients the cross-sections; the bed is never smoothed, so steps and pools stay in it (Will: "keep the true shape
+ * of the V"). Only tall, short barriers (road and railroad fills whose culverts the bare-earth lidar cannot see) are breached.
  *
  * The centerline is the TNC flowline, smoothed, then moved sideways at every station to the valley bottom by a dynamic-programming fit
  * (lowest ground with a penalty on sideways bends), so it always moves downstream and cannot loop. A first version traced a least-cost
@@ -122,10 +124,20 @@ export interface RunChannel {
   normalY: Float64Array;
   /** Strongest heading change per meter (1/m, positive = turning left) within `curvatureWindowM` of every station; used to keep inner-bend edges from crossing. */
   curvature: Float64Array;
-  /** The channel floor at every station (`localLowestGround`), median-filtered: the local thalweg (m NAVD88). */
+  /** Offset of the creek's lowest point across every station from the centerline (`localLowestGround`), m: the station's position is there. */
+  thalwegOffsetM: Float64Array;
+  /** Bilinear lidar at that lowest point, unsmoothed (m NAVD88). */
   thalwegM: Float64Array;
-  /** The bed profile: `thalwegM` smoothed and made monotone downstream within `maximumDeviationM` of the smoothed thalweg (m NAVD88). */
+  /** The bed the water stands on: `thalwegM`, lowered along the breach line where a barrier is breached (m NAVD88). */
   bedM: Float64Array;
+  /** Barriers breached in `bedM`, in the order they were breached. */
+  breaches: BarrierBreach[];
+  /** 1 where the valley-bottom fit ended at the edge of its search width at this station (the nearest fitted flowline station). */
+  atSearchEdge: Uint8Array;
+  /** Stations whose lowest point was followed downhill all the way to `descentLimitM` from the centerline. */
+  stationsAtDescentLimit: number;
+  /** Stations without lidar near the centerline; their bed is interpolated from the neighbours at offset 0. */
+  stationsWithoutLidar: number;
   /** Station index of each segment boundary: segment k spans boundaries[k] to boundaries[k + 1]. Length segments + 1. */
   boundaries: number[];
   /** Stations whose valley-bottom fit ended at the edge of the search width (the flowline may be farther than that from the channel). */
@@ -145,7 +157,7 @@ export interface RunChannel {
 function valleyBottomOffsets(
   window: LidarWindow,
   base: { x: Float64Array; y: Float64Array; normalX: Float64Array; normalY: Float64Array; curvature: Float64Array },
-): { offsets: Float64Array; atSearchEdge: number } {
+): { offsets: Float64Array; atSearchEdge: Uint8Array } {
   const fit = PARAMETERS.valleyBottomFit;
   const count = base.x.length;
   const steps = Math.round(fit.searchHalfWidthM / fit.lateralStepM);
@@ -193,10 +205,10 @@ function valleyBottomOffsets(
   let state = 0;
   for (let candidate = 1; candidate < states; candidate += 1) if ((total[candidate] as number) < (total[state] as number)) state = candidate;
   const offsets = new Float64Array(count);
-  let atSearchEdge = 0;
+  const atSearchEdge = new Uint8Array(count);
   for (let station = count - 1; station >= 0; station -= 1) {
     offsets[station] = offsetOf(state);
-    if (state === 0 || state === states - 1) atSearchEdge += 1;
+    if (state === 0 || state === states - 1) atSearchEdge[station] = 1;
     if (station > 0) state = previousState[station * states + state] as number;
   }
   return { offsets, atSearchEdge };
@@ -268,6 +280,13 @@ export function buildRunChannel(segments: readonly OrientedSegment[], window: Li
   }
   const stations = resamplePolyline(fitted, PARAMETERS.tableSpacingM);
   const stationCount = stations.length;
+  // The fitted line is point for point the dense flowline it was moved from, so a station's search-edge flag is that of the dense point nearest it along the line.
+  const stationAtSearchEdge = new Uint8Array(stationCount);
+  for (let station = 0, dense = 0; station < stationCount; station += 1) {
+    const stationArcM = (station / Math.max(1, stationCount - 1)) * (fittedArcM[fittedArcM.length - 1] as number);
+    while (dense < fittedArcM.length - 1 && Math.abs((fittedArcM[dense + 1] as number) - stationArcM) <= Math.abs((fittedArcM[dense] as number) - stationArcM)) dense += 1;
+    stationAtSearchEdge[station] = atSearchEdge[dense] as number;
+  }
   const x = Float64Array.from(stations, (point) => point.x);
   const y = Float64Array.from(stations, (point) => point.y);
   const lengthM = fittedArcM[fittedArcM.length - 1] as number;
@@ -284,30 +303,36 @@ export function buildRunChannel(segments: readonly OrientedSegment[], window: Li
     normalX,
     normalY,
     curvature,
+    thalwegOffsetM: new Float64Array(stationCount),
     thalwegM: new Float64Array(stationCount),
     bedM: new Float64Array(stationCount),
+    breaches: [],
+    atSearchEdge: stationAtSearchEdge,
+    stationsAtDescentLimit: 0,
+    stationsWithoutLidar: 0,
     boundaries: [],
-    stationsAtSearchEdge: atSearchEdge,
+    stationsAtSearchEdge: stationAtSearchEdge.reduce((sum, flag) => sum + flag, 0),
     meanOffsetFromFlowlineM: smoothOffsets.reduce((sum, offset) => sum + Math.abs(offset), 0) / smoothOffsets.length,
     groundAt: (index, offsetM) => window.bilinear((x[index] as number) + (normalX[index] as number) * offsetM, (y[index] as number) + (normalY[index] as number) * offsetM),
   };
 
-  // 3. Thalweg and bed profile.
+  // 3. Thalweg (the lowest point across every station) and the bed: the raw lidar there, breached only through tall, short barriers.
   const raw = new Float64Array(stationCount).fill(Number.NaN);
-  const { medianWindowM, profileSmoothingSigmaM } = PARAMETERS.bed;
   for (let index = 0; index < stationCount; index += 1) {
     const lowest = localLowestGround(channel, index);
-    if (lowest) raw[index] = lowest.groundM;
+    if (!lowest) {
+      channel.stationsWithoutLidar += 1;
+      continue;
+    }
+    raw[index] = lowest.groundM;
+    channel.thalwegOffsetM[index] = lowest.offsetM;
+    if (Math.abs(lowest.offsetM) >= PARAMETERS.bed.descentLimitM - 1e-9) channel.stationsAtDescentLimit += 1;
   }
   if (!fillGaps(raw)) throw new Error(`Creek Segment run starting at ${segments[0]?.segmentId ?? '?'} has no lidar under its channel.`);
-  channel.thalwegM.set(medianFilter(raw, Math.round(medianWindowM / spacingM)));
-  // Monotone where the ground allows it within `maximumDeviationM`; across a road fill or a lidar pit the profile stays that close
-  // to the ground instead of floating a pool above it or burying meters of creek under it.
-  const smoothed = gaussianSmooth(channel.thalwegM, profileSmoothingSigmaM / spacingM);
-  const monotone = isotonicRegression(smoothed, true);
-  const { maximumDeviationM, finalSmoothingSigmaM } = PARAMETERS.bed;
-  const clamped = monotone.map((value, index) => Math.min((smoothed[index] as number) + maximumDeviationM, Math.max((smoothed[index] as number) - maximumDeviationM, value)));
-  channel.bedM.set(gaussianSmooth(clamped, finalSmoothingSigmaM / spacingM));
+  channel.thalwegM.set(raw);
+  const breached = breachBarriers(raw, spacingM);
+  channel.bedM.set(breached.bedM);
+  channel.breaches = breached.breaches;
 
   // 4. Segment boundaries: the station at the same fraction of the fitted line's length as the shared vertex is of the flowline's,
   // through the dense station it was moved from.
@@ -349,6 +374,128 @@ export function localLowestGround(channel: RunChannel, station: number): { offse
   }
 }
 
+/** A barrier breached in the bed: a stretch where the raw bed would hold a pool at least `minimumPoolDepthM` deep behind a short rise. */
+export interface BarrierBreach {
+  /** Station of the barrier's crest: the lip the pool would spill over. */
+  crestStation: number;
+  /** The breach line runs from the pool bottom to the first station downstream that is no higher (the run end when there is none). */
+  firstStation: number;
+  lastStation: number;
+  /** Crest − pool bottom: the depth of the pool the breach avoids, m. */
+  poolDepthM: number;
+  /** Crest − the bed at the last station, m. */
+  heightAboveDownstreamM: number;
+  /** Along-channel length of the barrier where it stands more than half the pool depth above the pool bottom, m. */
+  lengthAtHalfHeightM: number;
+}
+
+/**
+ * The bed with tall, short barriers breached (see `barrierCarving` in method-config.ts). Each pass finds the depressions of the bed (stretches
+ * below the highest bed at or downstream of them), takes the deepest one at least `minimumPoolDepthM` deep whose barrier is short enough, and
+ * lowers the bed from the pool bottom to the first station downstream at or below it along a straight line (never raising a station).
+ * A barrier too long to breach is left, and its pool fills.
+ */
+function breachBarriers(thalwegM: Float64Array, spacingM: number): { bedM: Float64Array; breaches: BarrierBreach[] } {
+  const { minimumPoolDepthM, maximumLengthAtHalfHeightM } = PARAMETERS.barrierCarving;
+  const bed = Float64Array.from(thalwegM);
+  const count = bed.length;
+  const breaches: BarrierBreach[] = [];
+  const tooLongCrests = new Set<number>();
+  for (let pass = 0; pass < count; pass += 1) {
+    const level = new Float64Array(count);
+    level[count - 1] = bed[count - 1] as number;
+    for (let index = count - 2; index >= 0; index -= 1) level[index] = Math.max(bed[index] as number, level[index + 1] as number);
+    let deepest: { bottom: number; crest: number; depthM: number } | null = null;
+    for (let start = 0; start < count; ) {
+      if ((level[start] as number) - (bed[start] as number) <= 1e-9) {
+        start += 1;
+        continue;
+      }
+      let crest = start;
+      let bottom = start;
+      for (; crest < count && (level[crest] as number) - (bed[crest] as number) > 1e-9; crest += 1) if ((bed[crest] as number) <= (bed[bottom] as number)) bottom = crest;
+      const depthM = (level[start] as number) - (bed[bottom] as number);
+      if (depthM >= minimumPoolDepthM && !tooLongCrests.has(crest) && (!deepest || depthM > deepest.depthM)) deepest = { bottom, crest, depthM };
+      start = crest;
+    }
+    if (!deepest) return { bedM: bed, breaches };
+    const { bottom, crest, depthM } = deepest;
+    const bottomM = bed[bottom] as number;
+    const halfHeightM = bottomM + depthM / 2;
+    let upstreamFoot = crest;
+    while (upstreamFoot > 0 && (bed[upstreamFoot - 1] as number) > halfHeightM) upstreamFoot -= 1;
+    let downstreamFoot = crest;
+    while (downstreamFoot < count - 1 && (bed[downstreamFoot + 1] as number) > halfHeightM) downstreamFoot += 1;
+    const lengthAtHalfHeightM = (downstreamFoot - upstreamFoot + 1) * spacingM;
+    if (lengthAtHalfHeightM > maximumLengthAtHalfHeightM) {
+      tooLongCrests.add(crest);
+      continue;
+    }
+    let outlet = crest + 1;
+    while (outlet < count && (bed[outlet] as number) > bottomM) outlet += 1;
+    const lastStation = Math.min(outlet, count - 1);
+    const lastM = outlet < count ? (bed[outlet] as number) : bottomM;
+    const crestM = bed[crest] as number;
+    for (let index = bottom + 1; index <= lastStation; index += 1) {
+      const lineM = bottomM + ((lastM - bottomM) * (index - bottom)) / (lastStation - bottom);
+      bed[index] = Math.min(bed[index] as number, lineM);
+    }
+    breaches.push({
+      crestStation: crest,
+      firstStation: bottom,
+      lastStation,
+      poolDepthM: depthM,
+      heightAboveDownstreamM: crestM - lastM,
+      lengthAtHalfHeightM,
+    });
+  }
+  throw new Error('Barrier breaching did not finish.');
+}
+
+/** The creek's lowest point across a table station (where its bed was measured), EPSG 32610. */
+export function thalwegPoint(channel: RunChannel, station: number): Point {
+  const offsetM = channel.thalwegOffsetM[station] as number;
+  return { x: (channel.x[station] as number) + (channel.normalX[station] as number) * offsetM, y: (channel.y[station] as number) + (channel.normalY[station] as number) * offsetM };
+}
+
+/** True where a breach lowered the bed below the lidar at the station's lowest point. */
+export function isBreachedStation(channel: RunChannel, station: number): boolean {
+  return (channel.bedM[station] as number) < (channel.thalwegM[station] as number) - 1e-6;
+}
+
+/**
+ * The water-surface stations of the segment between table stations `first` and `last` (see `waterSurfaceStations` in method-config.ts):
+ * table station indices from `first` to `last`, which of them is the WSE Anchor Point, and each one's distance from `first` along the
+ * centerline (rounded to cm, as the ribbon saves it, so Stage 3 and the browser smooth the water over the same positions). The anchor is the
+ * table station nearest the middle, or, when that one is breached, the nearest station of the segment that is not.
+ */
+export function waterSurfaceStations(
+  channel: RunChannel,
+  first: number,
+  last: number,
+): { stations: number[]; anchorStation: number; stationDistancesM: number[] } {
+  let anchor = Math.round(first + (last - first) * ANCHOR_POSITION_ALONG_SEGMENT);
+  if (isBreachedStation(channel, anchor)) {
+    for (let distance = 1; distance <= last - first; distance += 1) {
+      const candidate = [anchor - distance, anchor + distance].find((station) => station >= first && station <= last && !isBreachedStation(channel, station));
+      if (candidate !== undefined) {
+        anchor = candidate;
+        break;
+      }
+    }
+  }
+  const stepsAlong = (from: number, to: number): number[] => {
+    const span = to - from;
+    if (span === 0) return [];
+    const steps = Math.min(span, Math.ceil((span * channel.spacingM) / PARAMETERS.waterSurfaceStations.targetSpacingM));
+    return Array.from({ length: steps }, (_, step) => from + Math.round(((step + 1) * span) / steps));
+  };
+  const towardAnchor = stepsAlong(first, anchor);
+  const stations = [first, ...towardAnchor, ...stepsAlong(anchor, last)];
+  const stationDistancesM = stations.map((station) => Math.round((station - first) * channel.spacingM * 100) / 100);
+  return { stations, anchorStation: towardAnchor.length, stationDistancesM };
+}
+
 /** Arc length along the centerline from the run's first station to `index`, meters. */
 export function arcLengthM(channel: RunChannel, index: number): number {
   return index * channel.spacingM;
@@ -359,7 +506,7 @@ export function stationAtArcLength(channel: RunChannel, arcM: number): number {
   return Math.max(0, Math.min(channel.stationCount - 1, Math.round(arcM / channel.spacingM)));
 }
 
-/** Bed profile elevation at a fractional station index (linear interpolation). */
+/** Bed at a fractional station index (linear interpolation; exact at a table station). */
 export function bedAt(channel: RunChannel, stationIndex: number): number {
   const clamped = Math.max(0, Math.min(channel.stationCount - 1, stationIndex));
   const low = Math.floor(clamped);
@@ -368,7 +515,7 @@ export function bedAt(channel: RunChannel, stationIndex: number): number {
 }
 
 /**
- * Least-squares slope of the bed profile over `halfWindowM` either side of a station, positive where the bed falls downstream
+ * Least-squares slope of the bed over `halfWindowM` either side of a station, positive where the bed falls downstream
  * (the stations run downstream). Fewer than 3 stations in the window uses the 3 nearest.
  */
 export function bedSlopeAt(channel: RunChannel, stationIndex: number, halfWindowM: number): number {

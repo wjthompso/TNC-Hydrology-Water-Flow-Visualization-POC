@@ -2,6 +2,7 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { readJson, writeCompactJson } from '../../../json-files.ts';
+import { roundToDecimals, utm10nToWgs84 } from '../../../utm-geometry.ts';
 import { adjacentSegmentsById, loadCreekSegmentNetwork, type NetworkCreekSegment } from '../../creek-segment-network.ts';
 import {
   CNF_DISCHARGE_FILE,
@@ -39,7 +40,7 @@ import { waterYearOf } from '../../water-years.ts';
 import { DRAINAGE_AREA_RATIO_TRANSFER, MAXIMUM_TRANSFER_DISTANCE_M } from '../m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { requestedModeledWseDerivationMethod } from '../modeled-wse-derivation-method-registry.ts';
 import { anchorRating } from './anchor-section.ts';
-import { bedAt, buildRunChannel, orientRun, segmentRuns, type OrientedSegment } from './flowline-channel.ts';
+import { buildRunChannel, isBreachedStation, orientRun, segmentRuns, thalwegPoint, waterSurfaceStations, type OrientedSegment } from './flowline-channel.ts';
 import { junctionDepthsAlongRun } from './junction-depths.ts';
 import { LidarMosaic } from './lidar-mosaic.ts';
 import {
@@ -50,18 +51,22 @@ import {
   FLOWLINE_PROFILE_TIME_SERIES_FIELDS,
   JUNCTION_DEPTH,
   M3_FLOWLINE_PROFILE_MANNING_DEPTH_METHOD,
+  POOL_FILLED_WATER_SURFACE,
 } from './method-config.ts';
+import { poolFilledRunSurfaces } from './pool-filled-water-surface.ts';
 import { lookUpRatingCurve } from './rating-curve-lookup.ts';
 
 /**
  * m3 Stage 3 — flowline profile time series. Reads the saved Stage 0–1 output (shared with m1) and writes the m3 Time Series to
  * `03-time-series/m3-flowline-profile-manning-depth/v<version>/`.
  *
- * Per run of joined Creek Segments of a flowline: trace the drainage line on the 1 m lidar, smooth it in plan view, build the bed profile
- * (smoothed, never rising downstream), and cut the anchor cross-section perpendicular to the centerline at the middle of every segment.
- * Per segment: reach discharge × drainage-area ratio (exactly as m1), inverted on the rating curve of the anchor cross-section; the raw anchor
- * depth below 1 cm is dry. The depth at each junction is one smoothed number per shared vertex (`junction-depths.ts`). `values` is the WSE of that
- * smoothed surface at the anchor point: anchor bed (bed profile) + the junction depths interpolated to the middle. See METHOD.md in this folder.
+ * Per run of joined Creek Segments of a flowline: fit the valley-bottom centerline on the 1 m lidar, take the raw lidar at the lowest point
+ * across every station as the bed (breached through tall, short barriers), and cut the anchor cross-section through the lowest point at the
+ * middle of every segment. Per segment: reach discharge × drainage-area ratio (exactly as m1), inverted on the rating curve of the anchor
+ * cross-section; the raw anchor depth below 1 cm is dry. The flowing depth at each junction is one smoothed number per shared vertex
+ * (`junction-depths.ts`). `values` is the pool-filled water surface at the anchor station (`pool-filled-water-surface.ts`, the function the
+ * browser draws with: the water smoothed over a window scaled by its depth, then pool-filled), from the junction depths as written and the
+ * station beds and distances rounded as the ribbon stores them. See METHOD.md in this folder.
  *
  * Run with `--modeled-wse-method=m3-flowline-profile-manning-depth`: the version helpers in `modeled-wse-version.ts` read that flag to pick
  * the output folder and fingerprint, so this script refuses to run without it rather than write into another method's folder.
@@ -82,7 +87,7 @@ function emptyOutcomeCounts(): OutcomeCounts {
 
 /** What the Time Series files carry for one Creek Segment of m3. */
 interface FlowlineProfileTimeSeriesSegment extends WaterSurfaceElevationTimeSeriesSegment {
-  /** Bed profile elevation at the anchor point, m NAVD88. Depth at the anchor = value − anchorBedElevationM. */
+  /** Bed at the anchor point, m NAVD88. Depth at the anchor = value − anchorBedElevationM. */
   anchorBedElevationM: number;
   /** True water depth at the upstream and downstream end of the segment's ribbon, m, parallel to `values`. */
   junctionDepthUpstreamM: (number | null)[];
@@ -102,6 +107,12 @@ interface SegmentModel {
   hasDischarge: boolean;
   /** Centerline arc length of the segment's ribbon, meters. */
   lengthM: number;
+  /** Bed at each water-surface station (the ribbon's stations), m NAVD88, rounded to 3 decimals as the ribbon ring stores it. */
+  stationBedsM: number[];
+  /** Distance of each of those stations from the segment's upstream boundary, meters (cm), as the ribbon stores it. */
+  stationDistancesM: number[];
+  /** Which of those stations is the WSE Anchor Point. */
+  anchorStation: number;
   anchorBedElevationM: number;
   bedUpstreamM: number;
   bedDownstreamM: number;
@@ -184,16 +195,30 @@ function buildFlowlineSegments(input: {
         (junctionDownstream[position] as (number | null)[])[offset] = down === null ? null : roundValue(down, 3);
       });
     }
+    // The segment's WSE is the pool-filled surface at its anchor station, from the junction depths as written to the file.
+    const valuesByPosition = run.models.map(() => new Array<number | null>(length).fill(null));
+    for (let offset = 0; offset < length; offset += 1) {
+      const surfaces = poolFilledRunSurfaces(
+        run.models.map((model, position) => ({
+          stationBedsM: model.stationBedsM,
+          stationDistancesM: model.stationDistancesM,
+          upstreamDepthM: (junctionUpstream[position] as (number | null)[])[offset] ?? null,
+          downstreamDepthM: (junctionDownstream[position] as (number | null)[])[offset] ?? null,
+        })),
+        POOL_FILLED_WATER_SURFACE,
+      );
+      run.models.forEach((model, position) => {
+        const up = (junctionUpstream[position] as (number | null)[])[offset] ?? null;
+        const surface = surfaces[position];
+        // A dry segment (depth 0) holds its anchor bed, as in v1; a segment without a value holds null.
+        (valuesByPosition[position] as (number | null)[])[offset] =
+          up === null ? null : surface ? roundValue(surface[model.anchorStation] as number, 3) : roundValue(model.anchorBedElevationM, 3);
+      });
+    }
     run.models.forEach((model, position) => {
       const upstreamDepths = junctionUpstream[position] as (number | null)[];
       const downstreamDepths = junctionDownstream[position] as (number | null)[];
-      // The segment's WSE is the smoothed surface at the anchor point, from the junction depths as written to the file.
-      const values = upstreamDepths.map((up, offset) => {
-        const down = downstreamDepths[offset];
-        return up === null || down === null || down === undefined
-          ? null
-          : roundValue(model.anchorBedElevationM + up + (down - up) * ANCHOR_POSITION_ALONG_SEGMENT, 3);
-      });
+      const values = valuesByPosition[position] as (number | null)[];
       const record: FlowlineProfileTimeSeriesSegment = {
         segmentId: model.segmentId,
         values,
@@ -258,10 +283,18 @@ interface ModelBuild {
   stationsAtSearchEdge: number;
   /** Mean sideways move of the centerline from the smoothed flowline over every station, m. */
   meanOffsetFromFlowlineM: number;
-  /** Largest |bed profile − local lowest ground| along any channel, m. */
-  maximumBedProfileDeviationM: number;
-  /** Mean |bed profile − local lowest ground| over every station of every channel, m. */
-  meanBedProfileDeviationM: number;
+  /** Mean |offset of the lowest point from the centerline| over every station, m. */
+  meanThalwegOffsetM: number;
+  stationsAtDescentLimit: number;
+  stationsWithoutLidar: number;
+  /** Anchor stations whose valley-bottom fit ended at the search edge, or whose lowest point was followed to the descent limit. */
+  anchorsAtSearchEdge: number;
+  anchorsAtDescentLimit: number;
+  /** Anchors moved off a breached middle station, and anchors left on one because every station of the segment is breached. */
+  anchorsMovedOffBreach: number;
+  anchorsOnBreach: number;
+  /** Every breached barrier, with its segment and position, for the manifest. */
+  breaches: { segmentId: string; lonLat: [number, number]; poolDepthM: number; heightAboveDownstreamM: number; lengthAtHalfHeightM: number; breachLengthM: number }[];
 }
 
 /** Builds the channel of every run of every flowline and the anchor rating of every segment. */
@@ -289,10 +322,16 @@ async function buildModels(warnings: string[]): Promise<ModelBuild> {
     segmentsWithoutRating: 0,
     stationsAtSearchEdge: 0,
     meanOffsetFromFlowlineM: 0,
-    maximumBedProfileDeviationM: 0,
-    meanBedProfileDeviationM: 0,
+    meanThalwegOffsetM: 0,
+    stationsAtDescentLimit: 0,
+    stationsWithoutLidar: 0,
+    anchorsAtSearchEdge: 0,
+    anchorsAtDescentLimit: 0,
+    anchorsMovedOffBreach: 0,
+    anchorsOnBreach: 0,
+    breaches: [],
   };
-  let deviationSumM = 0;
+  let thalwegOffsetSumM = 0;
   let offsetSumM = 0;
   let stationCount = 0;
   for (const [tncComid, flowlineSegments] of segmentsByComid) {
@@ -311,12 +350,26 @@ async function buildModels(warnings: string[]): Promise<ModelBuild> {
       const channel = buildRunChannel(oriented, window);
       build.stationsAtSearchEdge += channel.stationsAtSearchEdge;
       offsetSumM += channel.meanOffsetFromFlowlineM * channel.stationCount;
-      for (let station = 0; station < channel.stationCount; station += 1) {
-        const deviation = Math.abs((channel.bedM[station] as number) - (channel.thalwegM[station] as number));
-        deviationSumM += deviation;
-        build.maximumBedProfileDeviationM = Math.max(build.maximumBedProfileDeviationM, deviation);
-      }
+      build.stationsAtDescentLimit += channel.stationsAtDescentLimit;
+      build.stationsWithoutLidar += channel.stationsWithoutLidar;
+      for (let station = 0; station < channel.stationCount; station += 1) thalwegOffsetSumM += Math.abs(channel.thalwegOffsetM[station] as number);
       stationCount += channel.stationCount;
+      const segmentAtStation = (station: number): string => {
+        const position = channel.boundaries.findIndex((boundary, index) => index > 0 && station <= boundary);
+        return (oriented[Math.max(0, position - 1)] as OrientedSegment).segmentId;
+      };
+      for (const breach of channel.breaches) {
+        const crest = thalwegPoint(channel, breach.crestStation);
+        const [longitude, latitude] = utm10nToWgs84(crest.x, crest.y);
+        build.breaches.push({
+          segmentId: segmentAtStation(breach.crestStation),
+          lonLat: [roundToDecimals(longitude, 6), roundToDecimals(latitude, 6)],
+          poolDepthM: roundValue(breach.poolDepthM, 2),
+          heightAboveDownstreamM: roundValue(breach.heightAboveDownstreamM, 2),
+          lengthAtHalfHeightM: roundValue(breach.lengthAtHalfHeightM, 1),
+          breachLengthM: roundValue((breach.lastStation - breach.firstStation) * channel.spacingM, 1),
+        });
+      }
       const models = oriented.map((segment, position): SegmentModel => {
         const segmentCrosswalk = crosswalkById.get(segment.segmentId);
         if (!segmentCrosswalk) warnings.push(`${segment.segmentId} has no crosswalk entry, values are null.`);
@@ -329,9 +382,20 @@ async function buildModels(warnings: string[]): Promise<ModelBuild> {
         }
         const first = channel.boundaries[position] as number;
         const last = channel.boundaries[position + 1] as number;
-        const anchorIndex = first + (last - first) * ANCHOR_POSITION_ALONG_SEGMENT;
-        const rating = last > first ? anchorRating(channel, segment.segmentId, anchorIndex) : null;
-        if (!rating) warnings.push(`${segment.segmentId} has no ribbon (its boundaries coincide), values are null.`);
+        const { stations, anchorStation, stationDistancesM } = waterSurfaceStations(channel, first, last);
+        const anchorIndex = stations[anchorStation] as number;
+        // A segment wholly on a breached fill runs through its culvert: there is no lidar of its creek bed, so it has no rating curve and no water.
+        const whollyOnBreach = last > first && isBreachedStation(channel, anchorIndex);
+        if (last > first) {
+          const middle = Math.round(first + (last - first) * ANCHOR_POSITION_ALONG_SEGMENT);
+          if (whollyOnBreach) build.anchorsOnBreach += 1;
+          else if (anchorIndex !== middle) build.anchorsMovedOffBreach += 1;
+          if (channel.atSearchEdge[anchorIndex]) build.anchorsAtSearchEdge += 1;
+          if (Math.abs(channel.thalwegOffsetM[anchorIndex] as number) >= CHANNEL_PROFILE.bed.descentLimitM - 1e-9) build.anchorsAtDescentLimit += 1;
+        }
+        const rating = last > first && !whollyOnBreach ? anchorRating(channel, segment.segmentId, anchorIndex) : null;
+        if (whollyOnBreach) warnings.push(`${segment.segmentId} lies wholly on a breached barrier (a fill over a culvert), values are null.`);
+        else if (!rating) warnings.push(`${segment.segmentId} has no ribbon (its boundaries coincide), values are null.`);
         else {
           if (rating.slopeFloored) build.slopeFlooredSegments += 1;
           if (!rating.curve) {
@@ -346,9 +410,13 @@ async function buildModels(warnings: string[]): Promise<ModelBuild> {
           rating,
           hasDischarge: segmentCrosswalk !== undefined && segmentCrosswalk.nhdplusV2Comid !== null && !exceedsMaximumTransferDistance(segmentCrosswalk),
           lengthM: (last - first) * channel.spacingM,
-          anchorBedElevationM: bedAt(channel, anchorIndex),
-          bedUpstreamM: bedAt(channel, first),
-          bedDownstreamM: bedAt(channel, last),
+          stationBedsM: stations.map((station) => roundValue(channel.bedM[station] as number, 3)),
+          stationDistancesM,
+          anchorStation,
+          // The lidar at the anchor point; the same as the bed there except on a segment wholly on a breach, which has no water.
+          anchorBedElevationM: channel.thalwegM[anchorIndex] as number,
+          bedUpstreamM: channel.bedM[first] as number,
+          bedDownstreamM: channel.bedM[last] as number,
         };
       });
       build.segmentCount += models.length;
@@ -359,7 +427,7 @@ async function buildModels(warnings: string[]): Promise<ModelBuild> {
       console.log(`  Channels and anchor rating curves: ${build.flowlines.length} of ${segmentsByComid.size} flowlines, ${build.segmentCount} Creek Segments`);
     }
   }
-  build.meanBedProfileDeviationM = stationCount === 0 ? 0 : deviationSumM / stationCount;
+  build.meanThalwegOffsetM = stationCount === 0 ? 0 : thalwegOffsetSumM / stationCount;
   build.meanOffsetFromFlowlineM = stationCount === 0 ? 0 : offsetSumM / stationCount;
   return build;
 }
@@ -375,6 +443,13 @@ async function buildTimeSeries(): Promise<StageResult> {
   counts.slopeFlooredAnchorSections = build.slopeFlooredSegments;
   counts.anchorSectionsWithoutRatingCurve = build.segmentsWithoutRating;
   counts.centerlineStationsAtSearchEdge = build.stationsAtSearchEdge;
+  counts.stationsAtDescentLimit = build.stationsAtDescentLimit;
+  counts.stationsWithoutLidar = build.stationsWithoutLidar;
+  counts.anchorsAtSearchEdge = build.anchorsAtSearchEdge;
+  counts.anchorsAtDescentLimit = build.anchorsAtDescentLimit;
+  counts.anchorsMovedOffBreachedBarrier = build.anchorsMovedOffBreach;
+  counts.anchorsOnBreachedBarrier = build.anchorsOnBreach;
+  counts.breachedBarriers = build.breaches.length;
   const allModels = build.flowlines.flatMap((flowline) => flowline.runs.flatMap((run) => run.models));
   counts.drainageAreaRatioTransferSegments = allModels.filter((model) => model.crosswalk?.[DRAINAGE_AREA_RATIO_TRANSFER.fieldName]).length;
   counts.transferDistanceExceededSegments = allModels.filter((model) => model.crosswalk && exceedsMaximumTransferDistance(model.crosswalk)).length;
@@ -430,10 +505,11 @@ async function buildTimeSeries(): Promise<StageResult> {
     summaryLines.push(`${dataset.datasetId}: ${discharge.timestampsUtcMs.length} timestamps in ${ranges.length} file set(s); ${describeOutcomes(outcomes)}.`);
   }
   summaryLines.push(
-    `${build.segmentCount} Creek Segments on ${build.flowlines.length} flowlines, one anchor cross-section each, cut perpendicular to the smoothed centerline at ${ANCHOR_POSITION_ALONG_SEGMENT} of the ribbon; ` +
-      `local slope of the bed profile ±${ANCHOR_SLOPE.halfWindowM} m, ${build.slopeFlooredSegments} slopes floored, ${build.segmentsWithoutRating} anchors without a rating curve, centerline moved a mean ${build.meanOffsetFromFlowlineM.toFixed(1)} m sideways from the smoothed flowline, ${build.stationsAtSearchEdge} stations at the search edge; ` +
-      `bed profile vs the lowest ground along the centerline: mean ${build.meanBedProfileDeviationM.toFixed(3)} m, max ${build.maximumBedProfileDeviationM.toFixed(2)} m; ` +
-      `junction depth: mean of raw anchor depths within ±${JUNCTION_DEPTH.smoothingHalfWindowM} m (raw depth under ${DRY_BELOW_DEPTH_M} m is dry); values = WSE of the smoothed surface at the anchor point.`,
+    `${build.segmentCount} Creek Segments on ${build.flowlines.length} flowlines, one anchor cross-section each, through the lowest point of the table station nearest ${ANCHOR_POSITION_ALONG_SEGMENT} of the ribbon; ` +
+      `local slope of the bed ±${ANCHOR_SLOPE.halfWindowM} m, ${build.slopeFlooredSegments} slopes floored, ${build.segmentsWithoutRating} anchors without a rating curve, centerline moved a mean ${build.meanOffsetFromFlowlineM.toFixed(1)} m sideways from the smoothed flowline, ${build.stationsAtSearchEdge} stations at the search edge (${build.anchorsAtSearchEdge} anchors); ` +
+      `lowest point a mean ${build.meanThalwegOffsetM.toFixed(2)} m from the centerline, ${build.stationsAtDescentLimit} stations at the descent limit (${build.anchorsAtDescentLimit} anchors), ${build.stationsWithoutLidar} without lidar; ` +
+      `${build.breaches.length} barriers breached, ${build.anchorsMovedOffBreach} anchors moved off a breach, ${build.anchorsOnBreach} left on one; ` +
+      `junction depth: mean of raw anchor depths within ±${JUNCTION_DEPTH.smoothingHalfWindowM} m (raw depth under ${DRY_BELOW_DEPTH_M} m is dry); values = the pool-filled water surface at the anchor station.`,
     `${STEEP_EXAMPLE_SEGMENT_ID}: ${JSON.stringify(example[NATIONAL_WATER_MODEL.datasetId] ?? null)}`,
   );
   return {
@@ -443,7 +519,8 @@ async function buildTimeSeries(): Promise<StageResult> {
     measurements: {
       centerlineMeanOffsetFromFlowlineM: build.meanOffsetFromFlowlineM,
       steepExampleSegment: { segmentId: STEEP_EXAMPLE_SEGMENT_ID, ...example },
-      bedProfileDeviationFromLowestGroundM: { mean: build.meanBedProfileDeviationM, max: build.maximumBedProfileDeviationM },
+      meanThalwegOffsetFromCenterlineM: build.meanThalwegOffsetM,
+      breachedBarriers: build.breaches,
     },
     summaryLines,
   };
@@ -492,7 +569,8 @@ await runStageEntryPoint(async () => {
       },
       anchorWse: {
         anchorPositionAlongSegment: ANCHOR_POSITION_ALONG_SEGMENT,
-        rule: 'values = anchorBedElevationM + (junction depth at the upstream end + (junction depth at the downstream end − upstream) × anchorPositionAlongSegment), rounded to 3 decimals; a dry segment has depth 0 and values = anchor bed',
+        rule: 'values = the pool-filled water surface (pool-filled-water-surface.ts) at the anchor station, from the junction depths as written and the station beds rounded to 3 decimals, rounded to 3 decimals; a dry segment has depth 0 and values = anchor bed',
+        poolFilledWaterSurface: POOL_FILLED_WATER_SURFACE,
       },
     },
     run: buildTimeSeries,

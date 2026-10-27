@@ -2,12 +2,12 @@ import { roundToDecimals } from '../../../utm-geometry.ts';
 import { valleyEdgeIndices, type ProfileSample } from '../../cross-section-geometry.ts';
 import { buildRatingCurveRecord } from '../../rating-curve-inversion.ts';
 import type { CrossSectionRecord, RatingCurveRecord } from '../../stage-file-formats.ts';
-import { bedAt, bedSlopeAt, localLowestGround, type RunChannel } from './flowline-channel.ts';
+import { bedSlopeAt, thalwegPoint, type RunChannel } from './flowline-channel.ts';
 import { ANCHOR_SECTION, ANCHOR_SLOPE } from './method-config.ts';
 
 /**
- * The rating curve of one Creek Segment of m3: Manning's equation on the cross-section cut perpendicular to the smoothed centerline at the
- * middle of the segment, with the slope of the bed profile there. The section, valley-edge trim, bank tops, ladder, roughness, and running-maximum
+ * The rating curve of one Creek Segment of m3: Manning's equation on the cross-section through the creek's lowest point at the anchor
+ * station (perpendicular to the smoothed centerline), with the slope of the bed there. The section, valley-edge trim, bank tops, ladder, roughness, and running-maximum
  * rule are Stage 1 and Stage 2's (this builds a one-section `CrossSectionRecord` and hands it to `buildRatingCurveRecord`); only where the
  * section is cut and which slope it gets differ from m1 and m2.
  */
@@ -26,42 +26,41 @@ export function frameAt(channel: RunChannel, stationIndex: number): { x: number;
 }
 
 export interface AnchorRating {
-  /** Rating curve whose bed is the channel floor of the anchor cross-section (`localLowestGround`). */
+  /** Rating curve whose bed is the lidar at the anchor point (the anchor station's lowest point). */
   curve: RatingCurveRecord | null;
   /** Why `curve` is null, for a warning. */
   problem: string | null;
-  /** Bed profile elevation at the anchor point, m NAVD88: what the Time Series calls `anchorBedElevationM`. */
+  /** Bed at the anchor point, m NAVD88: what the Time Series calls `anchorBedElevationM`. */
   anchorBedM: number;
-  /** Channel floor of the anchor cross-section, m NAVD88: the bed the rating curve's depths are measured from. */
+  /** The rating curve's bed, m NAVD88 (3 decimals): the lidar at the anchor point, which the raw depths are measured from. */
   thalwegBedM: number;
   slope: number;
   slopeFloored: boolean;
 }
 
-/** The anchor rating of one segment, cut at fractional station `anchorIndex` of its run's channel. */
+/** The anchor rating of one segment, cut at table station `anchorIndex` of its run's channel. */
 export function anchorRating(channel: RunChannel, segmentId: string, anchorIndex: number): AnchorRating {
-  const anchorBedM = bedAt(channel, anchorIndex);
-  const rawSlope = bedSlopeAt(channel, Math.round(anchorIndex), ANCHOR_SLOPE.halfWindowM);
+  const anchorBedM = channel.bedM[anchorIndex] as number;
+  const rawSlope = bedSlopeAt(channel, anchorIndex, ANCHOR_SLOPE.halfWindowM);
   const slopeFloored = rawSlope < ANCHOR_SLOPE.minimumSlope;
   const slope = Math.max(rawSlope, ANCHOR_SLOPE.minimumSlope);
   const base = { anchorBedM, thalwegBedM: Number.NaN, slope: roundToDecimals(slope, 6), slopeFloored };
 
-  const frame = frameAt(channel, anchorIndex);
+  // Sampled from the anchor point outward, so offset 0 is the anchor point itself and the section's bed is the anchor bed.
+  const anchor = thalwegPoint(channel, anchorIndex);
+  const normalX = channel.normalX[anchorIndex] as number;
+  const normalY = channel.normalY[anchorIndex] as number;
   const sampled: ProfileSample[] = [];
   const steps = Math.round(ANCHOR_SECTION.halfWidthM / ANCHOR_SECTION.profileSpacingM);
+  let thalwegIndex = -1;
   for (let step = -steps; step <= steps; step += 1) {
     const offsetM = step * ANCHOR_SECTION.profileSpacingM;
-    const elevation = channel.window.bilinear(frame.x + frame.normalX * offsetM, frame.y + frame.normalY * offsetM);
-    if (elevation !== null) sampled.push({ offsetM, elevationM: elevation });
+    const elevation = channel.window.bilinear(anchor.x + normalX * offsetM, anchor.y + normalY * offsetM);
+    if (elevation === null) continue;
+    if (step === 0) thalwegIndex = sampled.length;
+    sampled.push({ offsetM, elevationM: elevation });
   }
-  // The channel floor found the same way as along the bed profile, then the lowest profile sample within one sample spacing of it.
-  const floor = localLowestGround(channel, Math.round(anchorIndex));
-  let thalwegIndex = -1;
-  sampled.forEach((sample, index) => {
-    if (!floor || Math.abs(sample.offsetM - floor.offsetM) > ANCHOR_SECTION.profileSpacingM) return;
-    if (thalwegIndex < 0 || sample.elevationM < (sampled[thalwegIndex] as ProfileSample).elevationM) thalwegIndex = index;
-  });
-  if (thalwegIndex < 0) return { ...base, curve: null, problem: 'no lidar at the channel floor of the anchor cross-section' };
+  if (thalwegIndex < 0) return { ...base, curve: null, problem: 'no lidar at the anchor point' };
   const thalweg = sampled[thalwegIndex] as ProfileSample;
 
   // Valley-edge guard and fallback, as Stage 1.
@@ -78,7 +77,7 @@ export function anchorRating(channel: RunChannel, segmentId: string, anchorIndex
     alongSegmentM: 0,
     networkDistanceM: 0,
     thalwegOffsetM: thalweg.offsetM,
-    thalwegUtm: { x: roundToDecimals(frame.x + frame.normalX * thalweg.offsetM, 3), y: roundToDecimals(frame.y + frame.normalY * thalweg.offsetM, 3) },
+    thalwegUtm: { x: roundToDecimals(anchor.x, 3), y: roundToDecimals(anchor.y, 3) },
     bedElevationM: roundToDecimals(thalweg.elevationM, 3),
     areaAtReferenceDepthM2: 0,
     valleyEdgeLeftOffsetM: (profile[0] as ProfileSample).offsetM,

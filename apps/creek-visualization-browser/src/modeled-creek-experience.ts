@@ -10,8 +10,20 @@
 
 import { watch } from '@arcgis/core/core/reactiveUtils';
 import type SceneView from '@arcgis/core/views/SceneView';
+import { createAnchorGroundCache } from './anchor-ground-cache';
 import type { SegmentPolygonPlacement, WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
-import { ribbonDisplayAdjustmentForSlope } from './channel-ribbon-surface';
+import {
+  anchorClearanceMarginM,
+  anchorClearanceStationLiftsBySegmentId,
+  channelRibbonStationBedsM,
+  channelRibbonStationMidpointsLonLat,
+  poolFilledStationSurfacesBySegmentId,
+  ribbonDisplayAdjustmentForSlope,
+  ribbonDrawnByStationInterval,
+  stationDrapeSettings,
+  type PoolFillRibbonSegment,
+  type StationDrape,
+} from './channel-ribbon-surface';
 import { localBedSlope, withDisplayDepthFloor } from './display-depth-floor';
 import type { ElevationBucket, LonLat, ObservationClock } from './creek-data-contract';
 import type { CreekVisualizationAttachment } from './creek-visualization-library-interface';
@@ -39,6 +51,7 @@ import {
 } from './modeled-water-catalog';
 import {
   createModeledWaterDataStore,
+  heldJunctionDepthsAt,
   heldJunctionWaterSurfaceAt,
   heldValueAt,
   heldWaterDepthAt,
@@ -46,6 +59,8 @@ import {
   readFlowlineIndex,
   type CreekSegmentPathRecord,
   type FlowlineIndex,
+  type LoadedFlowline,
+  type LoadedTimeSeries,
 } from './modeled-water-data-store';
 import { createModeledWaterSceneRenderer } from './modeled-water-scene-renderer';
 import { buildModeledSegmentInspection, type ModeledSegmentInspection } from './modeled-segment-inspection';
@@ -67,9 +82,13 @@ import {
   type VisibleFlowlineSelection,
 } from './visible-flowlines';
 import {
+  MODELED_WSE_QUERY_PARAM,
   WSE_POLYGON_METHOD_QUERY_PARAM,
+  derivedDataSelectionKey,
+  drawnModeledWsePathOf,
   drawsDepthBuckets,
   groupDerivedData,
+  modeledWseKeyOfPath,
   readWsePolygonMethodList,
   resolveWsePolygonMethod,
   wsePolygonMethodKey,
@@ -108,6 +127,24 @@ function drawsBedParallelDepth(method: WsePolygonMethodVersion): boolean {
  */
 function drawsChannelRibbon(method: WsePolygonMethodVersion): boolean {
   return method.browserDrawing === 'channel-ribbon-depth';
+}
+
+/**
+ * `channel-ribbon-pool-filled` (ribbon v2): the same rungs drawn on the water surface pool-filled along each run, the rule
+ * the m3 v2 Time Series values follow, so the chart equals the drawing at the anchor (channel-ribbon-surface.ts).
+ */
+function drawsPoolFilledChannelRibbon(method: WsePolygonMethodVersion): boolean {
+  return method.browserDrawing === 'channel-ribbon-pool-filled';
+}
+
+/** A flowline's ribbon segments for the run walk: those with rungs and a `channelRibbon` summary. */
+function poolFillRibbonSegments(flowline: LoadedFlowline): Map<string, PoolFillRibbonSegment> {
+  const segments = new Map<string, PoolFillRibbonSegment>();
+  for (const [segmentId, summary] of flowline.channelRibbonBySegmentId) {
+    const buckets = flowline.polygonBucketsBySegmentId.get(segmentId);
+    if (buckets) segments.set(segmentId, { buckets, downstreamSegmentId: summary.downstreamSegmentId, stationDistancesM: summary.stationDistancesM ?? [] });
+  }
+  return segments;
 }
 
 /**
@@ -230,25 +267,43 @@ export interface ModeledExperienceSeam {
   readonly wsePolygonMethods: readonly WsePolygonMethodVersion[];
   /**
    * Dev tools: the extent's derived data products grouped by modeled WSE
-   * version (Time Series), each with the polygon versions built from it.
+   * version (Time Series), each with the polygon versions that can draw it.
    */
   readonly derivedDataGroups: readonly DerivedDataGroup[];
   /** Dev tools: registered methods with no saved output in this extent. */
   readonly notGeneratedDerivedData: NotGeneratedDerivedData;
+  /** Dev tools: ribbon v2's anchor clearance lift, its margin, and what keeping it current costs. */
+  readonly anchorClearance: AnchorClearanceStatus;
   /** The method name the page opens with when no `wsePolygonMethod` is requested. */
   readonly defaultWsePolygonMethodId: string;
   /** The method version whose polygons are drawn now. */
   readonly wsePolygonMethod: WsePolygonMethodVersion;
   /**
-   * Dev tools: draws another saved method version (`<method-id>@v<version>`)
+   * Dev tools: draws another saved method version (`<method-id>@v<version>`,
+   * or a channel pairing `<method-id>@v<version>+<modeled-wse-id>@v<version>`)
    * without a page reload, keeping the camera and the selected time, and
-   * writes it to the `wsePolygonMethod` URL parameter. Resolves once its
-   * polygons are drawn.
+   * writes it to the `wsePolygonMethod` (and `modeledWse`) URL parameters.
+   * Resolves once its polygons are drawn.
    */
   setWsePolygonMethod(key: string): Promise<void>;
 }
 
 type ModeledSeamWindow = Window & { __TNC_MODELED__?: ModeledExperienceSeam };
+
+export interface AnchorClearanceStatus {
+  /** `?ribbonAnchorClearanceM=` in meters; null when the lift is off. */
+  readonly marginM: number | null;
+  /** `?ribbonDrapeDepthCapM=` and `?ribbonDrapeTaperM=` in meters; null when the station drape is off. */
+  readonly drape: { depthCapM: number; taperM: number } | null;
+  /** False when `?ribbonStationIntervals=off` draws ribbon v2 as one ring. */
+  readonly byStationInterval: boolean;
+  /** Browser ground samples taken at anchors and draped stations since the page opened (each cached until the drawn terrain changes). */
+  readonly groundSampleCount: number;
+  /** Redraws caused by the drawn terrain changing (not by the selected time). */
+  readonly terrainRecomputeCount: number;
+  /** The last of those: placements worked out (ms), and until the water was redrawn (ms, includes the wait for the next frame). */
+  readonly lastTerrainRecompute: { resolveMs: number; drawnMs: number } | null;
+}
 
 export interface ModeledExperienceScene {
   /**
@@ -275,12 +330,16 @@ export async function startModeledCreekExperience(
   ]);
   const catalog = readModeledCatalog(catalogFile);
   const methodList = readWsePolygonMethodList(methodListFile);
-  const requestedMethod = new URLSearchParams(window.location.search).get(WSE_POLYGON_METHOD_QUERY_PARAM);
-  const resolvedMethod = resolveWsePolygonMethod(methodList, requestedMethod);
+  const query = new URLSearchParams(window.location.search);
+  const resolvedMethod = resolveWsePolygonMethod(
+    methodList,
+    query.get(WSE_POLYGON_METHOD_QUERY_PARAM),
+    query.get(MODELED_WSE_QUERY_PARAM),
+  );
   if (resolvedMethod.unmatchedRequest) {
     console.warn(
       `No saved WSE Polygon Generation Method ${resolvedMethod.unmatchedRequest} for ${extentId}; ` +
-        `drawing ${wsePolygonMethodKey(resolvedMethod.selected)}.`,
+        `drawing ${derivedDataSelectionKey(resolvedMethod.selected)}.`,
     );
   }
   let wsePolygonMethod = resolvedMethod.selected;
@@ -342,11 +401,25 @@ export async function startModeledCreekExperience(
     { signal: lifetime.signal },
   );
 
+  const anchorClearanceStats = { terrainRecomputeCount: 0, lastTerrainRecompute: null as AnchorClearanceStatus['lastTerrainRecompute'] };
+  // Ribbon v2's anchor clearance follows the drawn terrain: when finer (or coarser) tiles replace it, the lifts are worked out again.
+  const anchorGround = createAnchorGroundCache(view, () => {
+    if (lifetime.signal.aborted || !drawsPoolFilledChannelRibbon(wsePolygonMethod) || anchorClearanceMarginM() === null) return;
+    const startedMs = performance.now();
+    renderer.schedule(resolvePlacements(state.selectedTimeUtcMs));
+    const resolvedMs = performance.now();
+    void renderer.flush().then(() => {
+      anchorClearanceStats.terrainRecomputeCount += 1;
+      anchorClearanceStats.lastTerrainRecompute = { resolveMs: resolvedMs - startedMs, drawnMs: performance.now() - startedMs };
+    });
+  });
+  lifetime.onEnd(() => anchorGround.dispose());
+
   const store = createModeledWaterDataStore({
     extentId,
     dataSource: modeledDataSource(),
     wsePolygonMethodPath: wsePolygonMethod.path,
-    modeledWseVersionPath: wsePolygonMethod.builtFromModeledWsePath ?? null,
+    modeledWseVersionPath: drawnModeledWsePathOf(wsePolygonMethod) ?? null,
     timeSeries: selected.timeSeries,
     timeStep: selected.dataset.timeStep,
     // A fetch that lands after the experience ended must not redraw or write status text.
@@ -361,13 +434,102 @@ export async function startModeledCreekExperience(
     return path && path.length >= 2 ? equirectangularDistanceM(path[0], path[path.length - 1]) : null;
   };
 
+  /** Ribbon v2's display rule for one segment, by its bed slope; off (0, 0) unless a URL parameter turns it on. */
+  const poolFilledDisplayAdjustment = (series: LoadedTimeSeries, segmentId: string): { floorM: number; liftM: number } =>
+    ribbonDisplayAdjustmentForSlope(
+      localBedSlope(series.junctionBedUpstreamMBySegmentId.get(segmentId), series.junctionBedDownstreamMBySegmentId.get(segmentId), segmentChordLengthM(segmentId)),
+      false,
+    );
+
+  /**
+   * Ribbon v2's clearance lift for one flowline at the selected time: each wet segment's own lift at its anchor, from the browser
+   * ground there and the water drawn there before the lift, then the lift at every station between anchors, raised by the station
+   * drape (`drape` non-null) where thin water would sit below the browser ground at the station's midline.
+   */
+  const anchorClearanceForFlowline = (
+    flowline: LoadedFlowline,
+    series: LoadedTimeSeries,
+    ribbonSegments: ReadonlyMap<string, PoolFillRibbonSegment>,
+    surfacesBySegmentId: ReadonlyMap<string, readonly number[]>,
+    marginM: number,
+    drape: { depthCapM: number; taperM: number } | null,
+  ): Map<string, NonNullable<SegmentPolygonPlacement['channelRibbonAnchorClearance']>> => {
+    // The height the ring gives a station before the lift (poolFilledChannelRibbonRingsWgs84).
+    const drawnBeforeLiftM = (display: { floorM: number; liftM: number }, surfaceM: number, bedM: number): number =>
+      bedM + Math.max(surfaceM - bedM, display.floorM, 0) + display.liftM;
+    const anchorsBySegmentId = new Map<string, { anchorStation: number; liftM: number; groundM: number | null }>();
+    for (const [segmentId, surfacesM] of surfacesBySegmentId) {
+      const summary = flowline.channelRibbonBySegmentId.get(segmentId);
+      const anchorStation = summary?.anchorStation ?? null;
+      const bedsM = channelRibbonStationBedsM((ribbonSegments.get(segmentId) as PoolFillRibbonSegment).buckets);
+      const surfaceM = anchorStation === null ? undefined : surfacesM[anchorStation];
+      const bedM = anchorStation === null ? undefined : bedsM?.[anchorStation];
+      if (!summary || anchorStation === null || surfaceM === undefined || bedM === undefined) continue;
+      const drawnM = drawnBeforeLiftM(poolFilledDisplayAdjustment(series, segmentId), surfaceM, bedM);
+      const groundM = anchorGround.groundAt(summary.anchorLonLat);
+      anchorsBySegmentId.set(segmentId, { anchorStation, liftM: groundM === null ? 0 : Math.max(0, groundM + marginM - drawnM), groundM });
+    }
+    const stationDrape: StationDrape | null = drape && {
+      ...drape,
+      stationsOf: (segmentId) => {
+        const surfacesM = surfacesBySegmentId.get(segmentId);
+        const buckets = (ribbonSegments.get(segmentId) as PoolFillRibbonSegment).buckets;
+        const bedsM = channelRibbonStationBedsM(buckets);
+        const midpoints = channelRibbonStationMidpointsLonLat(buckets);
+        if (!surfacesM || !bedsM || !midpoints) return null;
+        const display = poolFilledDisplayAdjustment(series, segmentId);
+        const trueDepthsM = surfacesM.map((surfaceM, station) => surfaceM - (bedsM[station] as number));
+        // Deep water is not draped, so the map is only sampled under thin water.
+        const neededLiftsM = trueDepthsM.map((depthM, station) => {
+          if (!(depthM < drape.depthCapM)) return null;
+          const groundM = anchorGround.groundAt(midpoints[station] as LonLat);
+          const bedM = bedsM[station] as number;
+          return groundM === null ? null : Math.max(0, groundM + marginM - drawnBeforeLiftM(display, bedM + depthM, bedM));
+        });
+        return { trueDepthsM, neededLiftsM };
+      },
+    };
+    const stationLifts = anchorClearanceStationLiftsBySegmentId(
+      ribbonSegments,
+      surfacesBySegmentId,
+      (segmentId) => anchorsBySegmentId.get(segmentId) ?? null,
+      stationDrape,
+    );
+    const clearanceBySegmentId = new Map<string, NonNullable<SegmentPolygonPlacement['channelRibbonAnchorClearance']>>();
+    for (const [segmentId, lifts] of stationLifts) {
+      const anchor = anchorsBySegmentId.get(segmentId);
+      clearanceBySegmentId.set(segmentId, {
+        stationLiftsM: lifts.stationLiftsM,
+        anchorStation: anchor?.anchorStation ?? null,
+        anchorLiftM: anchor?.liftM ?? 0,
+        marginM,
+        anchorGroundM: anchor?.groundM ?? null,
+        drape: drape && { ...drape, drapedStationCount: lifts.drapedStationCount, cappedStationCount: lifts.cappedStationCount },
+      });
+    }
+    return clearanceBySegmentId;
+  };
+
   const resolvePlacements = (timeUtcMs: number): SegmentPolygonPlacement[] => {
     const placements: SegmentPolygonPlacement[] = [];
     state.transferSegmentIds = new Set();
+    const clearanceMarginM = anchorClearanceMarginM();
+    const drape = stationDrapeSettings();
+    const byStationInterval = ribbonDrawnByStationInterval();
     for (const comid of state.visible.tncComids) {
       const flowline = store.loadedFlowline(comid);
       if (!flowline) continue;
       const series = store.seriesAt(comid, timeUtcMs);
+      // Ribbon v2: one walk per flowline at the selected time gives every station of every wet segment its pool-filled surface.
+      const ribbonSegments = drawsPoolFilledChannelRibbon(wsePolygonMethod) ? poolFillRibbonSegments(flowline) : null;
+      const poolFilledSurfaces =
+        ribbonSegments && series
+          ? poolFilledStationSurfacesBySegmentId(ribbonSegments, (segmentId) => heldJunctionDepthsAt(series, segmentId, timeUtcMs, holdMs))
+          : null;
+      const anchorClearances =
+        ribbonSegments && series && poolFilledSurfaces && clearanceMarginM !== null
+          ? anchorClearanceForFlowline(flowline, series, ribbonSegments, poolFilledSurfaces, clearanceMarginM, drape)
+          : null;
       for (const [segmentId, buckets] of flowline.polygonBucketsBySegmentId) {
         const isTransfer =
           (series?.transferSegmentIds.has(segmentId) ?? false) || crosswalkTransferIds.has(segmentId);
@@ -377,12 +539,21 @@ export async function startModeledCreekExperience(
         let junctionWaterSurface: JunctionWaterSurface | null = null;
         let bedParallelWaterDepth: BedParallelWaterDepth | null = null;
         let channelRibbonLiftM = 0;
+        let channelRibbonFloorM = 0;
+        let channelRibbonStationSurfacesM: readonly number[] | null = null;
+        let channelRibbonAnchorClearance: SegmentPolygonPlacement['channelRibbonAnchorClearance'] | null = null;
         if (pinned !== undefined && drawsBedParallelDepth(wsePolygonMethod)) {
           // The pin is the WSE at the anchor point; buckets are depths. Without an anchor bed, nothing is drawn.
           const anchorBedElevationM = series?.anchorBedElevationMBySegmentId.get(segmentId);
           const depth = anchorBedElevationM === undefined ? null : pinnedWaterDepth(pinned, anchorBedElevationM);
           bucket = depth ? bucketForPinnedDepth(buckets, depth.anchorDepthM) : null;
           if (bucket) bedParallelWaterDepth = depth;
+          const pinnedRibbon = ribbonSegments?.get(segmentId);
+          if (bucket && depth && pinnedRibbon) {
+            // A pinned ribbon v2 segment is pool-filled on its own at the pinned depth, with no display rule.
+            channelRibbonStationSurfacesM =
+              poolFilledStationSurfacesBySegmentId(new Map([[segmentId, { ...pinnedRibbon, downstreamSegmentId: null }]]), () => depth.junctionDepth).get(segmentId) ?? null;
+          }
         } else if (pinned !== undefined) {
           // A test pin asks for one flat height, so no slope.
           bucket = bucketForWaterSurfaceElevation(buckets, pinned);
@@ -399,6 +570,21 @@ export async function startModeledCreekExperience(
             const display = ribbonDisplayAdjustmentForSlope(bedSlope);
             depth = withDisplayDepthFloor(depth, display.floorM);
             channelRibbonLiftM = display.liftM;
+          } else if (depth && poolFilledSurfaces) {
+            // Ribbon v2: drawn on the pool-filled surface; its display rule is off unless a URL parameter turns it on.
+            const surfaces = poolFilledSurfaces.get(segmentId) ?? null;
+            const anchorStation = flowline.channelRibbonBySegmentId.get(segmentId)?.anchorStation ?? null;
+            const anchorSurfaceM = surfaces && anchorStation !== null ? surfaces[anchorStation] : undefined;
+            if (surfaces && anchorSurfaceM !== undefined) {
+              const display = poolFilledDisplayAdjustment(series, segmentId);
+              channelRibbonStationSurfacesM = surfaces;
+              channelRibbonFloorM = display.floorM;
+              channelRibbonLiftM = display.liftM;
+              channelRibbonAnchorClearance = anchorClearances?.get(segmentId) ?? null;
+              depth = { ...depth, anchorDepthM: Math.max(anchorSurfaceM - depth.anchorBedElevationM, display.floorM) };
+            } else {
+              depth = null;
+            }
           }
           bucket = depth && depth.anchorDepthM > 0 ? bucketForWaterSurfaceElevation(buckets, depth.anchorDepthM) : null;
           if (bucket) bedParallelWaterDepth = depth;
@@ -416,6 +602,10 @@ export async function startModeledCreekExperience(
           junctionWaterSurface,
           ...(bedParallelWaterDepth ? { bedParallelWaterDepth } : {}),
           ...(bedParallelWaterDepth && drawsChannelRibbon(wsePolygonMethod) ? { channelRibbonBuckets: buckets, channelRibbonLiftM } : {}),
+          ...(bedParallelWaterDepth && channelRibbonStationSurfacesM
+            ? { channelRibbonBuckets: buckets, channelRibbonStationSurfacesM, channelRibbonFloorM, channelRibbonLiftM, channelRibbonByStationInterval: byStationInterval }
+            : {}),
+          ...(bedParallelWaterDepth && channelRibbonStationSurfacesM && channelRibbonAnchorClearance ? { channelRibbonAnchorClearance } : {}),
         });
       }
     }
@@ -618,7 +808,7 @@ export async function startModeledCreekExperience(
 
   /** Swaps the drawn polygons to another saved method version; the camera and selected time stay. */
   const setWsePolygonMethod = async (key: string): Promise<void> => {
-    const next = methodList.versions.find((entry) => wsePolygonMethodKey(entry) === key);
+    const next = [...methodList.versions, ...methodList.channelPairings].find((entry) => derivedDataSelectionKey(entry) === key);
     if (!next) throw new Error(`No saved WSE Polygon Generation Method ${key} for ${extentId}.`);
     if (next !== wsePolygonMethod) {
       const nextIndex = await loadFlowlineIndex(extentId, next);
@@ -626,8 +816,8 @@ export async function startModeledCreekExperience(
       index = nextIndex;
       segmentCenters = segmentCentersById(index);
       knownComids = new Set(index.flowlines.map((flowline) => flowline.tncComid));
-      // Also reloads the Time Series when the new method was built from another modeled WSE version.
-      store.setWsePolygonMethodPath(next.path, next.builtFromModeledWsePath ?? null);
+      // Also reloads the Time Series when the new method draws another modeled WSE version.
+      store.setWsePolygonMethodPath(next.path, drawnModeledWsePathOf(next) ?? null);
       renderer.clear();
       writeWsePolygonMethodToUrl(methodList, next);
       refreshVisibleFlowlines();
@@ -701,6 +891,26 @@ export async function startModeledCreekExperience(
     wsePolygonMethods: methodList.versions,
     derivedDataGroups: groupDerivedData(methodList),
     notGeneratedDerivedData: methodList.notGenerated,
+    anchorClearance: {
+      get marginM() {
+        return anchorClearanceMarginM();
+      },
+      get drape() {
+        return stationDrapeSettings();
+      },
+      get byStationInterval() {
+        return ribbonDrawnByStationInterval();
+      },
+      get groundSampleCount() {
+        return anchorGround.sampleCount;
+      },
+      get terrainRecomputeCount() {
+        return anchorClearanceStats.terrainRecomputeCount;
+      },
+      get lastTerrainRecompute() {
+        return anchorClearanceStats.lastTerrainRecompute;
+      },
+    },
     defaultWsePolygonMethodId: methodList.defaultMethodId,
     get wsePolygonMethod() {
       return wsePolygonMethod;
@@ -743,12 +953,15 @@ async function loadFlowlineIndex(extentId: string, method: WsePolygonMethodVersi
 /**
  * Keeps the address bar reloadable after a live switch: the parameter names
  * the version, and is dropped when it is the default method's newest version.
+ * `modeledWse` names a channel pairing's Time Series and is dropped otherwise.
  */
 function writeWsePolygonMethodToUrl(list: WsePolygonMethodList, method: WsePolygonMethodVersion): void {
   const url = new URL(window.location.href);
   const isDefault = resolveWsePolygonMethod(list, null).selected === method;
   if (isDefault) url.searchParams.delete(WSE_POLYGON_METHOD_QUERY_PARAM);
   else url.searchParams.set(WSE_POLYGON_METHOD_QUERY_PARAM, wsePolygonMethodKey(method));
+  if (method.drawnWithModeledWsePath) url.searchParams.set(MODELED_WSE_QUERY_PARAM, modeledWseKeyOfPath(method.drawnWithModeledWsePath));
+  else url.searchParams.delete(MODELED_WSE_QUERY_PARAM);
   window.history.replaceState(window.history.state, '', url);
 }
 

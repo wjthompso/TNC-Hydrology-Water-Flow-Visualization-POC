@@ -76,14 +76,19 @@ export interface LoadedTimeSeries {
 /**
  * What a `flowline-channel-ribbon` polygon set carries besides its buckets (optional field
  * `channelRibbon`; absent for every other method and in hosted data). Widths are indexed by depth rung,
- * parallel to the segment's buckets. Read by the dev tools click inspector only.
+ * parallel to the segment's buckets. Read by the dev tools click inspector and by ribbon v2's run walk.
  */
 export interface ChannelRibbonSummary {
   stationCount: number;
   lengthM: number;
-  /** The WSE Anchor Point: the ribbon's middle station on the channel. */
+  /** The WSE Anchor Point: the ribbon's middle station on the channel (v1), or the creek's lowest point at its anchor station (v2). */
   anchorLonLat: LonLat;
   anchorBedElevationM: number;
+  /** Ribbon v2: which station is the anchor, and the next segment of the run in flow order (null at the run end). Null in v1 files. */
+  anchorStation: number | null;
+  downstreamSegmentId: string | null;
+  /** Ribbon v2: each station's distance from the segment's upstream boundary along the centerline, m. Null in v1 files. */
+  stationDistancesM: readonly number[] | null;
   /** Smoothed lidar flood width at the anchor per rung, before the display floors, m. */
   trueTopWidthAtAnchorM: readonly number[];
   /** Drawn width at the anchor per rung, m. */
@@ -426,6 +431,7 @@ function readChannelRibbonSummaries(value: unknown): Map<string, ChannelRibbonSu
     const anchor = ribbon.anchorLonLat;
     const trueWidths = ribbon.trueTopWidthAtAnchorM;
     const displayWidths = ribbon.displayTopWidthAtAnchorM;
+    const distances = ribbon.stationDistancesM;
     const anchorBedM = finiteOrNull(ribbon.anchorBedElevationM);
     const anchorIsLonLat =
       Array.isArray(anchor) && typeof anchor[0] === 'number' && typeof anchor[1] === 'number';
@@ -435,6 +441,9 @@ function readChannelRibbonSummaries(value: unknown): Map<string, ChannelRibbonSu
       lengthM: finiteOrNull(ribbon.lengthM) ?? 0,
       anchorLonLat: [anchor[0], anchor[1]],
       anchorBedElevationM: anchorBedM,
+      anchorStation: finiteOrNull(ribbon.anchorStation),
+      downstreamSegmentId: typeof ribbon.downstreamSegmentId === 'string' ? ribbon.downstreamSegmentId : null,
+      stationDistancesM: Array.isArray(distances) && distances.every((distance) => typeof distance === 'number') ? (distances as number[]) : null,
       trueTopWidthAtAnchorM: trueWidths as number[],
       displayTopWidthAtAnchorM: displayWidths as number[],
     });

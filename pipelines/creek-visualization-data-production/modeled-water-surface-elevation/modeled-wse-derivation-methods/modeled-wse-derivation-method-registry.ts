@@ -1,6 +1,8 @@
 import { M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD } from './m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { M2_MULTI_SECTION_MANNING_DEPTH_METHOD } from './m2-multi-section-manning-depth/method-config.ts';
 import { M3_FLOWLINE_PROFILE_MANNING_DEPTH_METHOD } from './m3-flowline-profile-manning-depth/method-config.ts';
+import { M4_FLOWLINE_PROFILE_VARIABLE_POWER_DEPTH_METHOD } from './m4-flowline-profile-variable-power-depth/method-config.ts';
+import { M5_FLOWLINE_PROFILE_JARRETT_DEPTH_METHOD } from './m5-flowline-profile-jarrett-depth/method-config.ts';
 import type { ModeledWseDerivationMethodConfig } from './modeled-wse-derivation-method.ts';
 
 /**
@@ -11,6 +13,8 @@ export const MODELED_WSE_DERIVATION_METHODS: readonly ModeledWseDerivationMethod
   M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD,
   M2_MULTI_SECTION_MANNING_DEPTH_METHOD,
   M3_FLOWLINE_PROFILE_MANNING_DEPTH_METHOD,
+  M4_FLOWLINE_PROFILE_VARIABLE_POWER_DEPTH_METHOD,
+  M5_FLOWLINE_PROFILE_JARRETT_DEPTH_METHOD,
 ];
 
 /**

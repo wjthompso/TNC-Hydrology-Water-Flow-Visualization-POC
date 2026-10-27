@@ -3,7 +3,8 @@
 // in the 3D scene by the Dev tools water click inspector:
 // - a dot at the anchor's longitude and latitude, at the water height drawn there;
 // - a flag floating above it on a callout line (a screen-space offset, so terrain cannot bury it);
-// - a smaller dot at the anchor's bed height and a line up to the water, when the bed is known.
+// - a smaller white dot at the pipeline's estimated bed height and a line up to the water, when the bed is known;
+// - a small green diamond at the 1 m lidar ground height at the same longitude and latitude, when the dev server found it.
 // The layer stays on the map for the experience; callers show it only while Dev tools is open.
 
 import Graphic from '@arcgis/core/Graphic';
@@ -19,6 +20,7 @@ import type SceneView from '@arcgis/core/views/SceneView';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 
 const ANCHOR_PINK = '#ff2d95';
+const LIDAR_GROUND_GREEN = '#22c55e';
 const FLAG_LIFT_SCREEN_PX = 56;
 
 export interface WaterAnchorMarkerPosition {
@@ -26,8 +28,10 @@ export interface WaterAnchorMarkerPosition {
   latitude: number;
   /** Water height drawn at the anchor, m NAVD88. */
   waterSurfaceM: number;
-  /** Creek-bed height at the anchor, m NAVD88; null draws no bed dot or line. */
+  /** The pipeline's estimated creek-bed height at the anchor, m NAVD88; null draws no bed dot or line. */
   bedM: number | null;
+  /** Measured 1 m lidar ground height at the anchor's longitude and latitude, m NAVD88; null draws no green dot. */
+  groundM: number | null;
 }
 
 export interface WaterAnchorMarker {
@@ -77,6 +81,13 @@ export function createWaterAnchorMarker(
     size: 6,
     outline: new SimpleLineSymbol({ color: ANCHOR_PINK, width: 1.5 }),
   });
+  // A diamond, so it stays readable when the lidar ground and the drawn water sit within centimeters of each other.
+  const lidarGroundDotSymbol = new SimpleMarkerSymbol({
+    style: 'diamond',
+    color: LIDAR_GROUND_GREEN,
+    size: 9,
+    outline: new SimpleLineSymbol({ color: 'white', width: 1.5 }),
+  });
   const depthLineSymbol = new SimpleLineSymbol({ color: ANCHOR_PINK, width: 2 });
 
   let graphics: Graphic[] = [];
@@ -89,7 +100,7 @@ export function createWaterAnchorMarker(
       if (graphics.length > 0) layer.removeMany(graphics);
       graphics = [];
       if (!position) return;
-      const { longitude, latitude, waterSurfaceM, bedM } = position;
+      const { longitude, latitude, waterSurfaceM, bedM, groundM } = position;
       const pointAt = (z: number): Point =>
         new Point({ longitude, latitude, z, hasZ: true, spatialReference: { wkid: 4326 } });
       graphics.push(
@@ -114,6 +125,7 @@ export function createWaterAnchorMarker(
           }),
         );
       }
+      if (groundM !== null) graphics.push(new Graphic({ geometry: pointAt(groundM), symbol: lidarGroundDotSymbol }));
       layer.addMany(graphics);
     },
   };
