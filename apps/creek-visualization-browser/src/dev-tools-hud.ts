@@ -71,8 +71,9 @@ interface DevToolsHudOptions {
   container: HTMLElement;
   /**
    * `top` (default) pins the HUD to the top-right corner. `below-dev-tools-toggle`
-   * leaves room above it for the development-server toggle button and the
-   * imagery widget stacked under it.
+   * leaves room above it for the development-server toggle button only; the HUD
+   * then covers the imagery widget stacked under that button, so closing the HUD
+   * brings the imagery widget back.
    */
   placement?: 'top' | 'below-dev-tools-toggle';
   /**
@@ -242,8 +243,9 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     'pointer-events-auto',
     'absolute',
     'right-4',
-    belowToggle ? 'top-[6.25rem]' : 'top-4',
-    'z-20',
+    belowToggle ? 'top-14' : 'top-4',
+    // Above the imagery widget (z-30), which sits in the same spot and stays hidden while the panel is open.
+    'z-40',
     'w-[min(24rem,calc(100vw-2rem))]',
     'overflow-hidden',
     'border',
