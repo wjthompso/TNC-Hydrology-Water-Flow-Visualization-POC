@@ -128,7 +128,7 @@ Every change to a method's output-affecting code or parameters gets a new versio
 2. Rewrite its METHOD.md. In its `method-config.ts`, set `id`, `label`, `version: 1`, a one- or two-sentence `description`, `browserDrawing`, `sharedCodeFiles`, and `parameters`. Change the generator; it receives the shared Stage 0–3 inputs (`WsePolygonMethodInputs`) and returns polygon sets, a ladder summary, counts, and warnings (`WsePolygonMethodResult`). Stage 5 checks that every Creek Segment has one polygon set and that every modeled value is at or below the ladder's `ceilingM`.
 3. Register the config in `wse-polygon-generation-method-registry.ts` and the generator in `wse-polygon-generation-method-generators.ts`.
 4. Run `npm run pipeline:modeled-wse:water-surface-polygons -- --extent=jalama-gauge-reach --wse-polygon-method=<new-method-id>`, then `npm run pipeline:modeled-wse:catalog-and-validate -- --extent=jalama-gauge-reach`.
-5. Open the modeled experience with `?devtools=1` and choose the method in Dev tools → Dataset and time → **Polygon method**, or open `?wsePolygonMethod=<new-method-id>@v1` directly.
+5. Open the modeled experience on the development server with `?devtools=1` and choose the method in Dev tools → Dataset and time → **Polygon method**, or open `?wsePolygonMethod=<new-method-id>@v1` directly. A production build ignores `?devtools` unless `VITE_SHOW_DEV_TOOLS=true`.
 
 Change `DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID` only when the new method should become what the browser opens and what Stage 5 fails on; that decision changes what the Feature Behavior Tests check.
 

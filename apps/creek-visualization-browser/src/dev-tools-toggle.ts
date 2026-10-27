@@ -1,11 +1,11 @@
-// Development-only corner button that opens and closes the dev tools HUD.
-// Mounted by creek-experience-main.ts when `import.meta.env.DEV` is true, in
-// both the observed and the modeled experiences. Vite replaces that flag with
-// `false` in production builds, so this module is never bundled there. The
-// yellow ring tracks clicks from the moment the toggle mounts, including
-// clicks made while the panel is closed. The HUD panel itself is imported the
-// first time it is opened. The open state is remembered in localStorage;
-// `?devtools` still opens the HUD on load.
+// Corner button that opens and closes the dev tools HUD. Mounted by
+// creek-experience-main.ts when dev tools are enabled (the development server
+// by default, or any build with VITE_SHOW_DEV_TOOLS=true), in both the observed
+// and the modeled experiences. This module loads only in that case. The yellow
+// ring tracks clicks from the moment the toggle mounts, including clicks made
+// while the panel is closed. The HUD panel itself is imported the first time it
+// is opened. The open state is remembered in localStorage; `?devtools` opens
+// the HUD on load when the button is mounted.
 
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { CreekVisualizationAttachment } from './creek-visualization-library-interface';

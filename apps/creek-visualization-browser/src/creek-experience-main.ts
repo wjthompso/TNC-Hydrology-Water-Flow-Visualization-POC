@@ -10,6 +10,7 @@ import {
 } from './creek-visualization-library-interface';
 import type { WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
 import type { HitTestCapture, HitTestCaptureHit } from './dev-tools-capture-schema';
+import { resolveShowDevTools } from './dev-tools-visibility';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
 import {
@@ -335,31 +336,34 @@ function openAccuracyNoticeUnlessTestMode(datasetId: string): void {
 }
 
 /**
- * `?devtools` mounts the HUD open in every build. A development server also
- * gets a corner toggle button so the HUD is always one click away; Vite drops
- * that branch, and the toggle module, from production builds.
+ * Dev tools button and `?devtools` hatch. On for the development server unless
+ * `VITE_SHOW_DEV_TOOLS` says otherwise. A production build leaves both out
+ * unless that variable is true, so a shared Digital Twin link cannot open the HUD.
+ */
+const devToolsEnabled = resolveShowDevTools({
+  DEV: import.meta.env.DEV,
+  VITE_SHOW_DEV_TOOLS: import.meta.env.VITE_SHOW_DEV_TOOLS,
+});
+
+/**
+ * Mounts the corner button when dev tools are enabled, and opens the HUD
+ * immediately when the URL has `?devtools`. The toggle module loads only in
+ * that case.
  */
 async function installDevToolsIfRequested(experienceLifetime: ExperienceLifetime): Promise<void> {
-  if (!sceneView || !attachment) return;
+  if (!sceneView || !attachment || !devToolsEnabled) return;
   const view = sceneView;
   const open = attachment;
   const requested = new URLSearchParams(location.search).has('devtools');
-  if (import.meta.env.DEV) {
-    const { installDevToolsToggle } = await import('./dev-tools-toggle');
-    if (experienceLifetime.signal.aborted) return;
-    installDevToolsToggle({
-      view,
-      attachment: open,
-      container: document.body,
-      openOnLoad: requested,
-      lifetime: experienceLifetime,
-    });
-    return;
-  }
-  if (!requested) return;
-  const { installDevToolsHud } = await import('./dev-tools-hud');
+  const { installDevToolsToggle } = await import('./dev-tools-toggle');
   if (experienceLifetime.signal.aborted) return;
-  installDevToolsHud({ view, attachment: open, container: document.body, lifetime: experienceLifetime });
+  installDevToolsToggle({
+    view,
+    attachment: open,
+    container: document.body,
+    openOnLoad: requested,
+    lifetime: experienceLifetime,
+  });
 }
 
 /**
@@ -804,9 +808,9 @@ function geographicPoint(point: Point): Point | null {
   return geographic as Point;
 }
 
-/** Development builds stack the imagery widget under the Dev tools button; production has the corner to itself. */
+/** With Dev tools enabled, the imagery widget sits under that button. Otherwise it keeps the corner. */
 function bindImageryWidget(view: SceneView): void {
-  bindSceneImageryWidget(view, { belowDevTools: import.meta.env.DEV });
+  bindSceneImageryWidget(view, { belowDevTools: devToolsEnabled });
 }
 
 function showExperienceError(message: string): void {

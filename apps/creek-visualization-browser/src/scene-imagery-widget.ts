@@ -16,7 +16,7 @@ const OPTION_CLASS =
   'flex cursor-pointer items-start gap-2 rounded-md px-1.5 py-1 text-xs leading-snug text-slate-200 hover:bg-slate-800 has-[:checked]:bg-cyan-950/70 has-[:checked]:text-cyan-100 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-cyan-300';
 const RADIO_CLASS = 'mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-cyan-400 focus-visible:outline-none';
 
-/** Development builds put the Dev tools button in the same corner; the widget then sits below it. */
+/** When Dev tools are enabled, that button occupies the corner and this widget sits below it. */
 const BELOW_DEV_TOOLS_CLASS = 'top-14';
 
 export function bindSceneImageryWidget(view: SceneView, options: { belowDevTools: boolean }): void {

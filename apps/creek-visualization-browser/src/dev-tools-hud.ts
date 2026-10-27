@@ -1,6 +1,6 @@
-// Developer-only HUD. Mounted when the page URL carries `?devtools` (or
-// `?devtools=1`), or from the development-server corner toggle
-// (dev-tools-toggle.ts). Reads from `window.__TNC_TEST__` so the HUD and future
+// Developer-only HUD. Mounted from the Dev tools corner button
+// (dev-tools-toggle.ts) when dev tools are enabled. `?devtools` opens it on
+// load in that same case. Reads from `window.__TNC_TEST__` so the HUD and future
 // replay tests share the same capture shape. In the modeled experience it also
 // reads `window.__TNC_MODELED__` for the Drainage-Area Ratio Transfer tools.
 //
@@ -76,9 +76,8 @@ interface DevToolsHudOptions {
    */
   placement?: 'top' | 'below-dev-tools-toggle';
   /**
-   * When the dev-server toggle already tracks clicks, it owns the marker and
-   * forwards clicks here. A direct `?devtools` mount leaves this unset and the
-   * HUD creates the marker itself.
+   * When the corner toggle already tracks clicks, it owns the marker and
+   * forwards clicks here. A mount without a marker creates one.
    */
   clickMarker?: DevToolsClickMarker;
   /** Ending it removes the panel, its timers, and its map layers. The view stays. */
