@@ -107,7 +107,7 @@
               aria-pressed="false"
               aria-label="Play"
               title="Play"
-              class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-cyan-500/60 bg-cyan-950/60 text-cyan-100 transition-colors hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950"
+              class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-cyan-500/60 bg-cyan-950/60 text-cyan-100 transition-colors hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-not-allowed disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950"
             ></button>
           </div>
           <div class="flex items-baseline justify-between gap-3">
@@ -268,7 +268,7 @@
             id="wse-chart-plot"
             class="mt-2 hidden h-48 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
             role="img"
-            aria-label="Water-surface elevation over time for the selected Creek Segment. Click a time to select it."
+            aria-label="Water-surface elevation over time for the selected Creek Segment. Click a time to select it, or drag left or right to scrub."
           ></div>
           <div
             id="wse-chart-overview"
@@ -333,12 +333,12 @@
         </div>
         <!-- Observed experience only: shown by creek-experience-main.ts when the data carries inferred neighbours (UCS-300). -->
         <div id="legend-inferred-row" class="mt-1.5 hidden items-center gap-2 text-xs leading-relaxed text-slate-300">
-          <span class="inline-block h-3 w-6 shrink-0 rounded-sm border border-teal-700 bg-teal-300" aria-hidden="true"></span>
+          <span class="inline-block h-3 w-6 shrink-0 rounded-sm bg-teal-600" aria-hidden="true"></span>
           <span id="legend-inferred-label"></span>
         </div>
         <!-- Modeled experience only: shown by modeled-creek-experience.ts. -->
         <div id="legend-transfer-row" class="mt-1.5 hidden items-center gap-2 text-xs leading-relaxed text-slate-300">
-          <span class="inline-block h-3 w-6 shrink-0 rounded-sm border border-sky-700 bg-sky-300" aria-hidden="true"></span>
+          <span class="inline-block h-3 w-6 shrink-0 rounded-sm border border-sky-900 bg-sky-700" aria-hidden="true"></span>
           <!-- Text set from drainage-area-ratio-transfer-labels.ts. -->
           <span id="legend-transfer-label"></span>
         </div>

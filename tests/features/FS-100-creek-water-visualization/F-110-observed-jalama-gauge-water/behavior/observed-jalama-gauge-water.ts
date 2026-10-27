@@ -60,6 +60,8 @@ export interface SeamSnapshot {
     bucketMinElevationM: number | null;
     /** True for water inferred by Creek Segment Observed WSE Propagation; false for measured water. */
     inferred: boolean;
+    /** Symbol layer types on the drawn water graphic, e.g. ["water"]. Empty when the graphic is hidden. */
+    symbolLayerTypes: string[];
   }>;
   cameraTargetWgs84: [number, number] | null;
 }
@@ -375,6 +377,7 @@ export async function readSeam(page: Page): Promise<SeamSnapshot> {
         segmentId: item.segmentId,
         bucketMinElevationM: item.bucketMinElevationM,
         inferred: item.inferred === true,
+        symbolLayerTypes: [...(item.symbolLayerTypes ?? [])],
       })),
       cameraTargetWgs84: target ? [target[0], target[1]] : null,
     };

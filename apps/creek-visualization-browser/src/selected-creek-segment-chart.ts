@@ -111,7 +111,7 @@ export function bindSelectedCreekSegmentChart(input: {
   waterGraphics: WaterGraphicSource;
   chartElements: WaterSurfaceElevationChartElements;
   chartContentForSegment: (segmentId: string) => SegmentChartContent;
-  /** Called with the time of the chart reading a person clicked. */
+  /** Called with the time of the chart reading a person clicked or dragged to. */
   onChartTimeClicked: (timeUtcMs: number) => void;
   /** Ending it unbinds the click, the chart, and the highlight. */
   lifetime?: ExperienceLifetime;

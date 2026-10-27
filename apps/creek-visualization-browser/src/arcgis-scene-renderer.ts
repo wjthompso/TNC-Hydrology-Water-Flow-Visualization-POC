@@ -26,6 +26,12 @@ export interface WaterGraphicGeometryIdentity {
   bucketMinDepthM?: number | null;
   /** True when the drawn water is inferred by Creek Segment Observed WSE Propagation, false when observed or modeled. */
   inferred?: boolean;
+  /**
+   * Observed renderer only: the type of every symbol layer on the drawn water graphic, in order
+   * (`['water']` for plain water; a `fill` entry means a symbol outline). Empty when the graphic is
+   * hidden. The selection highlight is a view highlight, not a symbol layer, so it never appears here.
+   */
+  symbolLayerTypes?: readonly string[];
 }
 
 export interface SegmentPolygonPlacement {
@@ -87,13 +93,15 @@ export interface SegmentPolygonPlacement {
   inferred?: boolean;
 }
 
-/** Teal for inferred water, clearly apart from observed blue and the lighter blue of Drainage-Area Ratio Transfer water; matches the legend swatch. */
-export const INFERRED_WATER_COLOR = '#5eead4';
-export const INFERRED_WATER_OUTLINE_COLOR = '#0f766e';
-
-/** Lighter blue for Drainage-Area Ratio Transfer water; matches the legend swatch. */
-export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_COLOR = '#7dd3fc';
-export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_OUTLINE_COLOR = '#0369a1';
+/**
+ * Deep teal (teal-600) for inferred water, clearly apart from observed blue and the deep blue of
+ * Drainage-Area Ratio Transfer water; matches the legend swatch. Dark enough that the water
+ * layer's pale wave highlights stay visible against it.
+ */
+export const INFERRED_WATER_COLOR = '#0d9488';
+/** Deep blue (sky-700) for Drainage-Area Ratio Transfer water, dark so waves show; matches the legend swatch. */
+export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_COLOR = '#0369a1';
+export const DRAINAGE_AREA_RATIO_TRANSFER_WATER_OUTLINE_COLOR = '#0c4a6e';
 
 export interface ArcGISSceneRenderer {
   schedule(placements: readonly SegmentPolygonPlacement[]): void;
@@ -119,7 +127,7 @@ export const waterSymbol = new PolygonSymbol3D({
 });
 
 /**
- * Drainage-Area Ratio Transfer water: a clearly lighter blue (sky-300) with a
+ * Drainage-Area Ratio Transfer water: a clearly darker blue (sky-700) with a
  * thin outline, so borrowed-discharge segments read apart from modeled water
  * on the creek's own Reach. A transparent fill layer carries the outline, which
  * the water layer cannot draw itself.
@@ -128,33 +136,29 @@ export const drainageAreaRatioTransferWaterSymbol = new PolygonSymbol3D({
   symbolLayers: [
     new WaterSymbol3DLayer({
       color: DRAINAGE_AREA_RATIO_TRANSFER_WATER_COLOR,
-      waterbodySize: 'small',
-      waveStrength: 'slight',
+      waterbodySize: 'medium',
+      waveStrength: 'moderate',
       waveDirection: 260,
     }),
     new FillSymbol3DLayer({
-      material: { color: [125, 211, 252, 0] },
+      material: { color: [3, 105, 161, 0] },
       outline: { color: DRAINAGE_AREA_RATIO_TRANSFER_WATER_OUTLINE_COLOR, size: 1 },
     }),
   ],
 });
 
 /**
- * Inferred water (Creek Segment Observed WSE Propagation): teal with a thin outline, so a guess
- * made from the gauge never reads as the measured blue. A transparent fill layer carries the
- * outline, which the water layer cannot draw itself.
+ * Inferred water (Creek Segment Observed WSE Propagation): teal, so a guess made from the gauge
+ * never reads as the measured blue. No outline: each segment is its own polygon, so an outline
+ * would also draw a dark line across the creek where two segments meet.
  */
 export const inferredWaterSymbol = new PolygonSymbol3D({
   symbolLayers: [
     new WaterSymbol3DLayer({
       color: INFERRED_WATER_COLOR,
-      waterbodySize: 'small',
-      waveStrength: 'slight',
+      waterbodySize: 'medium',
+      waveStrength: 'moderate',
       waveDirection: 260,
-    }),
-    new FillSymbol3DLayer({
-      material: { color: [94, 234, 212, 0] },
-      outline: { color: INFERRED_WATER_OUTLINE_COLOR, size: 1 },
     }),
   ],
 });
@@ -301,9 +305,16 @@ function readIdentity(
           ? (writtenElevationM.get(segmentId) ?? null)
           : elevationOnGraphic(graphic, writtenElevationM.get(segmentId)),
       inferred,
+      symbolLayerTypes: graphic.visible ? symbolLayerTypesOf(graphic) : [],
     });
   }
   return identity;
+}
+
+function symbolLayerTypesOf(graphic: Graphic): string[] {
+  const symbol = graphic.symbol;
+  if (!symbol || symbol.type !== 'polygon-3d') return [];
+  return (symbol as PolygonSymbol3D).symbolLayers.toArray().map((layer) => layer.type);
 }
 
 /** Prefer the z stored on the graphic. Fall back to the z just written if the view has not echoed it yet. */

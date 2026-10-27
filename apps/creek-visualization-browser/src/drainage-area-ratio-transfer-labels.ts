@@ -8,13 +8,13 @@ export const DRAINAGE_AREA_RATIO_TRANSFER_TERM = 'Drainage-Area Ratio Transfer';
 /** Sidebar checkbox that shows or hides the borrowed-flow water. */
 export const DRAINAGE_AREA_RATIO_TRANSFER_TOGGLE_LABEL = `Show side creeks with borrowed flow (${DRAINAGE_AREA_RATIO_TRANSFER_TERM})`;
 
-/** Sidebar legend row for the lighter blue water. */
+/** Sidebar legend row for the dark blue water. */
 export const DRAINAGE_AREA_RATIO_TRANSFER_LEGEND_LABEL = `Side creek, borrowed flow (${DRAINAGE_AREA_RATIO_TRANSFER_TERM})`;
 
 /** Heading and body of the explanation inside the collapsed Dataset details. */
 export const DRAINAGE_AREA_RATIO_TRANSFER_EXPLANATION_HEADING = `Side creeks with borrowed flow (${DRAINAGE_AREA_RATIO_TRANSFER_TERM})`;
 export const DRAINAGE_AREA_RATIO_TRANSFER_EXPLANATION =
-  'Some small side creeks have no flow value in this model. For those, we borrow the flow of the nearest modeled creek that drains the same area and scale it by how much land drains to each spot (the USGS drainage-area ratio method). These are shown in lighter blue and can be hidden with the checkbox above.';
+  'Some small side creeks have no flow value in this model. For those, we borrow the flow of the nearest modeled creek that drains the same area and scale it by how much land drains to each spot (the USGS drainage-area ratio method). These are shown in dark blue and can be hidden with the checkbox above.';
 
 /** Dev tools section title and subtitle. */
 export const DRAINAGE_AREA_RATIO_TRANSFER_DEV_TOOLS_TITLE = 'Side creeks with borrowed flow';
