@@ -17,6 +17,7 @@ import {
   JALAMA_TNC_COMID,
   NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
   missingLocalPipelineOutput,
+  readAnchorBedElevationM,
   readWaterSurfaceElevationsAt,
 } from '../../F-140-modeled-creek-water-surface-elevation/behavior/local-pipeline-output.ts';
 import {
@@ -122,16 +123,33 @@ test("Clicking a time on a modeled creek segment's water-surface elevation chart
     expect(slider.readout, 'time readout').toBe(label);
     expect(Number(slider.value), 'time slider slot').toBe(Math.round((pointed.timeUtcMs - Date.parse('2017-10-01T00:00:00Z')) / HOUR_MS));
 
-    // The segment's modeled water redraws at the charted elevation, and the chart cursor sits on that hour.
+    // The chart plots Anchor Water Depth: the pipeline's elevation for the clicked hour minus the segment's anchor bed.
+    const pipelineInput = {
+      extentId: JALAMA_EXTENT_ID,
+      datasetId: NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+      comid: JALAMA_TNC_COMID,
+      timeUtcMs: pointed.timeUtcMs,
+    };
+    const clickedElevationM = readWaterSurfaceElevationsAt(pipelineInput)?.get(SEGMENT_ID);
+    const anchorBedM = readAnchorBedElevationM({ ...pipelineInput, segmentId: SEGMENT_ID });
+    if (typeof clickedElevationM !== 'number' || anchorBedM === null) {
+      throw new Error(`The local pipeline output has no elevation and anchor bed for ${SEGMENT_ID} at the clicked hour.`);
+    }
+    expect(pointed.valueM, 'charted water depth is the clicked hour\'s elevation minus the anchor bed').toBeCloseTo(
+      Math.max(0, clickedElevationM - anchorBedM),
+      6,
+    );
+
+    // The segment's modeled water redraws at that hour's elevation, and the chart cursor sits on that hour.
     await waitForModeledWaterIdle(page);
-    expect(await readModeledElevationM(page, SEGMENT_ID), 'modeled elevation the page holds').toBe(pointed.valueM);
-    const expectedBucket = bucketFor(modeled, SEGMENT_ID, pointed.valueM);
+    expect(await readModeledElevationM(page, SEGMENT_ID), 'modeled elevation the page holds').toBe(clickedElevationM);
+    const expectedBucket = bucketFor(modeled, SEGMENT_ID, clickedElevationM);
     expect(expectedBucket.minWaterSurfaceElevationM, 'the peak water differs from the opening water').not.toBe(
       openingBucket.minWaterSurfaceElevationM,
     );
     await expect
       .poll(async () => bucketMinOf((await readSeam(page)).waterGraphicGeometryIdentity, SEGMENT_ID), {
-        message: `segment water drawn at the charted ${pointed.valueM} m value's bucket`,
+        message: `segment water drawn at the clicked hour's ${clickedElevationM} m elevation bucket`,
       })
       .toBe(expectedBucket.minWaterSurfaceElevationM);
     expect((await readSelection(page)).chartCursorTimeUtcMs, 'chart time cursor').toBe(pointed.timeUtcMs);
