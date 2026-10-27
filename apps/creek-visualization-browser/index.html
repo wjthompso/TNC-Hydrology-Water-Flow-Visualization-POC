@@ -208,6 +208,63 @@
         </section>
 
         <section
+          id="trout-conditions-panel"
+          class="pointer-events-auto mb-4 border-t border-slate-700 pt-3"
+          aria-labelledby="trout-conditions-title"
+        >
+          <label class="flex cursor-pointer items-start gap-2 text-base text-slate-200">
+            <input
+              id="trout-conditions-toggle"
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            />
+            <span id="trout-conditions-title">Steelhead trout conditions</span>
+          </label>
+          <p id="trout-conditions-caveat" class="mt-1 text-xs leading-relaxed text-amber-300"></p>
+          <div class="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="Steelhead life stage">
+            <button
+              type="button"
+              data-steelhead-life-stage="eggs"
+              aria-pressed="false"
+              disabled
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              Eggs
+            </button>
+            <button
+              type="button"
+              data-steelhead-life-stage="juveniles"
+              aria-pressed="false"
+              disabled
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              Juveniles
+            </button>
+            <button
+              type="button"
+              data-steelhead-life-stage="adults"
+              aria-pressed="true"
+              disabled
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              Adults
+            </button>
+          </div>
+          <!-- Filled by steelhead-trout-conditions-controls.ts from the research ranges. Shown while the switch is on. -->
+          <div id="trout-conditions-details" class="mt-2 hidden text-sm leading-relaxed text-slate-300">
+            <p id="trout-conditions-season" class="text-slate-200"></p>
+            <ul id="trout-conditions-ranges" class="mt-1.5 space-y-1"></ul>
+            <p id="trout-conditions-no-band" class="mt-1.5 rounded-md border border-slate-600 bg-slate-800/60 p-2 text-slate-200"></p>
+            <p id="trout-conditions-segment-note" class="mt-1.5 hidden text-amber-300"></p>
+            <details class="mt-2 text-xs text-slate-400">
+              <summary class="cursor-pointer text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">Where the ranges come from</summary>
+              <ul id="trout-conditions-basis" class="mt-1 list-disc space-y-1 pl-4"></ul>
+              <p class="mt-1">Depth is water-surface elevation minus the segment's bed elevation. Temperature, oxygen, and velocity are not checked.</p>
+            </details>
+          </div>
+        </section>
+
+        <section
           id="wse-chart-panel"
           class="pointer-events-auto mb-4 border-t border-slate-700 pt-3"
           aria-labelledby="wse-chart-title"
@@ -327,6 +384,8 @@
         class="pointer-events-none absolute bottom-8 right-3 z-10 w-max max-w-[min(20rem,calc(100vw-27.5rem))] rounded-lg border border-slate-700/80 bg-slate-900/80 p-3 shadow-xl backdrop-blur"
       >
         <h2 class="text-sm font-semibold text-slate-100">Legend</h2>
+        <!-- Hidden while steelhead trout conditions recolor the water (steelhead-trout-conditions-controls.ts). -->
+        <div id="legend-source-rows">
         <div class="mt-2 flex items-center gap-2 text-xs leading-relaxed text-slate-300">
           <span class="inline-block h-3 w-6 shrink-0 rounded-sm bg-[#1d9bf0]" aria-hidden="true"></span>
           <span id="legend-water-label">Observed water on the gauge's creek segment</span>
@@ -341,6 +400,11 @@
           <span class="inline-block h-3 w-6 shrink-0 rounded-sm border border-sky-900 bg-sky-700" aria-hidden="true"></span>
           <!-- Text set from drainage-area-ratio-transfer-labels.ts. -->
           <span id="legend-transfer-label"></span>
+        </div>
+        </div>
+        <div id="legend-trout-block" class="hidden">
+          <p id="legend-trout-title" class="mt-2 text-xs font-medium text-slate-100"></p>
+          <div id="legend-trout-rows"></div>
         </div>
       </section>
 

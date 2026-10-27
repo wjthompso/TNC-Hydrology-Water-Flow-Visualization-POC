@@ -1,5 +1,9 @@
 import type SceneView from '@arcgis/core/views/SceneView';
-import { createArcGISSceneRenderer, type WaterGraphicGeometryIdentity } from './arcgis-scene-renderer';
+import {
+  createArcGISSceneRenderer,
+  type SegmentPolygonPlacement,
+  type WaterGraphicGeometryIdentity,
+} from './arcgis-scene-renderer';
 import type { ElevationBucket, LoadedCreekVisualization } from './creek-data-contract';
 import { inferredWaterSegmentGeometry } from './inferred-water-segment-geometry';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
@@ -14,9 +18,12 @@ import {
   type SelectedCreekSegmentChart,
 } from './selected-creek-segment-chart';
 import {
+  exactTimestampIndex,
   resolveSelectedTimeCreekState,
   type SegmentWaterPlacement,
 } from './selected-time-creek-state-resolver';
+import { bindSteelheadTroutConditionsControls } from './steelhead-trout-conditions-controls';
+import { classifySteelheadCondition } from './steelhead-trout-conditions';
 
 const OBSERVED_CHART_SOURCE_LABEL = 'Observed at USGS gauge 11120600, Jalama Creek near Lompoc (m NAVD88)';
 /** Inferred water is a guess made from the gauge; it is never labeled as measured. */
@@ -101,6 +108,38 @@ export function attachCreekVisualization(
   );
   lifetime.onEnd(() => renderer.dispose());
 
+  // Steelhead trout conditions (UCS-293). Bed elevation comes from the propagation file, which lists the
+  // gauge segment and its inferred neighbours; without that file no segment has a bed and none is rated.
+  const troutConditions = bindSteelheadTroutConditionsControls(lifetime);
+  const bedElevationM = (segmentId: string): number | null =>
+    options.data.propagation?.nodesById.get(segmentId)?.bedElevationM ?? null;
+
+  /** Adds each drawn segment's trout condition at the selected time when the switch is on. */
+  const withTroutConditions = (
+    placements: readonly SegmentWaterPlacement[],
+    timeUtcMs: number,
+  ): readonly SegmentPolygonPlacement[] => {
+    const { enabled, lifeStage } = troutConditions.state;
+    if (!enabled) return placements;
+    const timeIndex = exactTimestampIndex(options.data.timestampsUtcMs, timeUtcMs);
+    return placements.map((placement) => {
+      if (!placement.bucket || timeIndex < 0) return placement;
+      const readings =
+        options.data.waterSurfaceElevationMBySegmentId.get(placement.segmentId) ??
+        options.data.propagation?.inferredWaterSurfaceElevationMBySegmentId.get(placement.segmentId);
+      const waterSurfaceElevationM = readings?.[timeIndex] ?? null;
+      return {
+        ...placement,
+        troutCondition: classifySteelheadCondition(
+          lifeStage,
+          waterSurfaceElevationM,
+          bedElevationM(placement.segmentId),
+          timeUtcMs,
+        ),
+      };
+    });
+  };
+
   const applyPins = (
     placements: readonly SegmentWaterPlacement[],
   ): readonly SegmentWaterPlacement[] => {
@@ -129,7 +168,7 @@ export function attachCreekVisualization(
       : NO_OBSERVATION_STATUS;
     options.status.classList.toggle('text-amber-300', provisional);
     options.status.classList.toggle('text-slate-300', !provisional);
-    renderer.schedule(applyPins(resolved.placements));
+    renderer.schedule(withTroutConditions(applyPins(resolved.placements), timeUtcMs));
     selectedCreekSegmentChart?.setSelectedTime(timeUtcMs);
   };
 
@@ -146,6 +185,9 @@ export function attachCreekVisualization(
     applySelectedTime,
     lifetime,
   );
+
+  // Recolor the map when the switch or life stage changes (the chart follows through its own binding).
+  troutConditions.onChange(() => applySelectedTime(state.selectedTimeUtcMs));
 
   const chartElements = readWaterSurfaceElevationChartElements();
   if (chartElements) {
@@ -168,6 +210,7 @@ export function attachCreekVisualization(
         };
       },
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+      troutConditions: { controls: troutConditions, bedElevationM },
       lifetime,
     });
     selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);

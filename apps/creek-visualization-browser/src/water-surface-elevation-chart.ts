@@ -10,6 +10,10 @@
 // window. The elevation axis rescales to the readings inside the window, so a
 // short outlier fills the chart. Double-click the chart or press Reset zoom to
 // show the whole record again.
+//
+// Optional condition bands (UCS-293) paint red / yellow / green zones behind
+// the line, with a hatch over times the zones do not apply to. The chart only
+// draws the bands it is given and knows nothing about what they mean.
 
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { formatObservationTime } from './observation-timeline-controls';
@@ -41,6 +45,11 @@ const MIN_WINDOW_READINGS = 4;
 /** Arrow keys move a window edge by this share of the record; Shift moves ten times as far. */
 const KEYBOARD_STEP_FRACTION = 0.01;
 
+/** The axis reaches this far above the green edge, so the green zone has some height. */
+const BAND_HEADROOM_M = 0.05;
+/** A zone label is drawn only when its zone is at least this tall (px). */
+const BAND_LABEL_MIN_HEIGHT = 14;
+
 const NO_SELECTION_TEXT = 'Click creek water on the map to see its water-surface elevation over time.';
 /** Full instructions live in the chart's info tip (index.html); this is the short idle prompt. */
 const HOVER_HINT_TEXT = 'Hover the chart to read a value.';
@@ -68,6 +77,24 @@ export interface WaterSurfaceElevationSeries {
   timestampsUtcMs: readonly number[];
   /** Meters NAVD88, parallel to `timestampsUtcMs`. Null is a missing reading. */
   valuesM: readonly (number | null)[];
+}
+
+/**
+ * Red / yellow / green zones for one Creek Segment, as depths above its bed.
+ * Below `marginalFromDepthM` is red, up to `suitableFromDepthM` is yellow, and
+ * from there up is green.
+ */
+export interface WaterSurfaceConditionBands {
+  /** Names the zones for the chart's label, such as "Adults". */
+  stageLabel: string;
+  /** Bed elevation, m NAVD88, that turns depths into the chart's water-surface elevations. */
+  bedElevationM: number;
+  marginalFromDepthM: number;
+  suitableFromDepthM: number;
+  /** True for times the zones do not apply to; the chart hatches them. */
+  isOutOfSeason(timeUtcMs: number): boolean;
+  /** Short class text for a reading, appended to the hover readout; empty for none. */
+  describe(waterSurfaceElevationM: number, timeUtcMs: number): string;
 }
 
 export interface WaterSurfaceElevationChartElements {
@@ -104,6 +131,8 @@ export interface WaterSurfaceElevationChartState {
   /** The reading the selected time resolves to, m NAVD88; null when the selected time has none. */
   readonly selectedValueM: number | null;
   readonly unit: WaterLevelUnit;
+  /** Stage label of the condition bands drawn now; null when none are drawn. */
+  readonly conditionBandsStageLabel: string | null;
   /** Viewport pixel of the line at the reading nearest the time; null when it cannot be drawn. */
   clientPointForTime(timeUtcMs: number): { x: number; y: number } | null;
   /** Viewport pixel of the range slider at a time, for dragging the zoom window. */
@@ -118,6 +147,8 @@ export interface WaterSurfaceElevationChart {
   setSelectedTime(timeUtcMs: number): void;
   /** Relabels the axis, readouts, and cursor value; the line itself does not change. */
   setUnit(unit: WaterLevelUnit): void;
+  /** Draws condition bands behind the line; null removes them. */
+  setConditionBands(bands: WaterSurfaceConditionBands | null): void;
   readonly state: WaterSurfaceElevationChartState;
 }
 
@@ -180,6 +211,7 @@ export function createWaterSurfaceElevationChart(
   let selectedTimeUtcMs: number | null = null;
   let cursorTimeUtcMs: number | null = null;
   let hoverTimeUtcMs: number | null = null;
+  let conditionBands: WaterSurfaceConditionBands | null = null;
   let frame: PlotFrame = measureFrame(elements.plot, PLOT_INSET, FALLBACK_SIZE);
   let overviewFrame: PlotFrame = measureFrame(elements.overview, OVERVIEW_INSET, FALLBACK_OVERVIEW_SIZE);
   let drag: OverviewDrag | null = null;
@@ -189,6 +221,7 @@ export function createWaterSurfaceElevationChart(
   const svg = createSvgElement('svg', { class: 'block h-full w-full overflow-visible' });
   svg.setAttribute('aria-hidden', 'true');
   const axisGroup = createSvgElement('g', {});
+  const bandGroup = createSvgElement('g', {});
   const line = createSvgElement('path', {
     class: 'fill-none stroke-cyan-300',
     'stroke-width': '1.5',
@@ -214,7 +247,7 @@ export function createWaterSurfaceElevationChart(
     'stroke-dasharray': '3 3',
   });
   const hoverDot = createSvgElement('circle', { class: 'fill-cyan-100 stroke-slate-900', r: '3' });
-  svg.append(axisGroup, line, cursor, cursorDot, hoverLine, hoverDot, cursorTag);
+  svg.append(bandGroup, axisGroup, line, cursor, cursorDot, hoverLine, hoverDot, cursorTag);
   elements.plot.append(svg);
 
   // --- Range slider --------------------------------------------------------
@@ -415,7 +448,13 @@ export function createWaterSurfaceElevationChart(
     hoverDot.setAttribute('cx', String(x));
     hoverDot.setAttribute('cy', String(yForValue(reading.valueM)));
     hoverDot.setAttribute('visibility', 'visible');
-    elements.hoverReadout.textContent = `${formatObservationTime(reading.timeUtcMs)} · ${formatWaterLevel(reading.valueM, unit)}`;
+    const parts = [formatObservationTime(reading.timeUtcMs), formatWaterLevel(reading.valueM, unit)];
+    if (conditionBands) {
+      parts.push(`depth ${formatWaterLevel(reading.valueM - conditionBands.bedElevationM, unit)}`);
+      const condition = conditionBands.describe(reading.valueM, reading.timeUtcMs);
+      if (condition) parts.push(condition);
+    }
+    elements.hoverReadout.textContent = parts.join(' · ');
   };
 
   const renderMain = (): void => {
@@ -424,6 +463,7 @@ export function createWaterSurfaceElevationChart(
     axisGroup.replaceChildren();
     if (!series) {
       line.setAttribute('d', '');
+      bandGroup.replaceChildren();
       hide(cursor);
       hideCursorTag();
       cursorTimeUtcMs = null;
@@ -432,6 +472,10 @@ export function createWaterSurfaceElevationChart(
       return;
     }
     visibleRange = valueRangeIn(series, view) ?? { minM: series.minM, maxM: series.maxM };
+    // With bands on, the axis reaches the bed and a little past the green edge, so every zone shows.
+    if (conditionBands) visibleRange = rangeIncludingBands(visibleRange, conditionBands);
+    bandGroup.replaceChildren(...(conditionBands ? bandElements(conditionBands, view, frame, yForValue) : []));
+    cursor.setAttribute('class', conditionBands ? 'stroke-white' : 'stroke-amber-400');
     axisGroup.append(...axisElements(view, visibleRange, frame, yForValue, unit));
     line.setAttribute('d', linePath(series, view, PLOT_INSET.left, frame.plotWidth, yForValue));
     drawCursor();
@@ -705,6 +749,10 @@ export function createWaterSurfaceElevationChart(
       unit = next;
       render();
     },
+    setConditionBands(next) {
+      conditionBands = next;
+      render();
+    },
     state: {
       get segmentId() {
         return series?.segmentId ?? null;
@@ -732,6 +780,9 @@ export function createWaterSurfaceElevationChart(
       },
       get unit() {
         return unit;
+      },
+      get conditionBandsStageLabel() {
+        return conditionBands?.stageLabel ?? null;
       },
       clientPointForTime(timeUtcMs) {
         const reading = nearestReading(timeUtcMs);
@@ -939,6 +990,103 @@ function axisElements(
     }),
   );
   return elements;
+}
+
+/** Widens the range to the bed and to just past the green edge. */
+function rangeIncludingBands(range: ValueRange, bands: WaterSurfaceConditionBands): ValueRange {
+  return {
+    minM: Math.min(range.minM, bands.bedElevationM),
+    maxM: Math.max(range.maxM, bands.bedElevationM + bands.suitableFromDepthM + BAND_HEADROOM_M),
+  };
+}
+
+/** Three zone rectangles across the plot, labels where they fit, and a hatch over out-of-season time. */
+function bandElements(
+  bands: WaterSurfaceConditionBands,
+  window: TimeWindow,
+  frame: PlotFrame,
+  yForValue: (valueM: number) => number,
+): SVGElement[] {
+  const left = PLOT_INSET.left;
+  const top = PLOT_INSET.top;
+  const bottom = top + frame.plotHeight;
+  const marginalEdgeY = clamp(yForValue(bands.bedElevationM + bands.marginalFromDepthM), top, bottom);
+  const suitableEdgeY = clamp(yForValue(bands.bedElevationM + bands.suitableFromDepthM), top, bottom);
+  const zones = [
+    { label: 'Suitable', from: top, to: suitableEdgeY, class: 'fill-green-500/20' },
+    { label: 'Marginal', from: suitableEdgeY, to: marginalEdgeY, class: 'fill-yellow-400/20' },
+    { label: 'Unsuitable', from: marginalEdgeY, to: bottom, class: 'fill-red-500/20' },
+  ];
+  const elements: SVGElement[] = [];
+  const pattern = createSvgElement('pattern', {
+    id: 'wse-chart-out-of-season-hatch',
+    width: '6',
+    height: '6',
+    patternUnits: 'userSpaceOnUse',
+    patternTransform: 'rotate(45)',
+  });
+  pattern.append(createSvgElement('rect', { width: '6', height: '6', class: 'fill-slate-950/60' }));
+  pattern.append(createSvgElement('line', { x1: '0', y1: '0', x2: '0', y2: '6', class: 'stroke-slate-400/60', 'stroke-width': '2' }));
+  const defs = createSvgElement('defs', {});
+  defs.append(pattern);
+  elements.push(defs);
+  for (const zone of zones) {
+    const height = zone.to - zone.from;
+    if (height <= 0) continue;
+    const rect = createSvgElement('rect', {
+      class: zone.class,
+      x: String(left),
+      y: String(zone.from),
+      width: String(frame.plotWidth),
+      height: String(height),
+    });
+    elements.push(rect);
+    // A label needs room; the stage legend in the sidebar carries the class when the zone is thin.
+    if (height >= BAND_LABEL_MIN_HEIGHT) {
+      elements.push(
+        svgText(zone.label, {
+          x: String(left + frame.plotWidth - 4),
+          y: String(zone.from + height / 2),
+          'text-anchor': 'end',
+          'dominant-baseline': 'middle',
+          'fill-opacity': '0.8',
+        }),
+      );
+    }
+  }
+  for (const [startUtcMs, endUtcMs] of outOfSeasonSpans(bands, window)) {
+    const x1 = left + ((startUtcMs - window.startUtcMs) / (window.endUtcMs - window.startUtcMs || 1)) * frame.plotWidth;
+    const x2 = left + ((endUtcMs - window.startUtcMs) / (window.endUtcMs - window.startUtcMs || 1)) * frame.plotWidth;
+    elements.push(
+      createSvgElement('rect', {
+        fill: 'url(#wse-chart-out-of-season-hatch)',
+        x: String(x1),
+        y: String(top),
+        width: String(Math.max(0, x2 - x1)),
+        height: String(frame.plotHeight),
+      }),
+    );
+  }
+  return elements;
+}
+
+/** Out-of-season stretches inside the window, found by sampling about every 600th of it (at least hourly). */
+function outOfSeasonSpans(bands: WaterSurfaceConditionBands, window: TimeWindow): [number, number][] {
+  const spans: [number, number][] = [];
+  const stepMs = Math.max(60 * 60 * 1000, (window.endUtcMs - window.startUtcMs) / 600);
+  let spanStart: number | null = null;
+  for (let time = window.startUtcMs; time <= window.endUtcMs + stepMs; time += stepMs) {
+    const clamped = Math.min(time, window.endUtcMs);
+    const out = bands.isOutOfSeason(clamped);
+    if (out && spanStart === null) spanStart = clamped;
+    if (!out && spanStart !== null) {
+      spans.push([spanStart, clamped]);
+      spanStart = null;
+    }
+    if (clamped === window.endUtcMs) break;
+  }
+  if (spanStart !== null) spans.push([spanStart, window.endUtcMs]);
+  return spans;
 }
 
 function svgText(text: string, attributes: Record<string, string>): SVGTextElement {

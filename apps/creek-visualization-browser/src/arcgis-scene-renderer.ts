@@ -12,6 +12,7 @@ import {
   type JunctionWaterSurface,
   type SegmentSurfaceGeometry,
 } from './sloped-water-surface';
+import { STEELHEAD_CONDITION_DISPLAY, type SteelheadCondition } from './steelhead-trout-conditions';
 
 export interface WaterGraphicGeometryIdentity {
   segmentId: string;
@@ -68,6 +69,11 @@ export interface SegmentPolygonPlacement {
    * segment's geometry is known; the modeled renderer ignores it.
    */
   inferred?: boolean;
+  /**
+   * Steelhead trout conditions (UCS-293): when set, both renderers draw the water in this
+   * condition's color instead of the observed / inferred / modeled looks. 'not-rated' keeps them.
+   */
+  troutCondition?: SteelheadCondition;
 }
 
 /**
@@ -140,6 +146,31 @@ export const inferredWaterSymbol = new PolygonSymbol3D({
   ],
 });
 
+const troutConditionSymbols = new Map<SteelheadCondition, PolygonSymbol3D>();
+
+/**
+ * Water tinted by a steelhead trout condition (green, yellow, red, or gray out of season). It stays a
+ * water layer so the waves still read as water. Null for 'not-rated', which keeps the regular look.
+ */
+export function troutConditionWaterSymbol(condition: SteelheadCondition | undefined): PolygonSymbol3D | null {
+  if (condition === undefined || condition === 'not-rated') return null;
+  let symbol = troutConditionSymbols.get(condition);
+  if (!symbol) {
+    symbol = new PolygonSymbol3D({
+      symbolLayers: [
+        new WaterSymbol3DLayer({
+          color: STEELHEAD_CONDITION_DISPLAY[condition].colorHex,
+          waterbodySize: 'medium',
+          waveStrength: 'moderate',
+          waveDirection: 260,
+        }),
+      ],
+    });
+    troutConditionSymbols.set(condition, symbol);
+  }
+  return symbol;
+}
+
 /**
  * One reused graphic per prepared polygon set. Neighbouring segments never
  * receive a graphic. Geometry is replaced, or the graphic is hidden, once per frame.
@@ -185,7 +216,7 @@ export function createArcGISSceneRenderer(
         const inferred = placement.inferred === true;
         const geometry = inferredSegmentGeometryById.get(segmentId);
         const surface = inferred && geometry ? placement.junctionWaterSurface ?? null : null;
-        graphic.symbol = inferred ? inferredWaterSymbol : waterSymbol;
+        graphic.symbol = troutConditionWaterSymbol(placement.troutCondition) ?? (inferred ? inferredWaterSymbol : waterSymbol);
         graphic.geometry =
           surface && geometry
             ? new Polygon({
@@ -261,7 +292,7 @@ function placementKey(placements: readonly SegmentPolygonPlacement[]): string {
       if (typeof minimum !== 'number') return `${placement.segmentId}:`;
       const surface = placement.junctionWaterSurface;
       const inferredKey = placement.inferred ? `|i${surface?.upstreamM ?? ''}/${surface?.downstreamM ?? ''}` : '';
-      return `${placement.segmentId}:${minimum}${inferredKey}`;
+      return `${placement.segmentId}:${minimum}${inferredKey}${placement.troutCondition ? `|${placement.troutCondition}` : ''}`;
     })
     .join('|');
 }

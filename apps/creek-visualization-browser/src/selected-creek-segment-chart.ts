@@ -15,6 +15,8 @@ import {
   type WaterSurfaceElevationSeries,
 } from './water-surface-elevation-chart';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
+import type { SteelheadTroutConditionsControls } from './steelhead-trout-conditions-controls';
+import { STEELHEAD_LIFE_STAGE_RULES, steelheadChartBands } from './steelhead-trout-conditions';
 import { isWaterLevelUnit, readWaterLevelUnit, saveWaterLevelUnit, type WaterLevelUnit } from './water-level-units';
 
 /** What the chart shows for a segment: its series, or a message saying why there is none yet. */
@@ -113,6 +115,14 @@ export function bindSelectedCreekSegmentChart(input: {
   chartContentForSegment: (segmentId: string) => SegmentChartContent;
   /** Called with the time of the chart reading a person clicked or dragged to. */
   onChartTimeClicked: (timeUtcMs: number) => void;
+  /**
+   * Steelhead trout conditions (UCS-293): the switch and life stage, plus the segment's bed elevation
+   * (m NAVD88, null when the dataset has none), which turns the research depths into chart bands.
+   */
+  troutConditions?: {
+    controls: SteelheadTroutConditionsControls;
+    bedElevationM: (segmentId: string) => number | null;
+  };
   /** Ending it unbinds the click, the chart, and the highlight. */
   lifetime?: ExperienceLifetime;
 }): SelectedCreekSegmentChart {
@@ -142,7 +152,40 @@ export function bindSelectedCreekSegmentChart(input: {
     else chart.setSeries(null, content.emptyText);
   };
 
-  const selection = bindCreekSegmentSelection(input.view, input.waterGraphics, showContentFor, lifetime);
+  const selection = bindCreekSegmentSelection(
+    input.view,
+    input.waterGraphics,
+    (segmentId) => {
+      showContentFor(segmentId);
+      applyConditionBands();
+    },
+    lifetime,
+  );
+
+  // Condition bands follow the selected segment, the switch, and the life stage. The key skips redraws
+  // when playback calls refresh() with nothing changed.
+  let shownBandsKey: string | null = null;
+  const applyConditionBands = (): void => {
+    const trout = input.troutConditions;
+    if (!trout) return;
+    const { enabled, lifeStage } = trout.controls.state;
+    const segmentId = selection.selectedSegmentId;
+    const bedElevationM = enabled && segmentId ? trout.bedElevationM(segmentId) : null;
+    const key = `${enabled}|${lifeStage}|${segmentId}|${bedElevationM}`;
+    if (key === shownBandsKey) return;
+    shownBandsKey = key;
+    const bands = bedElevationM === null ? null : steelheadChartBands(lifeStage, bedElevationM);
+    chart.setConditionBands(bands);
+    trout.controls.setSegmentNote(segmentNoteFor(enabled, lifeStage, segmentId, bedElevationM));
+  };
+  if (input.troutConditions) {
+    input.troutConditions.controls.onChange(() => {
+      selection.setTroutConditionsHighlight(input.troutConditions?.controls.state.enabled ?? false);
+      applyConditionBands();
+    });
+    selection.setTroutConditionsHighlight(input.troutConditions.controls.state.enabled);
+    applyConditionBands();
+  }
 
   return {
     selection,
@@ -151,9 +194,24 @@ export function bindSelectedCreekSegmentChart(input: {
     refresh() {
       selection.refresh();
       showContentFor(selection.selectedSegmentId);
+      applyConditionBands();
     },
     selectSegment: (segmentId) => selection.select(segmentId),
   };
+}
+
+function segmentNoteFor(
+  enabled: boolean,
+  lifeStage: Parameters<typeof steelheadChartBands>[0],
+  segmentId: string | null,
+  bedElevationM: number | null,
+): string {
+  if (!enabled || STEELHEAD_LIFE_STAGE_RULES[lifeStage].depthBand === null) return '';
+  if (segmentId === null) return 'Select a creek segment on the map to see its bands on the chart.';
+  if (bedElevationM === null) {
+    return 'This segment has no bed elevation in the dataset, so its depth, chart bands, and map color cannot be computed.';
+  }
+  return '';
 }
 
 /** A stable id per array object, so a reloaded Time Series reads as new content. */
