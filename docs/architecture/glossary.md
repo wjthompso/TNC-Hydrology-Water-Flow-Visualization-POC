@@ -96,7 +96,7 @@ A standard open-channel equation that relates flow velocity to the channel's slo
 
 ## Modeled WSE Derivation Method
 
-A named, versioned way to turn modeled discharge into modeled water-surface elevation for each Creek Segment: Reach discharge, drainage-area ratio scaling (including any Drainage-Area Ratio Transfer), USGS 3DEP cross-sections, and Manning's equation rating curves. Each version keeps its own published table, so versions can be compared; publishing a new version adds a table and never overwrites an earlier one. It pairs with the WSE Polygon Generation Method, which turns these elevations into polygons.
+A named, versioned way to turn modeled discharge into modeled water-surface elevation for each Creek Segment: Reach discharge, drainage-area ratio scaling (including any Drainage-Area Ratio Transfer), USGS 3DEP cross-sections, and a flow-resistance equation (Manning's equation or a steep-creek law). Each version keeps its own published table, so versions can be compared; publishing a new version adds a table and never overwrites an earlier one. It pairs with the WSE Polygon Generation Method, which turns these elevations into polygons.
 
 ## Modeled water
 

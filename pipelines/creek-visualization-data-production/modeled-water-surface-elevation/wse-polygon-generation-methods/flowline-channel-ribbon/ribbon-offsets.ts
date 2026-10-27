@@ -1,14 +1,15 @@
-import { crossSectionOffsetsM, localLowestGround, type RunChannel } from '../../modeled-wse-derivation-methods/m3-flowline-profile-manning-depth/flowline-channel.ts';
+import { crossSectionOffsetsM, type RunChannel } from '../../modeled-wse-derivation-methods/m3-flowline-profile-manning-depth/flowline-channel.ts';
 import { fillGaps, gaussianSmooth, medianFilter } from '../../modeled-wse-derivation-methods/m3-flowline-profile-manning-depth/series-smoothing.ts';
 import { FLOWLINE_CHANNEL_RIBBON_METHOD } from './method-config.ts';
 
 /**
  * Edges of the channel ribbon at every table station of one run and every depth rung: how far left and right of the smoothed
- * centerline the water reaches when it stands `rung` meters above the local thalweg. See DESIGN.md.
+ * centerline the water reaches when it stands `rung` meters above the station's bed. See DESIGN.md.
  *
  * Per station and rung the edges come from ONE cross-section (a 1-D flood of the lateral lidar profile), not from a 2-D flood of
  * the raster. The raw edges are then smoothed ALONG the creek (median, then Gaussian), kept monotone with depth, widened to the
- * display floor, and kept from crossing on the inside of bends. The result is a smooth function of position and depth.
+ * display floor, and kept from crossing on the inside of bends. The result is a smooth function of position and depth that always
+ * covers the station's lowest point, where the water's bed was measured, so thin water is never drawn beside the creek on its bank.
  */
 
 const PARAMETERS = FLOWLINE_CHANNEL_RIBBON_METHOD.parameters;
@@ -47,18 +48,18 @@ export function computeRibbonEdges(channel: RunChannel): RibbonEdges {
   const rawRight = rungs.map(() => new Float64Array(count).fill(Number.NaN));
   for (let station = 0; station < count; station += 1) {
     const ground = offsets.map((offset) => channel.groundAt(station, offset) ?? Number.NaN);
-    // Seeded at the channel floor the bed profile was measured from, so a rung depth means the same water here as in the rating curve.
-    const floor = localLowestGround(channel, station);
-    if (!floor) continue;
+    // Seeded at the station's lowest point, where its bed was measured, so a rung depth means the same water here as in the rating curve.
+    const thalwegOffsetM = channel.thalwegOffsetM[station] as number;
     let seed = -1;
     offsets.forEach((offset, index) => {
-      if (seed < 0 || Math.abs(offset - floor.offsetM) < Math.abs((offsets[seed] as number) - floor.offsetM)) seed = index;
+      if (seed < 0 || Math.abs(offset - thalwegOffsetM) < Math.abs((offsets[seed] as number) - thalwegOffsetM)) seed = index;
     });
     const seedGround = ground[seed] as number;
     if (Number.isNaN(seedGround)) continue;
     rungs.forEach((depth, rung) => {
-      const level = (channel.thalwegM[station] as number) + depth;
-      if (seedGround >= level) return; // dry at the centerline for the lidar: filled in from the neighbours below
+      const level = (channel.bedM[station] as number) + depth;
+      // Dry at the lowest point for the lidar (always on a breached barrier, whose bed is below the fill): filled in from the neighbours below.
+      if (seedGround >= level) return;
       (rawLeft[rung] as Float64Array)[station] = edgeOffset(offsets, ground, seed, 1, level);
       (rawRight[rung] as Float64Array)[station] = edgeOffset(offsets, ground, seed, -1, level);
     });
@@ -75,6 +76,8 @@ export function computeRibbonEdges(channel: RunChannel): RibbonEdges {
   const right = rungs.map(() => new Float32Array(count));
   const trueTopWidthM = rungs.map(() => new Float32Array(count));
   const minHalf = PARAMETERS.minimumTopWidthM / 2;
+  const insideMarginM = PARAMETERS.thalwegInsideMarginM;
+  const clamp = (value: number, low: number, high: number): number => Math.min(high, Math.max(low, value));
   const curvatureLimit = (station: number, side: 1 | -1): number => {
     // Turning left (positive curvature) makes the left side the inside of the bend: an edge farther out than the radius would cross itself.
     const turn = (channel.curvature[station] as number) * side;
@@ -90,16 +93,17 @@ export function computeRibbonEdges(channel: RunChannel): RibbonEdges {
       let leftEdge = smoothLeft[station] as number;
       let rightEdge = smoothRight[station] as number;
       if (rightEdge > leftEdge) [leftEdge, rightEdge] = [rightEdge, leftEdge];
-      // A film of water a few centimeters deep does not spread over a flat valley floor: cap the top width by the depth.
+      const thalwegOffsetM = channel.thalwegOffsetM[station] as number;
+      // A film of water a few centimeters deep does not spread over a flat valley floor: cap the top width by the depth, on the lowest point as far as the flood allows.
       const widthCapM = PARAMETERS.maximumTopWidth.baseM + PARAMETERS.maximumTopWidth.perMeterOfDepthM * depthM;
       if (leftEdge - rightEdge > widthCapM) {
-        const middle = (leftEdge + rightEdge) / 2;
+        const middle = clamp(thalwegOffsetM, rightEdge + widthCapM / 2, leftEdge - widthCapM / 2);
         leftEdge = middle + widthCapM / 2;
         rightEdge = middle - widthCapM / 2;
       }
       (trueTopWidthM[rung] as Float32Array)[station] = leftEdge - rightEdge;
       if (leftEdge - rightEdge < PARAMETERS.minimumTopWidthM) {
-        const middle = (leftEdge + rightEdge) / 2;
+        const middle = clamp((leftEdge + rightEdge) / 2, thalwegOffsetM - minHalf + insideMarginM, thalwegOffsetM + minHalf - insideMarginM);
         leftEdge = middle + minHalf;
         rightEdge = middle - minHalf;
       }
@@ -110,8 +114,10 @@ export function computeRibbonEdges(channel: RunChannel): RibbonEdges {
     const finalLeft = gaussianSmooth(flooredLeft, finalSigmaPoints);
     const finalRight = gaussianSmooth(flooredRight, finalSigmaPoints);
     for (let station = 0; station < count; station += 1) {
-      let leftEdge = finalLeft[station] as number;
-      let rightEdge = finalRight[station] as number;
+      // The smoothing may pull an edge back over the lowest point where it jostles; widen that side so the water covers it.
+      const thalwegOffsetM = channel.thalwegOffsetM[station] as number;
+      let leftEdge = Math.max(finalLeft[station] as number, thalwegOffsetM + insideMarginM);
+      let rightEdge = Math.min(finalRight[station] as number, thalwegOffsetM - insideMarginM);
       // Monotone with depth: a deeper rung is never narrower than the one below.
       if (rung > 0) {
         leftEdge = Math.max(leftEdge, (left[rung - 1] as Float32Array)[station] as number);

@@ -5,6 +5,7 @@ import FillSymbol3DLayer from '@arcgis/core/symbols/FillSymbol3DLayer';
 import PolygonSymbol3D from '@arcgis/core/symbols/PolygonSymbol3D';
 import WaterSymbol3DLayer from '@arcgis/core/symbols/WaterSymbol3DLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
+import type { RibbonAnchorClearance } from './channel-ribbon-surface';
 import type { ElevationBucket } from './creek-data-contract';
 import {
   slopedRingsWgs84,
@@ -61,8 +62,30 @@ export interface SegmentPolygonPlacement {
    * `bedParallelWaterDepth` instead of from the one picked `bucket`. The observed renderer ignores it.
    */
   channelRibbonBuckets?: readonly ElevationBucket[];
-  /** `channel-ribbon-depth` only: the labeled display lift added to the ribbon's z (0 for true water). */
+  /** `channel-ribbon-depth` and `channel-ribbon-pool-filled`: the labeled display lift added to the ribbon's z (0 for true water). */
   channelRibbonLiftM?: number;
+  /**
+   * `channel-ribbon-pool-filled` only: the water surface at each of the segment's ribbon stations, pool-filled along its run (m NAVD88).
+   * The modeled renderer draws each station at this surface, with its depth below it picking the rungs.
+   */
+  channelRibbonStationSurfacesM?: readonly number[];
+  /** `channel-ribbon-pool-filled` only: the optional display rule's minimum drawn depth at each station (0 for true water). */
+  channelRibbonFloorM?: number;
+  /**
+   * `channel-ribbon-pool-filled` only: the clearance lift at each station (anchor blend and station drape, channel-ribbon-surface.ts)
+   * and what it was worked out from at this segment's anchor. Absent when the lift is off (`?ribbonAnchorClearanceM=off`) and for pinned water.
+   */
+  channelRibbonAnchorClearance?: RibbonAnchorClearance & {
+    /** This segment's own lift at its anchor, m: max(0, ground + margin − drawn water there). */
+    anchorLiftM: number;
+    marginM: number;
+    /** The browser ground the lift cleared, m NAVD88; null when the map had no ground there yet (the lift is then 0). */
+    anchorGroundM: number | null;
+    /** The station drape's settings and what it did on this segment; null when the drape is off (`?ribbonDrapeDepthCapM=off`). */
+    drape: { depthCapM: number; taperM: number; drapedStationCount: number; cappedStationCount: number } | null;
+  };
+  /** `channel-ribbon-pool-filled` only: draw one quad ring per station interval (the default) instead of one ring. */
+  channelRibbonByStationInterval?: boolean;
   /**
    * True for water inferred from the gauge by Creek Segment Observed WSE Propagation. The observed
    * renderer draws it with the inferred shading, sloped between `junctionWaterSurface` when the

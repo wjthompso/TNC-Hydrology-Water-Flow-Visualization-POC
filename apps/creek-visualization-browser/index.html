@@ -469,21 +469,55 @@
       <!--
         Imagery widget: an Esri-style square map button, showing a preview of the
         current imagery, that opens the imagery list. Bound by
-        scene-imagery-widget.ts. Sits at the top-right corner; in development it
-        drops below the Dev tools button.
+        scene-imagery-widget.ts. The LiDAR button beside it draws the same 2018
+        point cloud as the Digital Twin's 3D toggle (lidar-point-cloud.ts).
+        Sits at the top-right corner; in development it drops below the Dev tools button.
       -->
       <div id="imagery-widget" class="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col items-end">
-        <button
-          id="imagery-widget-btn"
-          type="button"
-          aria-expanded="false"
-          aria-controls="imagery-widget-panel"
-          aria-label="Imagery"
-          title="Imagery"
-          class="h-11 w-11 cursor-pointer overflow-hidden rounded-md border border-slate-600/80 bg-slate-900/85 p-0.5 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-expanded:border-cyan-400/70 aria-expanded:bg-cyan-950/80 aria-expanded:text-cyan-100"
-        >
-          <img alt="" width="40" height="40" draggable="false" class="h-full w-full rounded-[5px] object-cover" />
-        </button>
+        <div class="flex items-start gap-2">
+          <button
+            id="lidar-visibility-toggle"
+            type="button"
+            aria-pressed="false"
+            aria-label="Show 2018 LiDAR point cloud"
+            title="Show 2018 LiDAR point cloud"
+            class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md border border-slate-600/80 bg-slate-900/85 text-slate-400 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-400/70 aria-pressed:bg-cyan-950/80 aria-pressed:text-cyan-300"
+          >
+            <!-- Same isometric point-cloud glyph as the Digital Twin LidarIcon. -->
+            <svg width="22" height="22" viewBox="-4 -2 30 30" fill="none" aria-hidden="true">
+              <circle cx="6" cy="4" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="6" cy="16" r="1.1" fill="currentColor" opacity="0.25" />
+              <circle cx="16" cy="16" r="1.1" fill="currentColor" opacity="0.25" />
+              <circle cx="6" cy="10" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="6" cy="22" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="16" cy="4" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="16" cy="10" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="16" cy="22" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="11" cy="7" r="1.1" fill="currentColor" opacity="0.25" />
+              <circle cx="11" cy="19" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="1" cy="13" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="21" cy="13" r="1.5" fill="currentColor" opacity="0.4" />
+              <circle cx="1" cy="7" r="2" fill="currentColor" />
+              <circle cx="1" cy="19" r="2" fill="currentColor" />
+              <circle cx="21" cy="7" r="2" fill="currentColor" />
+              <circle cx="21" cy="19" r="2" fill="currentColor" />
+              <circle cx="11" cy="1" r="2" fill="currentColor" />
+              <circle cx="11" cy="13" r="2" fill="currentColor" />
+              <circle cx="11" cy="25" r="2" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            id="imagery-widget-btn"
+            type="button"
+            aria-expanded="false"
+            aria-controls="imagery-widget-panel"
+            aria-label="Imagery"
+            title="Imagery"
+            class="h-11 w-11 cursor-pointer overflow-hidden rounded-md border border-slate-600/80 bg-slate-900/85 p-0.5 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-expanded:border-cyan-400/70 aria-expanded:bg-cyan-950/80 aria-expanded:text-cyan-100"
+          >
+            <img alt="" width="40" height="40" draggable="false" class="h-full w-full rounded-[5px] object-cover" />
+          </button>
+        </div>
         <fieldset
           id="imagery-widget-panel"
           hidden

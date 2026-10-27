@@ -1,6 +1,10 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { modeledWseVersionRelativePath, type RecordedModeledWseDerivationMethod } from './modeled-wse-derivation-method.ts';
+import {
+  modeledWseVersionRelativePath,
+  type RecordedBuiltFromModeledWseVersion,
+  type RecordedModeledWseDerivationMethod,
+} from './modeled-wse-derivation-method.ts';
 
 /**
  * Folder layout of saved Modeled WSE Derivation Method output inside a Stage 3 directory:
@@ -17,6 +21,11 @@ export interface SavedModeledWseVersion {
   relativePath: string;
   completedAt: string | null;
   method: RecordedModeledWseDerivationMethod;
+  /**
+   * The saved version whose channel this version was solved on (`parameters.channelFromModeledWseVersion`, written by the steep-creek
+   * methods m4 and m5 on m3 v2's channel), so polygons built from that version can draw this Time Series. Null for every other method.
+   */
+  channelFromModeledWseVersion: RecordedBuiltFromModeledWseVersion | null;
 }
 
 /**
@@ -29,7 +38,7 @@ export async function readSavedModeledWseVersion(
   version: number,
 ): Promise<SavedModeledWseVersion | null> {
   const relativePath = modeledWseVersionRelativePath(methodId, version);
-  let manifest: { completedAt?: unknown; parameters?: { modeledWseDerivationMethod?: unknown } };
+  let manifest: { completedAt?: unknown; parameters?: { modeledWseDerivationMethod?: unknown; channelFromModeledWseVersion?: unknown } };
   try {
     manifest = JSON.parse(await readFile(path.join(stageDirectory, relativePath, 'manifest.json'), 'utf8')) as typeof manifest;
   } catch {
@@ -37,12 +46,14 @@ export async function readSavedModeledWseVersion(
   }
   const method = manifest.parameters?.modeledWseDerivationMethod as RecordedModeledWseDerivationMethod | undefined;
   if (!method || typeof method.methodSha256 !== 'string') return null;
+  const channelFrom = manifest.parameters?.channelFromModeledWseVersion as RecordedBuiltFromModeledWseVersion | undefined;
   return {
     methodId,
     version,
     relativePath,
     completedAt: typeof manifest.completedAt === 'string' ? manifest.completedAt : null,
     method,
+    channelFromModeledWseVersion: channelFrom && typeof channelFrom.methodSha256 === 'string' ? channelFrom : null,
   };
 }
 

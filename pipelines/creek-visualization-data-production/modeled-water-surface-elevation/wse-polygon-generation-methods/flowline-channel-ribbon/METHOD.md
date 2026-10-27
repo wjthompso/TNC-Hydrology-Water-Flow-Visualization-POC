@@ -1,10 +1,28 @@
 # WSE Polygon Generation Method `flowline-channel-ribbon`
 
-Version 1 (experimental). Built on Modeled WSE Derivation Method `m3-flowline-profile-manning-depth` v1; both are meant to freeze together as Data-Product Version `m3-v1`. Browser drawing: `channel-ribbon-depth`.
+Version 2 (experimental). Built on Modeled WSE Derivation Method `m3-flowline-profile-manning-depth` v2; both are meant to freeze together as Data-Product Version `m3-v2`. Browser drawing: `channel-ribbon-pool-filled`. Version 1 (on m3-v1, drawing `channel-ribbon-depth`) stays on disk and draws exactly as before; "What changed in version 2" lists the differences, and the rest of this file describes version 1 where it says so.
 
 The water of a creek is drawn as one continuous ribbon along a smoothed channel centerline, not as a raster flood-fill footprint per Creek Segment. The ribbon's two edges come from one-dimensional cross-section floods of the 1 m lidar, smoothed along the creek, for a ladder of depths. The browser slides each station's edge vertices between the two depth rungs around that station's own water depth.
 
-## What it does
+## What changed in version 2
+
+- **Stations and bed.** The ribbon is built on m3-v2's channel: each station sits on the creek's lowest point across the smooth line, and the ring vertices' z is the raw 1 m lidar there (the breach line through a breached road or railroad fill), rounded to millimeters. The stations are m3's water-surface stations (`waterSurfaceStations`, table stations about 2 m apart with the anchor station among them), the same stations Stage 3 pool-fills, instead of n = 2 × ceil(length ÷ 4 m) + 1 evenly spaced fractional stations.
+- **Floods.** Each station's 1-D cross-section flood is seeded at its lowest point and rises to bed + rung, so a rung depth means depth above the measured bed. On a breached station every rung is below the fill, so it takes its width from its neighbours, and the water passes through the fill unseen.
+- **The water covers the lowest point.** The width cap and the 1 m width floor are centred on the lowest point as far as the flood allows (v1 centred them on the flood's midpoint, which could leave the water up to 49 m from the lowest point), and after the last smoothing an edge that crossed it is widened to keep it 0.25 m inside. Without this 29% of stations (28% of anchors) had their lowest point outside the 1 cm rung. 292 stations (0.4%, 16 anchors) still have it outside, where the inside-of-bend cap wins.
+- **Summary.** `channelRibbon` adds `anchorStation`, `downstreamSegmentId` (the next segment of the run, null at its end: the browser rebuilds runs from it), `breachedStations` and `stationDistancesM` (each station's distance from the segment's upstream boundary along the centerline, cm; m3 smooths the water surface over these positions); `anchorLonLat` is the anchor's lowest point at 8 decimals and `anchorBedElevationM` the lidar there.
+- **Drawing** (`channel-ribbon-pool-filled`). The browser computes each run's water surface with m3's `pool-filled-water-surface.ts` and m3's `POOL_FILLED_WATER_SURFACE` parameters (the function and parameters Stage 3 writes `values` with) from the junction depths and the stations' beds and distances: bed + flowing depth averaged over ±5 × the flowing depth along the run, then pool-filled (see m3's METHOD.md, step 9). It draws every station at that surface, picking the rungs by its depth below the surface. Deep water drowns the bumps of the raw bed; pools behind steps stand level and widen to the flood at that level; the drawing at the anchor equals the chart. The polygons do not depend on the modeled depths, so another m-method on the same channel can reuse them.
+- **Display rule off by default.** The v1 floor and lift apply only when `?ribbonDisplayFloorM=` or `?ribbonDisplayLiftM=` is given (then: drawn depth at a station = max(surface − bed, ramp × floor), z = bed + that + ramp × lift).
+
+### Version 2 numbers (dangermond-preserve)
+
+- 3,338 polygon sets, 19 rungs, 2,748,084 ring vertices; 3 segments without a ribbon (their boundaries coincide). 105 files, 94.4 MB, largest 4.3 MB. Stage 4: 20 s.
+- Anchor beds checked against the m3-v2 Time Series: 3,335, 0 mismatched.
+- Chart = drawing at the anchor: worst 0.5 mm over 11,621 wet segment-hours (three hours of the January 2023 storm and 2019-01-17T13Z), with the browser's own functions, smoothed surface included. Run neighbours are drawn at exactly the same height at their shared station (3,041 of 3,041 wet pairs at the peak).
+- Neighbours sharing an identical boundary edge at every rung: 3,221 of 3,222 run neighbours, as in v1 (the other borders a segment without a ribbon).
+- Self-intersecting rings (proper crossings of a ring's own edges, any rung): 3,196 in v2 against 3,254 in v1. At rungs up to 1 m: 163 against 308. At 3–8 m rungs v2 has slightly more (299 / 469 / 838 / 1,148 against 296 / 456 / 802 / 1,103). 256 (segment, rung) rings cross in v2 but not in v1 and 314 the other way round; every new one is a fold of one bank on itself at a bend (none where the two banks cross; v1 has 54 of those), 237 of them at rungs of 1.5 m and deeper, none up to 0.1 m. The raw bed makes deep-rung flood levels noisier along the creek than v1's smoothed profile, so edges on gentle valley sides wiggle more. Will accepted these folds as a known limitation (no repair); the depth-scaled water smoothing does not change the polygons, and the counts are identical after it.
+- Folded station-rungs (an edge point behind the previous station): 7 at the first rung, 4,810 at the 8 m rung (v1: 36 and 4,883).
+
+## What it does (version 1; version 2 differs as listed above)
 
 1. **Channel** (shared with m3; `m3-flowline-profile-manning-depth/flowline-channel.ts`). Each run of joined Creek Segments of a TNC flowline, in flow order:
    - Resample the flowline's vertex chain every 1 m and smooth it (Gaussian, σ 5 m, odd reflection at the ends).
@@ -26,7 +44,7 @@ The water of a creek is drawn as one continuous ribbon along a smoothed channel 
    - Extra field `channelRibbon`: `stationCount`, `lengthM`, `anchorLonLat`, `anchorBedElevationM`, and `trueTopWidthAtAnchorM` / `displayTopWidthAtAnchorM` per rung. True is the smoothed lidar flood width before the floors; display is the drawn width.
 4. **Check**. Stage 4 reads the m3 monthly Time Series and counts segments whose `anchorBedElevationM` differs from the bed this method computes. If they differ, the chart and the drawing would disagree. The v1 run had 0 of 3,335.
 
-## How the browser draws it (`channel-ribbon-surface.ts`)
+## How the browser draws version 1 (`channel-ribbon-surface.ts`)
 
 At the selected time the segment's two junction depths come from the m3 Time Series. Station i has depth dᵢ = up + (down − up) × i ÷ (n − 1). Each station picks the two rungs around dᵢ and interpolates its left and right vertex linearly. Below 1 cm it tapers to the midline of the first rung. Above the top rung it keeps the top rung's width. The vertex z is the bed profile + dᵢ.
 
@@ -34,7 +52,7 @@ The segment is drawn only when its anchor depth is at least 1 cm, the first rung
 
 **Display rule (labeled exaggeration; never stored).** The bed slope comes from the segment's junction beds over its chord. A smoothstep ramp goes from 0 at 3% to 1 at 8%. On the ramp, the drawn depth is max(true, ramp × 0.15 m) (true depth under 1 cm stays dry), the width follows the drawn depth, and the surface is lifted ramp × 0.3 m. Neighbours of similar slope get the same exaggeration, so they meet without a step. `?ribbonDisplayFloorM=0&ribbonDisplayLiftM=0` draws true water. The Time Series and the chart keep true values. The dev tools method line states the rule.
 
-## Chart and drawing agreement at the WSE Anchor Point
+## Chart and drawing agreement at the WSE Anchor Point (version 1)
 
 At true depth, the drawn z at the middle station is the bed profile there plus the mean of the two junction depths. The Time Series value is the same by construction. Checked on every wet segment of the preserve at three hours of the January 2023 storm (7,771 segment-hours): worst difference 0.0005 m, from rounding to millimeters. With the display rule on, a steep segment is drawn higher than the chart by (floor − true depth, when positive) + lift. That gap is the documented exaggeration.
 
@@ -81,13 +99,23 @@ On segments 27714697-040…045:
 
 On flat Jalama 27714637-024…030 every method is one visible piece. m3 covers 10,882 m² against 11,028 m² for HAND v2 and 14,031 m² for m1. Previews are in `/tmp/m3-previews/*.png`, with panels in the order m1, HAND v2, HAND v3, HAND v3 + floor, m3 true, m3 display. Blue is visible and red is hidden under the emulated mesh.
 
-## Size and runtime (dangermond-preserve)
+## Size and runtime (dangermond-preserve, version 1)
 
 - 105 files, 93.9 MB in all; the largest is 4.3 MB.
 - 2.75 million ring vertices.
 - Stage 4: 21 s, plus loading the terrain tiles.
 
 ## Known limitations
+
+Version 2:
+
+- True water on steep reaches is still mostly hidden by the browser terrain (at 27714697-043/044/045 the drawn water at the anchor is 0.04–0.05 m below the drawn terrain at the January 2023 peak); phase 4 adds a clearance lift at the anchor.
+- Deep-rung single-bank folds: 256 (segment, rung) rings fold one bank on itself at a bend in v2 that did not in v1 (all at rungs of 0.15 m and deeper, 237 at 1.5 m and deeper; none is a bank-to-bank crossing). Accepted as a known limitation; no repair. They are drawn only when the water reaches those rungs.
+- Thin water keeps the steps of the raw bed (its smoothing window is shorter than the station spacing), so a shallow flat creek still shows riffle steps (on Jalama up to 0.19 m at the 2019-01-17T13Z low flow, against 0.55 m before the smoothing); deep water is drawn nearly level (see m3's METHOD.md, "Known limitations").
+- Water passing a breached fill is drawn on the breach line, inside the fill, so it is hidden there; a segment wholly on a breach has no value and draws nothing.
+- 292 stations (0.4%, 16 anchors) keep their lowest point outside the 1 cm rung where the inside-of-bend cap wins; there the anchor point lies just beside the drawn water.
+
+Version 1:
 
 - Steep reaches are still not fully visible. Over 27714697-040…045 the drawn ribbon is one piece, but the emulated mesh hides parts of it, so the viewer sees 16 pieces. Narrow gullies are smoothed out of the 3DEP `exportImage` mesh. A bigger lift hides less but floats more.
 - The cross-section flood follows only the normal of the centerline. A side pool or a backwater arm off the normal is missed. At tight bends, deep rungs are capped on the inside (folded station-rungs still occur: 36 at the first rung and 4,883 at the 8 m rung preserve-wide, where wide water fills a bending valley).
@@ -100,3 +128,4 @@ On flat Jalama 27714637-024…030 every method is one visible piece. m3 covers 1
 | Version | Change |
 | --- | --- |
 | 1 | First version. Built on m3-v1. |
+| 2 | Built on m3-v2: stations on the creek's lowest point with the raw lidar (breached through tall short barriers) as ring z and flood seed, on m3's water-surface stations; the water always covers the lowest point; `anchorStation`, `downstreamSegmentId` and `breachedStations` added to `channelRibbon`; `stationDistancesM` added to `channelRibbon`; drawn on m3's depth-scaled smoothed, pool-filled water surface (`channel-ribbon-pool-filled`) with the display rule off by default. A pre-smoothing draft of v2 (without `stationDistancesM`) existed only during development. |

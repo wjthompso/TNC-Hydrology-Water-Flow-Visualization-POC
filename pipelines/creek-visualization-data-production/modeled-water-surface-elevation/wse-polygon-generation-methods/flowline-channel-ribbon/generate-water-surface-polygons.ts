@@ -2,12 +2,14 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { adjacentSegmentsById, type NetworkCreekSegment } from '../../creek-segment-network.ts';
 import { roundToDecimals, utm10nToWgs84 } from '../../../utm-geometry.ts';
-import { frameAt } from '../../modeled-wse-derivation-methods/m3-flowline-profile-manning-depth/anchor-section.ts';
 import {
   bedAt,
   buildRunChannel,
+  isBreachedStation,
   orientRun,
   segmentRuns,
+  thalwegPoint,
+  waterSurfaceStations,
   type OrientedSegment,
   type RunChannel,
 } from '../../modeled-wse-derivation-methods/m3-flowline-profile-manning-depth/flowline-channel.ts';
@@ -26,8 +28,9 @@ import { computeRibbonEdges, type RibbonEdges } from './ribbon-offsets.ts';
 
 /**
  * WSE Polygon Generation Method `flowline-channel-ribbon` (Stage 4). For every run of joined Creek Segments of every flowline: build the m3
- * channel (smoothed lidar-traced centerline, bed profile), compute the ribbon edges for every depth rung, and write each Creek Segment's rungs as
- * vertex-aligned morph-target rings. See METHOD.md and DESIGN.md in this folder.
+ * channel (smoothed lidar-traced centerline, raw lidar bed at the lowest point of every station, breached through tall short barriers), compute
+ * the ribbon edges for every depth rung, and write each Creek Segment's rungs as vertex-aligned morph-target rings on m3's water-surface
+ * stations, the stations Stage 3 pool-fills the water surface on. See METHOD.md and DESIGN.md in this folder.
  */
 
 const PARAMETERS = FLOWLINE_CHANNEL_RIBBON_METHOD.parameters;
@@ -39,6 +42,14 @@ interface ChannelRibbonSummary {
   lengthM: number;
   anchorLonLat: [number, number];
   anchorBedElevationM: number;
+  /** Which of the segment's stations is the WSE Anchor Point. */
+  anchorStation: number;
+  /** The next Creek Segment of the run in flow order, or null at the run's downstream end: the browser pool-fills the run along this chain. */
+  downstreamSegmentId: string | null;
+  /** Stations whose bed is a breach line through a barrier (the water passes through the fill there). */
+  breachedStations: number;
+  /** Each station's distance from the segment's upstream boundary station along the centerline, m: where m3 smooths the water surface. */
+  stationDistancesM: number[];
   trueTopWidthAtAnchorM: number[];
   displayTopWidthAtAnchorM: number[];
 }
@@ -61,14 +72,26 @@ interface SegmentRibbon {
   foldedStationsByRung: number[];
 }
 
-/** The ribbon of one Creek Segment between dense-table stations `first` and `last` of its run's channel. */
-function segmentRibbon(channel: RunChannel, edges: RibbonEdges, segmentId: string, first: number, last: number): SegmentRibbon {
+/** Centerline point and left normal of a table station. */
+function frameOf(channel: RunChannel, station: number): { x: number; y: number; normalX: number; normalY: number } {
+  return { x: channel.x[station] as number, y: channel.y[station] as number, normalX: channel.normalX[station] as number, normalY: channel.normalY[station] as number };
+}
+
+/** The ribbon of one Creek Segment between table stations `first` and `last` of its run's channel, on m3's water-surface stations. */
+function segmentRibbon(
+  channel: RunChannel,
+  edges: RibbonEdges,
+  segment: { segmentId: string; downstreamSegmentId: string | null },
+  first: number,
+  last: number,
+): SegmentRibbon {
+  const { segmentId } = segment;
   const rungs = edges.rungDepthsM;
   const lengthM = (last - first) * channel.spacingM;
-  const stationCount = Math.max(3, 2 * Math.ceil(lengthM / (2 * PARAMETERS.stationSpacing.targetM)) + 1);
-  const stationIndices = Array.from({ length: stationCount }, (_, station) => first + ((last - first) * station) / (stationCount - 1));
-  const bedProfileM = stationIndices.map((index) => roundToDecimals(bedAt(channel, index), 3));
-  const frames = stationIndices.map((index) => frameAt(channel, index));
+  const { stations: stationIndices, anchorStation, stationDistancesM } = waterSurfaceStations(channel, first, last);
+  const stationCount = stationIndices.length;
+  const bedProfileM = stationIndices.map((index) => roundToDecimals(channel.bedM[index] as number, 3));
+  const frames = stationIndices.map((index) => frameOf(channel, index));
   const foldedStationsByRung = rungs.map(() => 0);
   const buckets: PolygonSet['elevationBuckets'] = rungs.map((rungDepthM, rung) => {
     const leftEdge = edges.left[rung] as Float32Array;
@@ -107,16 +130,21 @@ function segmentRibbon(channel: RunChannel, edges: RibbonEdges, segmentId: strin
     };
   });
 
-  const anchorStation = (stationCount - 1) / 2;
   const anchorIndex = stationIndices[anchorStation] as number;
-  const anchorFrame = frames[anchorStation] as (typeof frames)[number];
-  const [anchorLongitude, anchorLatitude] = utm10nToWgs84(anchorFrame.x, anchorFrame.y);
-  const anchorBedElevationM = bedProfileM[anchorStation] as number;
+  const anchorPoint = thalwegPoint(channel, anchorIndex);
+  const [anchorLongitude, anchorLatitude] = utm10nToWgs84(anchorPoint.x, anchorPoint.y);
+  // The lidar at the anchor point, as the Time Series stores it (the station's bed, except on a segment wholly on a breach).
+  const anchorBedElevationM = roundToDecimals(channel.thalwegM[anchorIndex] as number, 3);
   const summary: ChannelRibbonSummary = {
     stationCount,
     lengthM: roundToDecimals(lengthM, 2),
-    anchorLonLat: [roundToDecimals(anchorLongitude, 7), roundToDecimals(anchorLatitude, 7)],
+    // 8 decimals (about 1 mm) so the lidar read back at this point is the anchor bed within a millimeter or two even on steep ground.
+    anchorLonLat: [roundToDecimals(anchorLongitude, 8), roundToDecimals(anchorLatitude, 8)],
     anchorBedElevationM,
+    anchorStation,
+    downstreamSegmentId: segment.downstreamSegmentId,
+    breachedStations: stationIndices.filter((index) => isBreachedStation(channel, index)).length,
+    stationDistancesM,
     trueTopWidthAtAnchorM: rungs.map((_depth, rung) => roundToDecimals(sampleAt(edges.trueTopWidthM[rung] as Float32Array, anchorIndex), 2)),
     displayTopWidthAtAnchorM: rungs.map((_depth, rung) =>
       roundToDecimals(sampleAt(edges.left[rung] as Float32Array, anchorIndex) - sampleAt(edges.right[rung] as Float32Array, anchorIndex), 2),
@@ -211,7 +239,7 @@ export async function generateFlowlineChannelRibbonPolygons(inputs: WsePolygonMe
           });
           return;
         }
-        const ribbon = segmentRibbon(channel, edges, segment.segmentId, first, last);
+        const ribbon = segmentRibbon(channel, edges, { segmentId: segment.segmentId, downstreamSegmentId: oriented[position + 1]?.segmentId ?? null }, first, last);
         ribbon.foldedStationsByRung.forEach((folds, rung) => (foldedStationsByRung[rung] = (foldedStationsByRung[rung] as number) + folds));
         anchorBedBySegmentId.set(segment.segmentId, ribbon.ladder.bedElevationM);
         ribbons.push({ networkIndex, ribbon });

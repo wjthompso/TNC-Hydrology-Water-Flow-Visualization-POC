@@ -73,9 +73,33 @@ export interface LoadedTimeSeries {
   junctionBedDownstreamMBySegmentId: ReadonlyMap<string, number>;
 }
 
+/**
+ * What a `flowline-channel-ribbon` polygon set carries besides its buckets (optional field
+ * `channelRibbon`; absent for every other method and in hosted data). Widths are indexed by depth rung,
+ * parallel to the segment's buckets. Read by the dev tools click inspector and by ribbon v2's run walk.
+ */
+export interface ChannelRibbonSummary {
+  stationCount: number;
+  lengthM: number;
+  /** The WSE Anchor Point: the ribbon's middle station on the channel (v1), or the creek's lowest point at its anchor station (v2). */
+  anchorLonLat: LonLat;
+  anchorBedElevationM: number;
+  /** Ribbon v2: which station is the anchor, and the next segment of the run in flow order (null at the run end). Null in v1 files. */
+  anchorStation: number | null;
+  downstreamSegmentId: string | null;
+  /** Ribbon v2: each station's distance from the segment's upstream boundary along the centerline, m. Null in v1 files. */
+  stationDistancesM: readonly number[] | null;
+  /** Smoothed lidar flood width at the anchor per rung, before the display floors, m. */
+  trueTopWidthAtAnchorM: readonly number[];
+  /** Drawn width at the anchor per rung, m. */
+  displayTopWidthAtAnchorM: readonly number[];
+}
+
 export interface LoadedFlowline {
   tncComid: string;
   polygonBucketsBySegmentId: ReadonlyMap<string, readonly ElevationBucket[]>;
+  /** Only segments whose polygon set carries a `channelRibbon` summary appear here. */
+  channelRibbonBySegmentId: ReadonlyMap<string, ChannelRibbonSummary>;
   /** Keyed by water year for hourly Datasets, or `all` for one-file Datasets. */
   seriesByKey: Map<string, LoadedTimeSeries>;
 }
@@ -237,6 +261,7 @@ export function createModeledWaterDataStore(
           const flowline: LoadedFlowline = {
             tncComid: comid,
             polygonBucketsBySegmentId: readPolygonSetFile(file),
+            channelRibbonBySegmentId: readChannelRibbonSummaries(file),
             seriesByKey: new Map(),
           };
           cache.set(comid, flowline);
@@ -391,6 +416,39 @@ function readPolygonSetFile(value: unknown): Map<string, readonly ElevationBucke
     bySegment.set(segmentId, buckets);
   }
   return bySegment;
+}
+
+/** The optional `channelRibbon` summary of each polygon set; a set without a well-formed one is left out. */
+function readChannelRibbonSummaries(value: unknown): Map<string, ChannelRibbonSummary> {
+  const summaries = new Map<string, ChannelRibbonSummary>();
+  const sets = Array.isArray((value as { waterSurfacePolygonSets?: unknown } | null)?.waterSurfacePolygonSets)
+    ? ((value as { waterSurfacePolygonSets: unknown[] }).waterSurfacePolygonSets)
+    : [];
+  for (const item of sets) {
+    const set = item as { segmentId?: unknown; channelRibbon?: Record<string, unknown> } | null;
+    const ribbon = set?.channelRibbon;
+    if (!ribbon || typeof ribbon !== 'object') continue;
+    const anchor = ribbon.anchorLonLat;
+    const trueWidths = ribbon.trueTopWidthAtAnchorM;
+    const displayWidths = ribbon.displayTopWidthAtAnchorM;
+    const distances = ribbon.stationDistancesM;
+    const anchorBedM = finiteOrNull(ribbon.anchorBedElevationM);
+    const anchorIsLonLat =
+      Array.isArray(anchor) && typeof anchor[0] === 'number' && typeof anchor[1] === 'number';
+    if (!anchorIsLonLat || anchorBedM === null || !Array.isArray(trueWidths) || !Array.isArray(displayWidths)) continue;
+    summaries.set(String(set?.segmentId), {
+      stationCount: finiteOrNull(ribbon.stationCount) ?? 0,
+      lengthM: finiteOrNull(ribbon.lengthM) ?? 0,
+      anchorLonLat: [anchor[0], anchor[1]],
+      anchorBedElevationM: anchorBedM,
+      anchorStation: finiteOrNull(ribbon.anchorStation),
+      downstreamSegmentId: typeof ribbon.downstreamSegmentId === 'string' ? ribbon.downstreamSegmentId : null,
+      stationDistancesM: Array.isArray(distances) && distances.every((distance) => typeof distance === 'number') ? (distances as number[]) : null,
+      trueTopWidthAtAnchorM: trueWidths as number[],
+      displayTopWidthAtAnchorM: displayWidths as number[],
+    });
+  }
+  return summaries;
 }
 
 function readTimeSeriesFile(value: unknown): LoadedTimeSeries {
@@ -598,6 +656,25 @@ export function heldWaterDepthAt(
     },
     displayDepthFloorForSlope(bedSlope),
   );
+}
+
+/**
+ * The Time Series' own junction depths held at the selected time, under the same hold rule as
+ * `heldValueAt`, with no display floor applied (`heldWaterDepthAt` may raise them). Null when the
+ * file has no junction depths for the segment or either end is null. For the dev tools.
+ */
+export function heldJunctionDepthsAt(
+  series: LoadedTimeSeries,
+  segmentId: string,
+  timeUtcMs: number,
+  holdMs: number,
+): { upstreamM: number; downstreamM: number } | null {
+  const index = heldIndexAt(series, timeUtcMs, holdMs);
+  if (index < 0) return null;
+  const upstreamM = finiteOrNull(series.junctionDepthUpstreamBySegmentId.get(segmentId)?.[index]);
+  const downstreamM = finiteOrNull(series.junctionDepthDownstreamBySegmentId.get(segmentId)?.[index]);
+  if (upstreamM === null || downstreamM === null) return null;
+  return { upstreamM: Math.max(0, upstreamM), downstreamM: Math.max(0, downstreamM) };
 }
 
 /** Index of the value held at the selected time, or -1 beyond the hold or before the first value. */

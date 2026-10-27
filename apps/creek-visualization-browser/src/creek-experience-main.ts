@@ -28,6 +28,7 @@ import { creekDataSourceConfiguration } from './creek-data-source-configuration'
 import { showModeledDatasetAccuracyNotice } from './modeled-dataset-accuracy-notices';
 import { waitAtMost } from './bounded-startup-wait';
 import { bindDatasetAboutDialog, fillObservedGaugeAbout } from './dataset-about-dialog';
+import { bindLidarPointCloudToggle } from './lidar-point-cloud';
 import { bindSceneImageryWidget } from './scene-imagery-widget';
 import { showLoadingMessage } from './loading-spinner';
 import { installMonitoringStationLocator } from './monitoring-station-locator';
@@ -47,6 +48,8 @@ interface CreekVisualizationTestSeam {
   readonly sceneUpdating: boolean;
   /** True when no camera animation or user navigation is in progress. Read-only. */
   readonly sceneStationary: boolean;
+  /** Point-cloud layers on the map with their visible and loaded flags. Read-only; empty before the view exists. */
+  readonly pointCloudLayers: readonly PointCloudLayerState[];
   /** Camera position height in meters. Read-only; null before the view exists. */
   readonly cameraAltitudeM: number | null;
   /** Camera position, heading, and tilt. Read-only; null before the view exists. */
@@ -117,6 +120,12 @@ interface CameraPose {
   readonly positionWgs84: readonly [number, number, number];
   readonly headingDegrees: number;
   readonly tiltDegrees: number;
+}
+
+interface PointCloudLayerState {
+  readonly id: string;
+  readonly visible: boolean;
+  readonly loaded: boolean;
 }
 
 type TestModeWindow = Window & { __TNC_TEST__?: CreekVisualizationTestSeam };
@@ -509,6 +518,14 @@ function installTestSeam(readyPromise: Promise<boolean>): void {
     get sceneStationary() {
       return sceneView?.stationary ?? false;
     },
+    get pointCloudLayers() {
+      const layers = sceneView?.map?.layers.filter((layer) => layer.type === 'point-cloud');
+      return (layers?.toArray() ?? []).map((layer) => ({
+        id: layer.id,
+        visible: layer.visible,
+        loaded: layer.loaded,
+      }));
+    },
     get cameraAltitudeM() {
       const altitudeM = sceneView?.camera?.position?.z;
       return typeof altitudeM === 'number' && Number.isFinite(altitudeM) ? altitudeM : null;
@@ -811,6 +828,7 @@ function geographicPoint(point: Point): Point | null {
 /** With Dev tools enabled, the imagery widget sits under that button. Otherwise it keeps the corner. */
 function bindImageryWidget(view: SceneView): void {
   bindSceneImageryWidget(view, { belowDevTools: devToolsEnabled });
+  bindLidarPointCloudToggle(view);
 }
 
 function showExperienceError(message: string): void {

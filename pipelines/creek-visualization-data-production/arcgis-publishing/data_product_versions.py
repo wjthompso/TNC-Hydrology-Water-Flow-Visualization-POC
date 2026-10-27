@@ -29,6 +29,9 @@ Public API (kept small on purpose; other freeze scripts import it):
     git_commit(commit) -> {"commit": full sha, "date_utc": str}
     git_last_commit(paths, before_iso=None) -> {"commit": str, "date_utc": str} | None
     git_last_commit_date(paths, before_iso=None) -> str | None   (ISO 8601 UTC "...Z")
+    git_oldest_commit_holding_method_code(code_sha256_by_file) -> ({"commit", "date_utc"}, basis sentence)
+        Like git_first_commit_with_method_code, but also finds code that later commits changed
+        (an older method version whose files have moved on in the working tree).
     utc_iso_from_epoch_ms(ms) -> str
     read_registry() -> dict
     write_registry(registry) -> None
@@ -244,6 +247,27 @@ def git_first_commit_with_method_code(code_sha256_by_file: dict[str, str]) -> tu
     return git_commit(matching_commit), (
         "committer date of the earliest git commit whose copies of every method code file equal the SHA-256 the stage "
         "manifest recorded (the method code may have been committed after the stage ran)"
+    )
+
+
+def git_oldest_commit_holding_method_code(code_sha256_by_file: dict[str, str]) -> tuple[dict, str]:
+    """The oldest git commit whose copies of every method code file equal the SHA-256 a stage recorded.
+
+    Used when the working tree has moved on since the stage ran (an older method version, such as m3 v1
+    after m3 v2 was written): the recorded code then exists only in history, so the walk skips newer
+    commits until it reaches one that holds it. Raises when no commit holds exactly that code.
+    """
+    log_output = _run_git(["log", "--format=%H", "--", *code_sha256_by_file])
+    holding_commits = [
+        commit
+        for commit in log_output.splitlines()
+        if all(_file_sha256_at_commit(commit, path) == recorded for path, recorded in code_sha256_by_file.items())
+    ]
+    if not holding_commits:
+        raise RuntimeError("No git commit holds exactly the method code files the stage recorded.")
+    return git_commit(holding_commits[-1]), (
+        "committer date of the oldest git commit whose copies of every method code file equal the SHA-256 the stage "
+        "manifest recorded; the working tree has changed those files since (a later method version)"
     )
 
 

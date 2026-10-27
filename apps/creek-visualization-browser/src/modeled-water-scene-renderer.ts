@@ -25,7 +25,7 @@ import {
   type SegmentPolygonPlacement,
   type WaterGraphicGeometryIdentity,
 } from './arcgis-scene-renderer';
-import { channelRibbonRingsWgs84 } from './channel-ribbon-surface';
+import { channelRibbonRingsWgs84, poolFilledChannelRibbonRingsWgs84 } from './channel-ribbon-surface';
 import type { ElevationBucket } from './creek-data-contract';
 import { segmentSurfaceGeometry, type CreekSegmentPathRecord } from './modeled-water-data-store';
 import {
@@ -103,6 +103,11 @@ export function createModeledWaterSceneRenderer(
       bucket.minWaterSurfaceElevationM,
       depth.anchorDepthM,
       placement.channelRibbonLiftM ?? '',
+      placement.channelRibbonFloorM ?? '',
+      placement.channelRibbonStationSurfacesM?.join(',') ?? '',
+      placement.channelRibbonAnchorClearance?.stationLiftsM.join(',') ?? '',
+      placement.channelRibbonAnchorClearance?.anchorStation ?? '',
+      placement.channelRibbonByStationInterval ? 'station-intervals' : 'one-ring',
       junctionDepth?.upstreamM ?? '',
       junctionDepth?.downstreamM ?? '',
       geometry ? 'geometry' : 'no-geometry',
@@ -120,7 +125,19 @@ export function createModeledWaterSceneRenderer(
     if (graphic.symbol !== symbol) graphic.symbol = symbol;
     // `channel-ribbon-depth` water morphs between all the segment's depth rungs at each station's own depth; anything
     // that is not a usable ribbon (or any other method) draws the picked bucket parallel to the bed.
-    const ribbonRings = placement.channelRibbonBuckets ? channelRibbonRingsWgs84(placement.channelRibbonBuckets, depth, placement.channelRibbonLiftM ?? 0) : null;
+    // `channel-ribbon-pool-filled` draws the same rungs at each station's pool-filled surface instead.
+    const ribbonRings = !placement.channelRibbonBuckets
+      ? null
+      : placement.channelRibbonStationSurfacesM
+        ? poolFilledChannelRibbonRingsWgs84(
+            placement.channelRibbonBuckets,
+            placement.channelRibbonStationSurfacesM,
+            placement.channelRibbonFloorM ?? 0,
+            placement.channelRibbonLiftM ?? 0,
+            placement.channelRibbonAnchorClearance ?? null,
+            placement.channelRibbonByStationInterval === true,
+          )
+        : channelRibbonRingsWgs84(placement.channelRibbonBuckets, depth, placement.channelRibbonLiftM ?? 0);
     graphic.geometry = new Polygon({
       hasZ: true,
       rings: ribbonRings ?? bedParallelRingsWgs84(bucket.ringsWgs84, geometry, depth),
@@ -137,6 +154,15 @@ export function createModeledWaterSceneRenderer(
       drainageAreaRatioTransfer: drainageAreaRatioTransfer === true,
       junctionDepthUpstreamM: junctionDepth?.upstreamM ?? null,
       junctionDepthDownstreamM: junctionDepth?.downstreamM ?? null,
+      // Dev tools click inspector: the ribbon's display lift (0 for true water and other methods).
+      displayLiftM: placement.channelRibbonLiftM ?? 0,
+      // Ribbon v2's anchor clearance lift at the anchor, its margin, and the browser ground it cleared; null when off.
+      anchorClearanceLiftM: placement.channelRibbonAnchorClearance?.anchorLiftM ?? null,
+      anchorClearanceMarginM: placement.channelRibbonAnchorClearance?.marginM ?? null,
+      anchorClearanceGroundM: placement.channelRibbonAnchorClearance?.anchorGroundM ?? null,
+      // Ribbon v2's clearance lift at every station (anchor blend and drape), and the drape's settings and counts; null when off.
+      stationClearanceLiftsM: placement.channelRibbonAnchorClearance?.stationLiftsM ?? null,
+      stationDrape: placement.channelRibbonAnchorClearance?.drape ?? null,
     };
     graphic.visible = true;
     writtenElevationM.set(segmentId, depth.waterSurfaceElevationM);
