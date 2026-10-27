@@ -1,6 +1,6 @@
-// Developer-only HUD. Mounted when the page URL carries `?devtools` (or
-// `?devtools=1`), or from the development-server corner toggle
-// (dev-tools-toggle.ts). Reads from `window.__TNC_TEST__` so the HUD and future
+// Developer-only HUD. Mounted from the Dev tools corner button
+// (dev-tools-toggle.ts) when dev tools are enabled. `?devtools` opens it on
+// load in that same case. Reads from `window.__TNC_TEST__` so the HUD and future
 // replay tests share the same capture shape. In the modeled experience it also
 // reads `window.__TNC_MODELED__` for the Drainage-Area Ratio Transfer tools.
 //
@@ -106,14 +106,14 @@ interface DevToolsHudOptions {
   container: HTMLElement;
   /**
    * `top` (default) pins the HUD to the top-right corner. `below-dev-tools-toggle`
-   * leaves room above it for the development-server toggle button and the
-   * imagery widget stacked under it.
+   * leaves room above it for the development-server toggle button only; the HUD
+   * then covers the imagery widget stacked under that button, so closing the HUD
+   * brings the imagery widget back.
    */
   placement?: 'top' | 'below-dev-tools-toggle';
   /**
-   * When the dev-server toggle already tracks clicks, it owns the marker and
-   * forwards clicks here. A direct `?devtools` mount leaves this unset and the
-   * HUD creates the marker itself.
+   * When the corner toggle already tracks clicks, it owns the marker and
+   * forwards clicks here. A mount without a marker creates one.
    */
   clickMarker?: DevToolsClickMarker;
   /** Ending it removes the panel, its timers, and its map layers. The view stays. */
@@ -278,8 +278,9 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
     'pointer-events-auto',
     'absolute',
     'right-4',
-    belowToggle ? 'top-[6.25rem]' : 'top-4',
-    'z-20',
+    belowToggle ? 'top-14' : 'top-4',
+    // Above the imagery widget (z-30), which sits in the same spot and stays hidden while the panel is open.
+    'z-40',
     'w-[min(24rem,calc(100vw-2rem))]',
     'overflow-hidden',
     'border',

@@ -16,6 +16,11 @@ interface ImportMetaEnv {
   readonly VITE_CREEK_GAUGE_SERVICE_URL?: string;
   /** "true" shows the California Natural Flows monthly Dataset; default hidden. */
   readonly VITE_SHOW_CALIFORNIA_NATURAL_FLOWS_MONTHLY?: string;
+  /**
+   * "true" shows the Dev tools button and honors `?devtools`. "false" hides both.
+   * Default: on for the development server, off for production builds.
+   */
+  readonly VITE_SHOW_DEV_TOOLS?: string;
 }
 
 interface ImportMeta {

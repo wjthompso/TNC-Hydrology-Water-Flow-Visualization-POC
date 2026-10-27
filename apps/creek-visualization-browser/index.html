@@ -403,9 +403,10 @@
       </div>
 
       <!--
-        Imagery widget: an Esri-style square map button that opens the imagery
-        list. Bound by scene-imagery-widget.ts. Sits at the top-right corner;
-        in development it drops below the Dev tools button.
+        Imagery widget: an Esri-style square map button, showing a preview of the
+        current imagery, that opens the imagery list. Bound by
+        scene-imagery-widget.ts. Sits at the top-right corner; in development it
+        drops below the Dev tools button.
       -->
       <div id="imagery-widget" class="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col items-end">
         <button
@@ -415,17 +416,14 @@
           aria-controls="imagery-widget-panel"
           aria-label="Imagery"
           title="Imagery"
-          class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-slate-600/80 bg-slate-900/85 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-expanded:border-cyan-400/70 aria-expanded:bg-cyan-950/80 aria-expanded:text-cyan-100"
+          class="h-11 w-11 cursor-pointer overflow-hidden rounded-md border border-slate-600/80 bg-slate-900/85 p-0.5 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-expanded:border-cyan-400/70 aria-expanded:bg-cyan-950/80 aria-expanded:text-cyan-100"
         >
-          <svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M10 2.75 17.25 6.5 10 10.25 2.75 6.5 10 2.75Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-            <path d="m2.75 10 7.25 3.75L17.25 10M2.75 13.5l7.25 3.75 7.25-3.75" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+          <img alt="" width="40" height="40" draggable="false" class="h-full w-full rounded-[5px] object-cover" />
         </button>
         <fieldset
           id="imagery-widget-panel"
           hidden
-          class="mt-2 w-64 rounded-lg border border-slate-700/80 bg-slate-900/90 p-2 text-slate-100 shadow-xl shadow-black/40 backdrop-blur"
+          class="mt-2 w-72 rounded-lg border border-slate-700/80 bg-slate-900/90 p-2 text-slate-100 shadow-xl shadow-black/40 backdrop-blur"
         >
           <legend class="sr-only">Imagery</legend>
           <p class="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400" aria-hidden="true">Imagery</p>

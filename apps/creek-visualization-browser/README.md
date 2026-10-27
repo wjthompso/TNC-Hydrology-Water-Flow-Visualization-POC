@@ -15,7 +15,7 @@ npm run dev -w creek-visualization-browser
 
 Optional `VITE_ARCGIS_API_KEY` is sent with ArcGIS requests and can raise tile quota. Imagery and terrain load without it. See `.env.example`.
 
-On the development server a `Dev tools` button in the top-right corner opens the developer HUD (camera pose, click hit tests, segment placements, and in the modeled experience a click-to-read modeled water-surface elevation plus the "Side creeks with borrowed flow" (Drainage-Area Ratio Transfer) navigation, whose Next/Previous step through every flagged Creek Segment in the extent). User-facing labels for that water live in `src/drainage-area-ratio-transfer-labels.ts`. It starts collapsed and remembers its state in `localStorage`. Adding `?devtools` to the URL opens the HUD on load, in every build.
+Dev tools are a developer HUD (heads-up display): camera pose, click hit tests, segment placements, and in the modeled experience a click-to-read modeled water-surface elevation plus the "Side creeks with borrowed flow" (Drainage-Area Ratio Transfer) navigation, whose Next/Previous step through every flagged Creek Segment in the extent. User-facing labels for that water live in `src/drainage-area-ratio-transfer-labels.ts`. The development server shows a `Dev tools` button in the top-right corner. It starts collapsed and remembers its state in `localStorage`. Adding `?devtools` to the URL opens the HUD on load. A production build hides the button and ignores `?devtools`, so a shared Digital Twin link cannot open it. Set `VITE_SHOW_DEV_TOOLS=true` to force Dev tools on in any build, or `false` to hide them on the development server for a demo. See `.env.example`.
 
 ## Modeled water
 
