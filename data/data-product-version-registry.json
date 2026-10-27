@@ -89,6 +89,96 @@
             "polygon_layer_id": null,
             "published_at_utc": null
           }
+        },
+        {
+          "version_label": "m3-v1",
+          "method_id": "m3-flowline-channel-ribbon",
+          "method_number": 3,
+          "version_number": 1,
+          "status": "active",
+          "change_type": "new method",
+          "change_note": "Stage 4 flowline-channel-ribbon v1 built from modeled-wse m3-v1: first version",
+          "method_date_utc": "2026-10-24T13:23:47Z",
+          "generated_at_utc": "2026-10-24T03:58:00.423Z",
+          "frozen_at_utc": "2026-10-27T20:35:14Z",
+          "frozen_from_commit": "aa43ffa84d0251a2d1c474297a9fb6f4a16ade9a",
+          "built_from_modeled_wse_version": {
+            "product": "modeled-wse",
+            "method_id": "m3-flowline-profile-manning-depth",
+            "version_label": "m3-v1"
+          },
+          "pipeline_method_id": "flowline-channel-ribbon",
+          "pipeline_method_version": 1,
+          "method_sha256": "4ce1dba020642e29119a0c21a6eb81dd63891c5eee586a34d8a6ad9fb3ccaddd",
+          "browser_drawing": "channel-ribbon-depth",
+          "bucket_bounds": "water depth in meters above the bed (min_depth_m / max_depth_m), not elevation",
+          "version_folder": "data/data-product-versions/wse-polygons/m3-flowline-channel-ribbon/m3-v1",
+          "arcgis_upload_sha256": "75712eb0f0b53ae4158e131ad1e0e02e7e1678c7fbc83d28a16951abad7fef8a",
+          "arcgis_prefix": "wse_polygons_m3_v1",
+          "arcgis_table_names": [
+            "wse_polygon_versions",
+            "wse_polygons_m3_v1",
+            "wse_polygons_m3_v1_channel_ribbons"
+          ],
+          "arcgis_service_name": "creek_water_visualization_wse_polygons_m3_v1",
+          "arcgis_service_title": "Dangermond Preserve — Creek Water Outlines (m3-v1, channel ribbon, for m3-v1)",
+          "feature_count": 63365,
+          "arcgis": {
+            "file_geodatabase_item_id": null,
+            "service_item_id": null,
+            "service_url": null,
+            "layer_ids": {
+              "wse_polygon_versions": null,
+              "wse_polygons_m3_v1": null,
+              "wse_polygons_m3_v1_channel_ribbons": null
+            },
+            "published_at_utc": null
+          }
+        },
+        {
+          "version_label": "m3-v2",
+          "method_id": "m3-flowline-channel-ribbon",
+          "method_number": 3,
+          "version_number": 2,
+          "status": "active",
+          "change_type": "implementation fix",
+          "change_note": "Stage 4 flowline-channel-ribbon v2 built from modeled-wse m3-v2: version 2: built on m3-v2. Stations sit on the creek’s lowest point with the raw lidar (breached through tall short barriers) as ring z and the flood level; m3’s water-surface stations (shared with Stage 3); anchor at the lowest point with anchorStation, downstreamSegmentId and stationDistancesM saved; drawn pool-filled (browserDrawing channel-ribbon-pool-filled, the water smoothed over ±5 × its depth first) with the display rule off by default",
+          "method_date_utc": "2026-10-27T13:49:33Z",
+          "generated_at_utc": "2026-10-26T22:51:07.850Z",
+          "frozen_at_utc": "2026-10-27T20:35:25Z",
+          "frozen_from_commit": "aa43ffa84d0251a2d1c474297a9fb6f4a16ade9a",
+          "built_from_modeled_wse_version": {
+            "product": "modeled-wse",
+            "method_id": "m3-flowline-profile-manning-depth",
+            "version_label": "m3-v2"
+          },
+          "pipeline_method_id": "flowline-channel-ribbon",
+          "pipeline_method_version": 2,
+          "method_sha256": "2e9a27ff0feddacc7396aca34d1663c27521b4438515340334a2b34aba9e9715",
+          "browser_drawing": "channel-ribbon-pool-filled",
+          "bucket_bounds": "water depth in meters above the bed (min_depth_m / max_depth_m), not elevation",
+          "version_folder": "data/data-product-versions/wse-polygons/m3-flowline-channel-ribbon/m3-v2",
+          "arcgis_upload_sha256": "467ba61f530d206b13802f7c423c4eabb91675cfaa483e06735264a2814a4518",
+          "arcgis_prefix": "wse_polygons_m3_v2",
+          "arcgis_table_names": [
+            "wse_polygon_versions",
+            "wse_polygons_m3_v2",
+            "wse_polygons_m3_v2_channel_ribbons"
+          ],
+          "arcgis_service_name": "creek_water_visualization_wse_polygons_m3_v2",
+          "arcgis_service_title": "Dangermond Preserve — Creek Water Outlines (m3-v2, channel ribbon on the raw lidar bed, for m3-v2, m4-v1 and m5-v1)",
+          "feature_count": 63365,
+          "arcgis": {
+            "file_geodatabase_item_id": null,
+            "service_item_id": null,
+            "service_url": null,
+            "layer_ids": {
+              "wse_polygon_versions": null,
+              "wse_polygons_m3_v2": null,
+              "wse_polygons_m3_v2_channel_ribbons": null
+            },
+            "published_at_utc": null
+          }
         }
       ],
       "title": "Dangermond Preserve — Creek Water Outlines",
@@ -204,6 +294,222 @@
               "WY2023": null
             },
             "published_at_utc": null
+          }
+        },
+        {
+          "product": "modeled-wse",
+          "method_id": "m3-flowline-profile-manning-depth",
+          "method_number": 3,
+          "version_number": 1,
+          "version_label": "m3-v1",
+          "status": "active",
+          "change_type": "new method",
+          "change_note": "New method: the cross-section is cut on a continuous smoothed centerline, the bed is one smooth monotone profile per run, and the depth is the true depth (display exaggeration is never stored).",
+          "method_date_utc": "2026-10-24T13:23:47Z",
+          "generated_at_utc": "2026-10-24T03:57:37.368Z",
+          "frozen_from_commit": "aa43ffa84d0251a2d1c474297a9fb6f4a16ade9a",
+          "code_fingerprint": "3ace5380d6c02889a318d185cbc56ef6b70d324e4dcc077701d871e1258ff713",
+          "segment_network_version": "dangermond-preserve-v1",
+          "extent_id": "dangermond-preserve",
+          "dataset_ids": [
+            "national-water-model-hourly",
+            "california-natural-flows-monthly"
+          ],
+          "water_years": "national-water-model-hourly: WY2021–WY2023 hourly 2020-10-01T00:00:00Z to 2023-02-01T00:00:00Z; california-natural-flows-monthly: monthly 1950-01 to 2024-12",
+          "derivation_summary": "Modeled water-surface elevation (m NAVD88) and junction water depth per Creek Segment. Discharge per NHDPlusV2 reach (NOAA National Water Model v3.0 retrospective, hourly; California Natural Flows, monthly) is scaled to each Creek Segment by the USGS drainage-area ratio method (segment Q = reach Q × drainageAreaRatio from the crosswalk (USGS drainage-area ratio method, ratio capped at 1), as m1). Flowline channel profile (Manning depth), version 1: Same drainage-area-ratio discharge as m1 and m2, inverted on a divided-channel Manning rating curve cut across a continuous, continuous channel centerline (the TNC flowline smoothed and moved sideways to the lidar valley bottom) at the middle of each Creek Segment. The bed is a smooth, downstream-monotone profile of the flowline; the water depth at each junction is one number per vertex (smoothed mean of the neighbouring anchor depths), so the surface is continuous. The Time Series store true depths only; the segment’s WSE is the surface at the anchor point. Time-varying values are stored as Held WSE Intervals: a new interval starts when the anchor WSE or either junction depth changes.",
+          "arcgis_table_names": [
+            "modeled_wse_versions",
+            "modeled_wse_m3_v1_creek_segments",
+            "modeled_wse_m3_v1_nwm_hourly_held_intervals",
+            "modeled_wse_m3_v1_cnf_monthly_held_intervals",
+            "modeled_wse_m3_v1_cnf_monthly_values"
+          ],
+          "version_folder": "data/data-product-versions/modeled-wse/m3-flowline-profile-manning-depth/m3-v1",
+          "arcgis_upload_sha256": "e2ebd44a8abc48d5fe3d44faf4914ce7e2e33d83d02cc363f36ef836b5a27116",
+          "arcgis_service_name": "creek_water_visualization_modeled_wse_m3_v1",
+          "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m3-v1, channel profile, smoothed bed, Manning roughness)",
+          "arcgis": {
+            "service_item_id": null,
+            "service_url": null,
+            "file_geodatabase_item_id": null,
+            "layer_ids": {
+              "modeled_wse_versions": null,
+              "modeled_wse_m3_v1_creek_segments": null,
+              "modeled_wse_m3_v1_nwm_hourly_held_intervals": null,
+              "modeled_wse_m3_v1_cnf_monthly_held_intervals": null,
+              "modeled_wse_m3_v1_cnf_monthly_values": null
+            },
+            "raw_hourly_csv_item_ids": {
+              "WY2021": null,
+              "WY2022": null,
+              "WY2023": null
+            },
+            "published_at_utc": null
+          }
+        },
+        {
+          "product": "modeled-wse",
+          "method_id": "m3-flowline-profile-manning-depth",
+          "method_number": 3,
+          "version_number": 2,
+          "version_label": "m3-v2",
+          "status": "active",
+          "change_type": "implementation fix",
+          "change_note": "Raw 1 m lidar bed at the lowest point of every station (no Gaussian, isotonic, clamp, or median), the anchor and its cross-section on that lowest point, tall short barriers breached, and values = the pool-filled surface at the anchor, after a depth-scaled smoothing of the water (±5 × the flowing depth); hydraulics unchanged.",
+          "method_date_utc": "2026-10-27T13:49:33Z",
+          "generated_at_utc": "2026-10-26T22:50:45.346Z",
+          "frozen_from_commit": "aa43ffa84d0251a2d1c474297a9fb6f4a16ade9a",
+          "code_fingerprint": "c30b196d9dcb4ad89ffc77290f3063138acc4ffb41450315befd295f56363b6a",
+          "segment_network_version": "dangermond-preserve-v1",
+          "extent_id": "dangermond-preserve",
+          "dataset_ids": [
+            "national-water-model-hourly",
+            "california-natural-flows-monthly"
+          ],
+          "water_years": "national-water-model-hourly: WY2021–WY2023 hourly 2020-10-01T00:00:00Z to 2023-02-01T00:00:00Z; california-natural-flows-monthly: monthly 1950-01 to 2024-12",
+          "derivation_summary": "Modeled water-surface elevation (m NAVD88) and junction water depth per Creek Segment. Discharge per NHDPlusV2 reach (NOAA National Water Model v3.0 retrospective, hourly; California Natural Flows, monthly) is scaled to each Creek Segment by the USGS drainage-area ratio method (segment Q = reach Q × drainageAreaRatio from the crosswalk (USGS drainage-area ratio method, ratio capped at 1), as m1). Flowline channel profile (Manning depth), version 2: Same drainage-area-ratio discharge as m1 and m2, inverted on a divided-channel Manning rating curve cut across a continuous, channel centerline (the TNC flowline smoothed and moved sideways to the lidar valley bottom) through the creek’s lowest point at the middle of each Creek Segment. The bed is the raw 1 m lidar at the lowest point of every station (no smoothing), breached through road and railroad fills; the flowing depth at each junction is one number per vertex (smoothed mean of the neighbouring anchor depths), and the water surface (bed + flowing depth averaged over ±5 × the flowing depth) is pool-filled along the run, so pools behind steps stand level and deep water drowns the bumps of the raw bed. The Time Series store true depths only; the segment’s WSE is the pool-filled surface at the anchor point. Time-varying values are stored as Held WSE Intervals: a new interval starts when the anchor WSE or either junction depth changes.",
+          "arcgis_table_names": [
+            "modeled_wse_versions",
+            "modeled_wse_m3_v2_creek_segments",
+            "modeled_wse_m3_v2_nwm_hourly_held_intervals",
+            "modeled_wse_m3_v2_cnf_monthly_held_intervals",
+            "modeled_wse_m3_v2_cnf_monthly_values"
+          ],
+          "version_folder": "data/data-product-versions/modeled-wse/m3-flowline-profile-manning-depth/m3-v2",
+          "arcgis_upload_sha256": "2240c4779c20363f2e425d7e65a696a2a00d94935331d1bac8a90e264a4e7e47",
+          "arcgis_service_name": "creek_water_visualization_modeled_wse_m3_v2",
+          "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m3-v2, channel profile, raw lidar bed, Manning roughness)",
+          "arcgis": {
+            "service_item_id": null,
+            "service_url": null,
+            "file_geodatabase_item_id": null,
+            "layer_ids": {
+              "modeled_wse_versions": null,
+              "modeled_wse_m3_v2_creek_segments": null,
+              "modeled_wse_m3_v2_nwm_hourly_held_intervals": null,
+              "modeled_wse_m3_v2_cnf_monthly_held_intervals": null,
+              "modeled_wse_m3_v2_cnf_monthly_values": null
+            },
+            "raw_hourly_csv_item_ids": {
+              "WY2021": null,
+              "WY2022": null,
+              "WY2023": null
+            },
+            "published_at_utc": null
+          }
+        },
+        {
+          "product": "modeled-wse",
+          "method_id": "m4-flowline-profile-variable-power-depth",
+          "method_number": 4,
+          "version_number": 1,
+          "version_label": "m4-v1",
+          "status": "active",
+          "change_type": "new method",
+          "change_note": "New method: m3 v2 with the Ferguson & Recking (2025) VPEc flow resistance on slopes above 2% (full law from 8%), D84 = 0.25 m × (S/0.10)^0.5.",
+          "method_date_utc": "2026-10-27T13:49:33Z",
+          "generated_at_utc": "2026-10-26T23:23:05.122Z",
+          "frozen_from_commit": "aa43ffa84d0251a2d1c474297a9fb6f4a16ade9a",
+          "code_fingerprint": "0db7583e8523782dbde34a9eb17a397e5996a458886fc0d1090bc0921c02fa27",
+          "segment_network_version": "dangermond-preserve-v1",
+          "extent_id": "dangermond-preserve",
+          "dataset_ids": [
+            "national-water-model-hourly",
+            "california-natural-flows-monthly"
+          ],
+          "water_years": "national-water-model-hourly: WY2021–WY2023 hourly 2020-10-01T00:00:00Z to 2023-02-01T00:00:00Z; california-natural-flows-monthly: monthly 1950-01 to 2024-12",
+          "derivation_summary": "Modeled water-surface elevation (m NAVD88) and junction water depth per Creek Segment. Discharge per NHDPlusV2 reach (NOAA National Water Model v3.0 retrospective, hourly; California Natural Flows, monthly) is scaled to each Creek Segment by the USGS drainage-area ratio method (segment Q = reach Q × drainageAreaRatio from the crosswalk (USGS drainage-area ratio method, ratio capped at 1), as m1). Flowline channel profile (variable-power steep-creek depth), version 1: m3 v2’s channel, raw lidar bed, anchor cross-section, discharge and pool-filled water surface, with a steep-creek roughness: the Ferguson & Recking (2025) variable-power flow-resistance law with D84 assumed from slope, blended from Manning’s n 0.04/0.07 over 2–8% slope. Time-varying values are stored as Held WSE Intervals: a new interval starts when the anchor WSE or either junction depth changes.",
+          "arcgis_table_names": [
+            "modeled_wse_versions",
+            "modeled_wse_m4_v1_creek_segments",
+            "modeled_wse_m4_v1_nwm_hourly_held_intervals",
+            "modeled_wse_m4_v1_cnf_monthly_held_intervals",
+            "modeled_wse_m4_v1_cnf_monthly_values"
+          ],
+          "version_folder": "data/data-product-versions/modeled-wse/m4-flowline-profile-variable-power-depth/m4-v1",
+          "arcgis_upload_sha256": "de3ac4310b7854212b951e19316bcbc79a9cc3f0e33e196f5772df0f549934a8",
+          "arcgis_service_name": "creek_water_visualization_modeled_wse_m4_v1",
+          "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m4-v1, Ferguson & Recking steep-creek roughness)",
+          "arcgis": {
+            "service_item_id": null,
+            "service_url": null,
+            "file_geodatabase_item_id": null,
+            "layer_ids": {
+              "modeled_wse_versions": null,
+              "modeled_wse_m4_v1_creek_segments": null,
+              "modeled_wse_m4_v1_nwm_hourly_held_intervals": null,
+              "modeled_wse_m4_v1_cnf_monthly_held_intervals": null,
+              "modeled_wse_m4_v1_cnf_monthly_values": null
+            },
+            "raw_hourly_csv_item_ids": {
+              "WY2021": null,
+              "WY2022": null,
+              "WY2023": null
+            },
+            "published_at_utc": null
+          },
+          "channel_from_modeled_wse_version": {
+            "product": "modeled-wse",
+            "method_id": "m3-flowline-profile-manning-depth",
+            "version_label": "m3-v2",
+            "method_sha256": "8a55b1446e70aa851343addc8368f2f984a006763e5b31dccb28a9022f95dce7"
+          }
+        },
+        {
+          "product": "modeled-wse",
+          "method_id": "m5-flowline-profile-jarrett-depth",
+          "method_number": 5,
+          "version_number": 1,
+          "version_label": "m5-v1",
+          "status": "active",
+          "change_type": "new method",
+          "change_note": "New method: m3 v2 with Jarrett’s (1984) flow resistance on slopes above 2% (full law from 8%), the same blend as m4.",
+          "method_date_utc": "2026-10-27T13:49:33Z",
+          "generated_at_utc": "2026-10-26T23:26:12.850Z",
+          "frozen_from_commit": "aa43ffa84d0251a2d1c474297a9fb6f4a16ade9a",
+          "code_fingerprint": "4e6f42fcc0d3c7f880830ee19bba356dcd5ebe8d3d9ccbbc17c4cd99c30774e9",
+          "segment_network_version": "dangermond-preserve-v1",
+          "extent_id": "dangermond-preserve",
+          "dataset_ids": [
+            "national-water-model-hourly",
+            "california-natural-flows-monthly"
+          ],
+          "water_years": "national-water-model-hourly: WY2021–WY2023 hourly 2020-10-01T00:00:00Z to 2023-02-01T00:00:00Z; california-natural-flows-monthly: monthly 1950-01 to 2024-12",
+          "derivation_summary": "Modeled water-surface elevation (m NAVD88) and junction water depth per Creek Segment. Discharge per NHDPlusV2 reach (NOAA National Water Model v3.0 retrospective, hourly; California Natural Flows, monthly) is scaled to each Creek Segment by the USGS drainage-area ratio method (segment Q = reach Q × drainageAreaRatio from the crosswalk (USGS drainage-area ratio method, ratio capped at 1), as m1). Flowline channel profile (Jarrett steep-creek depth), version 1: m3 v2’s channel, raw lidar bed, anchor cross-section, discharge and pool-filled water surface, with a steep-creek roughness: Jarrett (1984), n = 0.32 S^0.38 R^−0.16, which needs no grain size, blended from Manning’s n 0.04/0.07 over 2–8% slope as in m4. Time-varying values are stored as Held WSE Intervals: a new interval starts when the anchor WSE or either junction depth changes.",
+          "arcgis_table_names": [
+            "modeled_wse_versions",
+            "modeled_wse_m5_v1_creek_segments",
+            "modeled_wse_m5_v1_nwm_hourly_held_intervals",
+            "modeled_wse_m5_v1_cnf_monthly_held_intervals",
+            "modeled_wse_m5_v1_cnf_monthly_values"
+          ],
+          "version_folder": "data/data-product-versions/modeled-wse/m5-flowline-profile-jarrett-depth/m5-v1",
+          "arcgis_upload_sha256": "d003cd9dcec0ebc211b0d2dc7baf5c2077f57335a055190bb2ab689c6726f6e5",
+          "arcgis_service_name": "creek_water_visualization_modeled_wse_m5_v1",
+          "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m5-v1, Jarrett steep-creek roughness)",
+          "arcgis": {
+            "service_item_id": null,
+            "service_url": null,
+            "file_geodatabase_item_id": null,
+            "layer_ids": {
+              "modeled_wse_versions": null,
+              "modeled_wse_m5_v1_creek_segments": null,
+              "modeled_wse_m5_v1_nwm_hourly_held_intervals": null,
+              "modeled_wse_m5_v1_cnf_monthly_held_intervals": null,
+              "modeled_wse_m5_v1_cnf_monthly_values": null
+            },
+            "raw_hourly_csv_item_ids": {
+              "WY2021": null,
+              "WY2022": null,
+              "WY2023": null
+            },
+            "published_at_utc": null
+          },
+          "channel_from_modeled_wse_version": {
+            "product": "modeled-wse",
+            "method_id": "m3-flowline-profile-manning-depth",
+            "version_label": "m3-v2",
+            "method_sha256": "8a55b1446e70aa851343addc8368f2f984a006763e5b31dccb28a9022f95dce7"
           }
         }
       ],
