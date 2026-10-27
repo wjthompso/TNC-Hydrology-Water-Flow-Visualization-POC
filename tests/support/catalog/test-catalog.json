@@ -69,6 +69,13 @@
       "name": "Control panel layout",
       "lifecycle": "active",
       "lifecycleChange": null
+    },
+    {
+      "id": "F-200",
+      "featureSetId": "FS-100",
+      "name": "2018 LiDAR point cloud",
+      "lifecycle": "active",
+      "lifecycleChange": null
     }
   ],
   "criticalCoreAreas": [
@@ -504,6 +511,25 @@
       "durationBudgetMs": 20000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-110-observed-jalama-gauge-water/behavior/FBT-022.live.spec.ts"
+    },
+    {
+      "id": "FBT-023",
+      "name": "Clicking Show 2018 LiDAR point cloud draws colorized LiDAR points over the settled Jalama Creek scene.",
+      "methodology": "Why it matters: a person clicks the button expecting the 2018 LiDAR point cloud to appear in the finished scene, and a button that turns on while the scene never holds the cloud is the likely miss. How it checks: opens the locally served observed-water page in test mode and waits until SceneView has finished loading with a still camera. The browser page, SceneView, published creek data, and the 2018 colorized LiDAR scene layer are real. Esri imagery, terrain, and LiDAR responses from tiles.arcgis.com are real and reused from the Esri response cache; a missing response is fetched live and saved. Nothing else is mocked. Before the click, the settled view has no point-cloud layer. The test clicks the button by its visible name, Show 2018 LiDAR point cloud, then waits until the view is still and finished drawing. It fails unless that view then holds one visible point-cloud layer that has loaded. A measured miss stays a failure even if Esri also returns HTTP 429 or 5xx. If no LiDAR response arrives and the scene never finishes, the result is inconclusive. It does not check screen pixels, the hide click, point color, point size, density, or elevation agreement with the water.",
+      "category": "feature-behavior",
+      "owner": "F-200",
+      "additionalFeatureAssociations": [],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 30000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-200-lidar-point-cloud/behavior/FBT-023.live.spec.ts"
     },
     {
       "id": "FBT-131",

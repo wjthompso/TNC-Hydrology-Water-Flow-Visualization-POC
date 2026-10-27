@@ -18,6 +18,12 @@ declare global {
       readonly sceneUpdating: boolean;
       /** True when no camera animation or user navigation is in progress. */
       readonly sceneStationary: boolean;
+      /** Point-cloud layers on the map with their visible and loaded flags. Empty before the view exists. */
+      readonly pointCloudLayers: readonly {
+        readonly id: string;
+        readonly visible: boolean;
+        readonly loaded: boolean;
+      }[];
       /** Camera position height in meters. Null before the view exists. */
       readonly cameraAltitudeM: number | null;
       /** Camera position, heading, and tilt. Null before the view exists. */
