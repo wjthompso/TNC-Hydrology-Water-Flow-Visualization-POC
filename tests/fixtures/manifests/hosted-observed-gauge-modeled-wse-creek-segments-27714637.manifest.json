@@ -1,0 +1,15 @@
+{
+  "fixture": "tests/fixtures/recorded/hosted-observed-gauge/modeled-wse-creek-segments-27714637.json",
+  "source": {
+    "description": "All 61 Creek Segments of TNC flowline 27714637 from the public m1-v1 modeled WSE service, with geometry, as served.",
+    "redactedEndpoint": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse/FeatureServer/0"
+  },
+  "captureDate": "2026-10-28",
+  "sourceVersion": "Public hosted services as of 2026-10-28; modeled WSE m1-v1 and WSE polygons m1-v1, segment_network_version dangermond-preserve-v1 (read-only /query responses, no token)",
+  "sha256": "4b8e1ce51b2760459070c739b6130110d58f8fea11020f3f27b738ae0a60da74",
+  "reviewStatus": "pending",
+  "reviewer": "Will Overbye-Thompson (review pending)",
+  "associations": [
+    "F-110"
+  ]
+}

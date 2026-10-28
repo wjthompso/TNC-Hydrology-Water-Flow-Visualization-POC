@@ -1,0 +1,15 @@
+{
+  "fixture": "tests/fixtures/recorded/hosted-observed-gauge/wse-polygons-gauge-neighbourhood.json",
+  "source": {
+    "description": "14 of the 938 polygon rows of the public m1-v1 WSE polygons service for TNC flowline 27714637 (two adjacent elevation buckets around the 2026-01-03 15:15 UTC flood-peak water level for each of gauge segment 27714637-026 and its six propagation neighbours), as served.",
+    "redactedEndpoint": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons/FeatureServer/0"
+  },
+  "captureDate": "2026-10-28",
+  "sourceVersion": "Public hosted services as of 2026-10-28; modeled WSE m1-v1 and WSE polygons m1-v1, segment_network_version dangermond-preserve-v1 (read-only /query responses, no token)",
+  "sha256": "2fea2dffae9377233cc9a04d91b02c1eab97df532872476ea40a8e2939f63a96",
+  "reviewStatus": "pending",
+  "reviewer": "Will Overbye-Thompson (review pending)",
+  "associations": [
+    "F-110"
+  ]
+}
