@@ -804,6 +804,7 @@ export async function startModeledCreekExperience(
       chartElements,
       chartContentForSegment,
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+      segmentLocationWgs84: (segmentId) => segmentCenters.get(segmentId) ?? null,
       troutConditions: {
         controls: troutConditions,
         // The modeled chart plots depth above the anchor bed, so zero depth is 0 wherever a bed exists.

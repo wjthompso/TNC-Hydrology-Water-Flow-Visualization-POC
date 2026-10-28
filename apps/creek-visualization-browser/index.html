@@ -208,63 +208,6 @@
         </section>
 
         <section
-          id="trout-conditions-panel"
-          class="pointer-events-auto mb-4 border-t border-slate-700 pt-3"
-          aria-labelledby="trout-conditions-title"
-        >
-          <label class="flex cursor-pointer items-start gap-2 text-base text-slate-200">
-            <input
-              id="trout-conditions-toggle"
-              type="checkbox"
-              class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
-            />
-            <span id="trout-conditions-title">Steelhead trout conditions</span>
-          </label>
-          <p id="trout-conditions-caveat" class="mt-1 text-xs leading-relaxed text-amber-300"></p>
-          <div class="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="Steelhead life stage">
-            <button
-              type="button"
-              data-steelhead-life-stage="eggs"
-              aria-pressed="false"
-              disabled
-              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
-            >
-              Eggs
-            </button>
-            <button
-              type="button"
-              data-steelhead-life-stage="juveniles"
-              aria-pressed="false"
-              disabled
-              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
-            >
-              Juveniles
-            </button>
-            <button
-              type="button"
-              data-steelhead-life-stage="adults"
-              aria-pressed="true"
-              disabled
-              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
-            >
-              Adults
-            </button>
-          </div>
-          <!-- Filled by steelhead-trout-conditions-controls.ts from the research ranges. Shown while the switch is on. -->
-          <div id="trout-conditions-details" class="mt-2 hidden text-sm leading-relaxed text-slate-300">
-            <p id="trout-conditions-season" class="text-slate-200"></p>
-            <ul id="trout-conditions-ranges" class="mt-1.5 space-y-1"></ul>
-            <p id="trout-conditions-no-band" class="mt-1.5 rounded-md border border-slate-600 bg-slate-800/60 p-2 text-slate-200"></p>
-            <p id="trout-conditions-segment-note" class="mt-1.5 hidden text-amber-300"></p>
-            <details class="mt-2 text-xs text-slate-400">
-              <summary class="cursor-pointer text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">Where the ranges come from</summary>
-              <ul id="trout-conditions-basis" class="mt-1 list-disc space-y-1 pl-4"></ul>
-              <p class="mt-1">Depth is water-surface elevation minus the segment's bed elevation. Temperature, oxygen, and velocity are not checked.</p>
-            </details>
-          </div>
-        </section>
-
-        <section
           id="wse-chart-panel"
           class="pointer-events-auto mb-4 border-t border-slate-700 pt-3"
           aria-labelledby="wse-chart-title"
@@ -332,14 +275,14 @@
           <div class="relative mt-2">
             <div
               id="wse-chart-plot"
-              class="h-48 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
+              class="relative h-48 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
               role="img"
               aria-label="Water depth over time for the selected Creek Segment. Click a time to select it, or drag left or right to scrub."
             ></div>
             <div
               id="wse-chart-empty-state"
               data-awaiting-selection="true"
-              class="group pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-md bg-slate-700/40 px-4 text-center"
+              class="group pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-md bg-slate-700/40 px-4 text-center transition-opacity duration-300 motion-reduce:transition-none"
             >
               <p id="wse-chart-empty" role="status" class="max-w-[15rem] text-balance text-sm font-medium leading-snug text-slate-100"></p>
               <div aria-hidden="true" class="flex flex-col items-center group-data-[awaiting-selection=false]:hidden">
@@ -363,7 +306,8 @@
           </div>
           <div
             id="wse-chart-overview"
-            class="mt-1 h-10 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/40"
+            data-empty="true"
+            class="group relative mt-1 h-10 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/40"
             role="group"
             aria-label="Zoom range. Drag a handle to resize, drag inside to pan, or drag outside to pick a new range. Double-click to show the whole record."
           ></div>
@@ -378,6 +322,87 @@
             </button>
           </div>
           <p id="wse-chart-hover" class="mt-1 min-h-5 text-sm text-slate-400"></p>
+
+        <!--
+          Steelhead trout conditions sit inside the Water depth panel because they recolor its chart
+          (bands behind the line) and the creek water on the map.
+        -->
+        <section
+          id="trout-conditions-panel"
+          class="mt-3 border-t border-slate-700 pt-3"
+          aria-labelledby="trout-conditions-title"
+        >
+          <!-- items-center puts the checkbox, fish, and text on one optical middle line. -->
+          <label class="flex cursor-pointer items-center gap-2 text-base text-slate-200">
+            <input
+              id="trout-conditions-toggle"
+              type="checkbox"
+              class="h-4 w-4 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            />
+            <span id="trout-conditions-title">Steelhead trout conditions</span>
+            <svg viewBox="0 0 24 24" class="h-5 w-5 shrink-0 text-cyan-300" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2.5 12C5 7.5 10 6.5 14 8.5c1.5.8 2.8 2 3.5 3.5-.7 1.5-2 2.7-3.5 3.5-4 2-9 1-11.5-3.5ZM17.5 12 22 8v8l-4.5-4Z" />
+              <circle cx="7.5" cy="11" r="0.9" fill="currentColor" stroke="none" />
+            </svg>
+          </label>
+          <!--
+            Everything under the checkbox collapses with it. Animating grid-template-rows from 0fr to 1fr
+            reaches the content's natural height without a fixed pixel height. The wrapper turns invisible
+            once closed, after the transition, so the hidden buttons leave the tab order and the screen reader.
+            The -m/p pairs on the inner box keep the buttons' focus outlines from being clipped by overflow-hidden.
+            steelhead-trout-conditions-controls.ts sets data-open.
+          -->
+          <div
+            id="trout-conditions-body"
+            data-open="false"
+            class="invisible grid grid-rows-[0fr] transition-[grid-template-rows,visibility] duration-300 ease-out data-[open=true]:visible data-[open=true]:grid-rows-[1fr] motion-reduce:transition-none"
+          >
+            <div class="-m-1 min-h-0 overflow-hidden p-1">
+          <p id="trout-conditions-caveat" class="mt-1 text-xs leading-relaxed text-amber-300"></p>
+          <div class="mt-2 grid grid-cols-3 gap-1" role="group" aria-label="Steelhead life stage">
+            <button
+              type="button"
+              data-steelhead-life-stage="eggs"
+              aria-pressed="false"
+              disabled
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              Eggs
+            </button>
+            <button
+              type="button"
+              data-steelhead-life-stage="juveniles"
+              aria-pressed="false"
+              disabled
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              Juveniles
+            </button>
+            <button
+              type="button"
+              data-steelhead-life-stage="adults"
+              aria-pressed="true"
+              disabled
+              class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-default disabled:opacity-40 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
+            >
+              Adults
+            </button>
+          </div>
+          <!-- Filled by steelhead-trout-conditions-controls.ts from the research ranges. Shown while the switch is on. -->
+          <div id="trout-conditions-details" class="mt-2 text-sm leading-relaxed text-slate-300">
+            <p id="trout-conditions-season" class="text-slate-200"></p>
+            <ul id="trout-conditions-ranges" class="mt-1.5 space-y-1"></ul>
+            <p id="trout-conditions-no-band" class="mt-1.5 rounded-md border border-slate-600 bg-slate-800/60 p-2 text-slate-200"></p>
+            <p id="trout-conditions-segment-note" class="mt-1.5 hidden text-amber-300"></p>
+            <details class="mt-2 text-xs text-slate-400">
+              <summary class="cursor-pointer text-slate-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300">Where the ranges come from</summary>
+              <ul id="trout-conditions-basis" class="mt-1 list-disc space-y-1 pl-4"></ul>
+              <p class="mt-1">Depth is water-surface elevation minus the segment's bed elevation. Temperature, oxygen, and velocity are not checked.</p>
+            </details>
+          </div>
+            </div>
+          </div>
+        </section>
         </section>
 
         <section id="modeled-panel" class="pointer-events-auto mb-4 hidden border-t border-slate-700 pt-3">
@@ -411,6 +436,26 @@
         </footer>
         </div>
       </aside>
+
+      <!--
+        Selected Creek Segment indicator: shown by selected-segment-indicator.ts while the
+        Selected Creek Segment is off screen. left/top (the bubble's center) and the arrow's
+        rotation are set every camera frame; the translate classes center the bubble on that point.
+      -->
+      <button
+        id="selected-segment-indicator"
+        type="button"
+        class="pointer-events-auto absolute left-0 top-0 z-10 hidden -translate-x-1/2 -translate-y-6 cursor-pointer rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-cyan-300"
+      >
+        <span class="flex flex-col items-center gap-1">
+          <span class="flex h-12 w-12 items-center justify-center rounded-full border-2 border-amber-400 bg-slate-900/90 text-amber-300 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800">
+            <svg data-indicator-arrow width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3l7 9h-4.5v9h-5v-9H5l7-9z" fill="currentColor" />
+            </svg>
+          </span>
+          <span data-indicator-distance class="rounded-full bg-slate-900/90 px-2 py-0.5 text-xs font-semibold tabular-nums text-amber-200 shadow shadow-black/40"></span>
+        </span>
+      </button>
 
       <section
         aria-label="Map legend"

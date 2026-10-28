@@ -56,7 +56,7 @@ function byId<T extends HTMLElement>(id: string, type: new () => T): T | null {
 export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetime): SteelheadTroutConditionsControls {
   const toggle = byId('trout-conditions-toggle', HTMLInputElement);
   const stageButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-steelhead-life-stage]')];
-  const details = document.getElementById('trout-conditions-details');
+  const body = document.getElementById('trout-conditions-body');
   const seasonLine = document.getElementById('trout-conditions-season');
   const rangesList = document.getElementById('trout-conditions-ranges');
   const noBandLine = document.getElementById('trout-conditions-no-band');
@@ -74,7 +74,8 @@ export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetim
   const renderRows = (): void => {
     const rule = STEELHEAD_LIFE_STAGE_RULES[shared.lifeStage];
     const band = rule.depthBand;
-    details?.classList.toggle('hidden', !shared.enabled);
+    // The body's CSS transition animates its height; its text stays put while it closes so it can shrink smoothly.
+    if (body) body.dataset.open = String(shared.enabled);
     legendBlock?.classList.toggle('hidden', !shared.enabled);
     sourceRows?.classList.toggle('hidden', shared.enabled);
     for (const button of stageButtons) {

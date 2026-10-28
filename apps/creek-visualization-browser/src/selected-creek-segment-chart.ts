@@ -14,7 +14,9 @@ import {
   type WaterSurfaceElevationChartState,
   type WaterSurfaceElevationSeries,
 } from './water-surface-elevation-chart';
+import type { LonLat } from './creek-data-contract';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
+import { bindSelectedSegmentIndicator } from './selected-segment-indicator';
 import type { SteelheadTroutConditionsControls } from './steelhead-trout-conditions-controls';
 import { STEELHEAD_LIFE_STAGE_RULES, steelheadChartBands } from './steelhead-trout-conditions';
 import { isWaterLevelUnit, readWaterLevelUnit, saveWaterLevelUnit, type WaterLevelUnit } from './water-level-units';
@@ -127,7 +129,12 @@ export function bindSelectedCreekSegmentChart(input: {
     controls: SteelheadTroutConditionsControls;
     zeroDepthChartValueM: (segmentId: string) => number | null;
   };
-  /** Ending it unbinds the click, the chart, and the highlight. */
+  /**
+   * A longitude/latitude on a segment. With it, an off-screen Selected Creek Segment gets a bubble on the
+   * screen edge pointing toward it; without it, no bubble.
+   */
+  segmentLocationWgs84?: (segmentId: string) => LonLat | null;
+  /** Ending it unbinds the click, the chart, the highlight, and the off-screen bubble. */
   lifetime?: ExperienceLifetime;
 }): SelectedCreekSegmentChart {
   const lifetime = input.lifetime ?? createExperienceLifetime();
@@ -162,9 +169,19 @@ export function bindSelectedCreekSegmentChart(input: {
     (segmentId) => {
       showContentFor(segmentId);
       applyConditionBands();
+      offScreenIndicator?.update();
     },
     lifetime,
   );
+
+  const offScreenIndicator = input.segmentLocationWgs84
+    ? bindSelectedSegmentIndicator({
+        view: input.view,
+        selectedSegmentId: () => selection.selectedSegmentId,
+        segmentLocation: input.segmentLocationWgs84,
+        lifetime,
+      })
+    : null;
 
   // Condition bands follow the selected segment, the switch, and the life stage. The key skips redraws
   // when playback calls refresh() with nothing changed.

@@ -18,6 +18,7 @@ import {
   readWaterSurfaceElevationChartElements,
   type SelectedCreekSegmentChart,
 } from './selected-creek-segment-chart';
+import { pathMidpointWgs84 } from './selected-segment-indicator';
 import {
   exactTimestampIndex,
   resolveSelectedTimeCreekState,
@@ -232,6 +233,7 @@ export function attachCreekVisualization(
         };
       },
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+      segmentLocationWgs84: (segmentId) => pathMidpointWgs84(options.data.segmentsById.get(segmentId)?.pathWgs84),
       troutConditions: {
         controls: troutConditions,
         // The gauge segment charts gauge height, which reads from the gauge datum, so its zero-depth
