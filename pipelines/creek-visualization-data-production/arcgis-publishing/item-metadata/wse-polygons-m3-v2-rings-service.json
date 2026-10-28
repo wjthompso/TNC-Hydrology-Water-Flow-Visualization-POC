@@ -1,0 +1,20 @@
+{
+  "id": "e3f2fd43751a417695dd7ea5d7afb159",
+  "type": "Feature Service",
+  "title": "Dangermond Preserve — Creek Water Outlines (m3-v2, channel ribbon on the raw lidar bed, for m3-v2, m4-v1 and m5-v1) — exact ribbon outlines",
+  "snippet": "The water outlines of WSE polygons m3-v2 exactly as computed, one row per Creek Segment and water depth, as text, for the Creek Water Visualization browser. Shown by default in the Creek Water Visualization.",
+  "description": "<p><b>What this is</b><br />The same water outlines as the companion WSE polygons layer (m3-v2), stored exactly as computed: one row per creek stretch and water depth, with the outline as text. When the layer was published, the map server split outlines that cross themselves (where a ribbon folds at a bend) into simple pieces. The Creek Water Visualization reads this table instead, so it can draw each ribbon in its original order along the creek.</p><p><b>Accuracy and limits</b><br />These are estimates, not measurements. The stream flows are modeled without gauge correction and may be off by a factor of 2 to 5, so the timing of rises and falls is more reliable than the heights. The water depth assumes steady flow over a bare-earth lidar terrain that cannot see the underwater channel bed. Use them for research and visualization.</p><p><b>Service</b><br />https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons_m3_v2_rings/FeatureServer</p><p><b>Technical details</b></p><p><b>Dangermond Preserve — Creek Water Outlines (m3-v2, channel ribbon on the raw lidar bed, for m3-v2, m4-v1 and m5-v1) — exact ribbon outlines</b>. A table that goes with the hosted feature layer https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons_m3_v2/FeatureServer.</p><p><b>Why it exists:</b> Exact station-ordered rings of every depth bucket of the channel ribbon, because the published polygon layer's self-crossing rings were split by ArcGIS on publishing. The hosted browser reads this table instead of the polygon layer geometry; the polygon layer stays the version's map layer.</p><p><b>Columns:</b> <code>segment_id</code>: Creek Segment id; <code>tnc_comid</code>: TNC flowline COMID (text); <code>bucket_index</code>: depth rung, as bucket_index in the polygon layer; <code>min_depth_m</code>: bucket lower bound, water depth in meters (minWaterSurfaceElevationM in the Stage 4 file); <code>max_depth_m</code>: bucket upper bound, water depth in meters; <code>vertex_count</code>: vertices in ring_json; <code>ring_json</code>: the bucket's one ring as [[lon, lat, bed elevation m NAVD88], …], EPSG:4326, exactly as Stage 4 wrote it; no closing vertex; left edge stations 0…n−1, then right edge n−1…0.</p><p><b>Provenance:</b> frozen 2026-10-28T16:06:17Z from commit ca9d1a964f5d4f1fea63db19af9108073ecefbc2, from the same Stage 4 files as m3-v2 (SHA-256 checked); every ring equals the frozen file geodatabase geometry ({\"exact\": 63005, \"rotated\": 0, \"reversed\": 360}; reversed rings are the file geodatabase writer's, this table keeps the Stage 4 order).</p><p><b>Versioning:</b> append-only; earlier versions are never overwritten or deleted.</p>",
+  "tags": [
+    "ucs-285",
+    "creek-water-visualization",
+    "dangermond-preserve",
+    "ucs-298",
+    "wse-polygons",
+    "m3-v2",
+    "exact-rings",
+    "experimental"
+  ],
+  "accessInformation": "NOAA National Water Model v3.0 retrospective; California Natural Flows Database; USGS 3D Elevation Program (3DEP) 1 m terrain; TNC (The Nature Conservancy) flowlines; EPA NHDPlusV2. Derived by the UCSB Spatial Center.",
+  "licenseInfo": "Research and visualization use. Modeled values are not validated at every creek; see the description.",
+  "access": "public"
+}

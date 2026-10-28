@@ -82,12 +82,25 @@
           ],
           "feature_count": 117361,
           "arcgis": {
-            "file_geodatabase_item_id": null,
-            "service_item_id": null,
-            "service_url": null,
-            "versions_table_layer_id": null,
-            "polygon_layer_id": null,
-            "published_at_utc": null
+            "file_geodatabase_item_id": "d6066021b79e4b6694217244cc844138",
+            "service_item_id": "a017262235664344bf6cdb51ecf386a9",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons_m2_v1/FeatureServer",
+            "versions_table_layer_id": 1,
+            "polygon_layer_id": 0,
+            "published_at_utc": "2026-10-27T20:40:45Z",
+            "service_name": "creek_water_visualization_wse_polygons_m2_v1",
+            "service_title": "Dangermond Preserve — Creek Water Outlines (m2-v1, height above nearest drainage fill, for m2-v1)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "wse_polygons_m2_v1": 117361,
+              "wse_polygon_versions": 1
+            },
+            "layer_ids": {
+              "wse_polygons_m2_v1": 0,
+              "wse_polygon_versions": 1
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true
           }
         },
         {
@@ -124,15 +137,27 @@
           "arcgis_service_title": "Dangermond Preserve — Creek Water Outlines (m3-v1, channel ribbon, for m3-v1)",
           "feature_count": 63365,
           "arcgis": {
-            "file_geodatabase_item_id": null,
-            "service_item_id": null,
-            "service_url": null,
+            "file_geodatabase_item_id": "ba4117d33e2d4d7f8168a678ca0d9dbc",
+            "service_item_id": "8a4d3ba24e084661aa65f8f586d284f4",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons_m3_v1/FeatureServer",
             "layer_ids": {
-              "wse_polygon_versions": null,
-              "wse_polygons_m3_v1": null,
-              "wse_polygons_m3_v1_channel_ribbons": null
+              "wse_polygon_versions": 1,
+              "wse_polygons_m3_v1": 0,
+              "wse_polygons_m3_v1_channel_ribbons": 2
             },
-            "published_at_utc": null
+            "published_at_utc": "2026-10-27T20:43:34Z",
+            "service_name": "creek_water_visualization_wse_polygons_m3_v1",
+            "service_title": "Dangermond Preserve — Creek Water Outlines (m3-v1, channel ribbon, for m3-v1)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "wse_polygons_m3_v1": 63365,
+              "wse_polygon_versions": 1,
+              "wse_polygons_m3_v1_channel_ribbons": 3335
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true,
+            "versions_table_layer_id": 1,
+            "polygon_layer_id": 0
           }
         },
         {
@@ -169,15 +194,51 @@
           "arcgis_service_title": "Dangermond Preserve — Creek Water Outlines (m3-v2, channel ribbon on the raw lidar bed, for m3-v2, m4-v1 and m5-v1)",
           "feature_count": 63365,
           "arcgis": {
-            "file_geodatabase_item_id": null,
-            "service_item_id": null,
-            "service_url": null,
+            "file_geodatabase_item_id": "b33ee56fc0294ed6be919f58478ee3d4",
+            "service_item_id": "eb16de9e9196430698645036f0a4417c",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons_m3_v2/FeatureServer",
             "layer_ids": {
-              "wse_polygon_versions": null,
-              "wse_polygons_m3_v2": null,
-              "wse_polygons_m3_v2_channel_ribbons": null
+              "wse_polygon_versions": 1,
+              "wse_polygons_m3_v2": 0,
+              "wse_polygons_m3_v2_channel_ribbons": 2
             },
-            "published_at_utc": null
+            "published_at_utc": "2026-10-27T20:52:30Z",
+            "service_name": "creek_water_visualization_wse_polygons_m3_v2",
+            "service_title": "Dangermond Preserve — Creek Water Outlines (m3-v2, channel ribbon on the raw lidar bed, for m3-v2, m4-v1 and m5-v1)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "wse_polygons_m3_v2": 63365,
+              "wse_polygon_versions": 1,
+              "wse_polygons_m3_v2_channel_ribbons": 3335
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true,
+            "versions_table_layer_id": 1,
+            "polygon_layer_id": 0,
+            "exact_rings_service": {
+              "service_item_id": "e3f2fd43751a417695dd7ea5d7afb159",
+              "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons_m3_v2_rings/FeatureServer",
+              "service_name": "creek_water_visualization_wse_polygons_m3_v2_rings",
+              "service_title": "Dangermond Preserve — Creek Water Outlines (m3-v2, channel ribbon on the raw lidar bed, for m3-v2, m4-v1 and m5-v1) — exact ribbon outlines",
+              "file_geodatabase_item_id": "762b2c0c5d404e7eb1c0c015642e51ef",
+              "table_name": "wse_polygons_m3_v2_rings",
+              "table_id": 0,
+              "row_count": 63365,
+              "rings_folder": "data/data-product-versions/wse-polygons/m3-flowline-channel-ribbon/m3-v2-rings",
+              "published_at_utc": "2026-10-28T16:09:25Z",
+              "portal_folder": "Creek Water Visualization",
+              "sharing": "private (owner only); not shared",
+              "public_sharing": {
+                "access": "public",
+                "shared_at_utc": "2026-10-28T16:41:53Z",
+                "access_before": "private"
+              }
+            },
+            "public_sharing": {
+              "access": "public",
+              "shared_at_utc": "2026-10-28T16:41:50Z",
+              "access_before": "private"
+            }
           }
         }
       ],
@@ -278,22 +339,34 @@
           "version_folder": "data/data-product-versions/modeled-wse/m2-multi-section-manning-depth/m2-v1",
           "arcgis_upload_sha256": "e473bf8ca0a02012c8f17c80f011e694206c68d860244c8f648ca9165148c1d2",
           "arcgis": {
-            "service_item_id": null,
-            "service_url": null,
-            "file_geodatabase_item_id": null,
+            "service_item_id": "2d1d8d11c06b4b1a943d075ecc7baae9",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m2_v1/FeatureServer",
+            "file_geodatabase_item_id": "80961efac0f2476ca46c5f19b7d29a83",
             "layer_ids": {
-              "modeled_wse_versions": null,
-              "modeled_wse_m2_v1_creek_segments": null,
-              "modeled_wse_m2_v1_nwm_hourly_held_intervals": null,
-              "modeled_wse_m2_v1_cnf_monthly_held_intervals": null,
-              "modeled_wse_m2_v1_cnf_monthly_values": null
+              "modeled_wse_versions": 4,
+              "modeled_wse_m2_v1_creek_segments": 0,
+              "modeled_wse_m2_v1_nwm_hourly_held_intervals": 3,
+              "modeled_wse_m2_v1_cnf_monthly_held_intervals": 1,
+              "modeled_wse_m2_v1_cnf_monthly_values": 2
             },
             "raw_hourly_csv_item_ids": {
-              "WY2021": null,
-              "WY2022": null,
-              "WY2023": null
+              "WY2021": "e830818a897d4f099318ead3a0c91966",
+              "WY2022": "c6e8cc0b3f794cc697b2148dade9e022",
+              "WY2023": "01f030c4f6e44057bf9979f9006b47a5"
             },
-            "published_at_utc": null
+            "published_at_utc": "2026-10-27T21:09:36Z",
+            "service_name": "creek_water_visualization_modeled_wse_m2_v1",
+            "service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m2-v1, multi-section Manning depth)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "modeled_wse_m2_v1_creek_segments": 3338,
+              "modeled_wse_m2_v1_cnf_monthly_held_intervals": 1352759,
+              "modeled_wse_m2_v1_cnf_monthly_values": 3004200,
+              "modeled_wse_m2_v1_nwm_hourly_held_intervals": 1426933,
+              "modeled_wse_versions": 1
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true
           }
         },
         {
@@ -329,22 +402,34 @@
           "arcgis_service_name": "creek_water_visualization_modeled_wse_m3_v1",
           "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m3-v1, channel profile, smoothed bed, Manning roughness)",
           "arcgis": {
-            "service_item_id": null,
-            "service_url": null,
-            "file_geodatabase_item_id": null,
+            "service_item_id": "fc1a015b5735488f8dc05b71267fd0c5",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m3_v1/FeatureServer",
+            "file_geodatabase_item_id": "5c29922f0342479b973287faadd1260c",
             "layer_ids": {
-              "modeled_wse_versions": null,
-              "modeled_wse_m3_v1_creek_segments": null,
-              "modeled_wse_m3_v1_nwm_hourly_held_intervals": null,
-              "modeled_wse_m3_v1_cnf_monthly_held_intervals": null,
-              "modeled_wse_m3_v1_cnf_monthly_values": null
+              "modeled_wse_versions": 4,
+              "modeled_wse_m3_v1_creek_segments": 0,
+              "modeled_wse_m3_v1_nwm_hourly_held_intervals": 3,
+              "modeled_wse_m3_v1_cnf_monthly_held_intervals": 1,
+              "modeled_wse_m3_v1_cnf_monthly_values": 2
             },
             "raw_hourly_csv_item_ids": {
-              "WY2021": null,
-              "WY2022": null,
-              "WY2023": null
+              "WY2021": "1f8d3514b5a74733a48d7e11d8ea3d46",
+              "WY2022": "c136caaecfbf4efd96d95a8c7945de78",
+              "WY2023": "4ef3f947b30b4bda9d00d9a5b241061b"
             },
-            "published_at_utc": null
+            "published_at_utc": "2026-10-27T21:19:12Z",
+            "service_name": "creek_water_visualization_modeled_wse_m3_v1",
+            "service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m3-v1, channel profile, smoothed bed, Manning roughness)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "modeled_wse_m3_v1_creek_segments": 3338,
+              "modeled_wse_m3_v1_cnf_monthly_held_intervals": 1012146,
+              "modeled_wse_m3_v1_cnf_monthly_values": 3004200,
+              "modeled_wse_m3_v1_nwm_hourly_held_intervals": 1341832,
+              "modeled_wse_versions": 1
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true
           }
         },
         {
@@ -380,22 +465,34 @@
           "arcgis_service_name": "creek_water_visualization_modeled_wse_m3_v2",
           "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m3-v2, channel profile, raw lidar bed, Manning roughness)",
           "arcgis": {
-            "service_item_id": null,
-            "service_url": null,
-            "file_geodatabase_item_id": null,
+            "service_item_id": "ae84ac31e2614aa18ca3e168ed400d9b",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m3_v2/FeatureServer",
+            "file_geodatabase_item_id": "76ce5fed8ea946ec97af101b7fb97ed4",
             "layer_ids": {
-              "modeled_wse_versions": null,
-              "modeled_wse_m3_v2_creek_segments": null,
-              "modeled_wse_m3_v2_nwm_hourly_held_intervals": null,
-              "modeled_wse_m3_v2_cnf_monthly_held_intervals": null,
-              "modeled_wse_m3_v2_cnf_monthly_values": null
+              "modeled_wse_versions": 4,
+              "modeled_wse_m3_v2_creek_segments": 0,
+              "modeled_wse_m3_v2_nwm_hourly_held_intervals": 3,
+              "modeled_wse_m3_v2_cnf_monthly_held_intervals": 1,
+              "modeled_wse_m3_v2_cnf_monthly_values": 2
             },
             "raw_hourly_csv_item_ids": {
-              "WY2021": null,
-              "WY2022": null,
-              "WY2023": null
+              "WY2021": "60acc5244fc94f47a01b6724c8c613fa",
+              "WY2022": "4a90b8557e4a4ea1a4b07c07ca18817b",
+              "WY2023": "a28d41e695f84a538c651adbeed0d64f"
             },
-            "published_at_utc": null
+            "published_at_utc": "2026-10-27T21:28:50Z",
+            "service_name": "creek_water_visualization_modeled_wse_m3_v2",
+            "service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m3-v2, channel profile, raw lidar bed, Manning roughness)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "modeled_wse_m3_v2_creek_segments": 3338,
+              "modeled_wse_m3_v2_cnf_monthly_held_intervals": 1037600,
+              "modeled_wse_m3_v2_cnf_monthly_values": 3004200,
+              "modeled_wse_m3_v2_nwm_hourly_held_intervals": 1335260,
+              "modeled_wse_versions": 1
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true
           }
         },
         {
@@ -431,22 +528,34 @@
           "arcgis_service_name": "creek_water_visualization_modeled_wse_m4_v1",
           "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m4-v1, Ferguson & Recking steep-creek roughness)",
           "arcgis": {
-            "service_item_id": null,
-            "service_url": null,
-            "file_geodatabase_item_id": null,
+            "service_item_id": "3f4adb92e4cf400a884d021483856b31",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m4_v1/FeatureServer",
+            "file_geodatabase_item_id": "241150cabc5c491eb21583618db72f92",
             "layer_ids": {
-              "modeled_wse_versions": null,
-              "modeled_wse_m4_v1_creek_segments": null,
-              "modeled_wse_m4_v1_nwm_hourly_held_intervals": null,
-              "modeled_wse_m4_v1_cnf_monthly_held_intervals": null,
-              "modeled_wse_m4_v1_cnf_monthly_values": null
+              "modeled_wse_versions": 4,
+              "modeled_wse_m4_v1_creek_segments": 0,
+              "modeled_wse_m4_v1_nwm_hourly_held_intervals": 3,
+              "modeled_wse_m4_v1_cnf_monthly_held_intervals": 1,
+              "modeled_wse_m4_v1_cnf_monthly_values": 2
             },
             "raw_hourly_csv_item_ids": {
-              "WY2021": null,
-              "WY2022": null,
-              "WY2023": null
+              "WY2021": "7f02a31e70c04fcda48591a61066db7d",
+              "WY2022": "0b51873a8fe1421292ce32056f716075",
+              "WY2023": "433d443e28ea464fad94e7952c7c482f"
             },
-            "published_at_utc": null
+            "published_at_utc": "2026-10-27T21:39:26Z",
+            "service_name": "creek_water_visualization_modeled_wse_m4_v1",
+            "service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m4-v1, Ferguson & Recking steep-creek roughness)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "modeled_wse_m4_v1_creek_segments": 3338,
+              "modeled_wse_m4_v1_cnf_monthly_held_intervals": 1184383,
+              "modeled_wse_m4_v1_cnf_monthly_values": 3004200,
+              "modeled_wse_m4_v1_nwm_hourly_held_intervals": 1376336,
+              "modeled_wse_versions": 1
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true
           },
           "channel_from_modeled_wse_version": {
             "product": "modeled-wse",
@@ -488,22 +597,39 @@
           "arcgis_service_name": "creek_water_visualization_modeled_wse_m5_v1",
           "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m5-v1, Jarrett steep-creek roughness)",
           "arcgis": {
-            "service_item_id": null,
-            "service_url": null,
-            "file_geodatabase_item_id": null,
+            "service_item_id": "74a40189cae34caaa1a96ee877a29d32",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m5_v1/FeatureServer",
+            "file_geodatabase_item_id": "b7ceb2343e7642b793072449b2bd88e0",
             "layer_ids": {
-              "modeled_wse_versions": null,
-              "modeled_wse_m5_v1_creek_segments": null,
-              "modeled_wse_m5_v1_nwm_hourly_held_intervals": null,
-              "modeled_wse_m5_v1_cnf_monthly_held_intervals": null,
-              "modeled_wse_m5_v1_cnf_monthly_values": null
+              "modeled_wse_versions": 4,
+              "modeled_wse_m5_v1_creek_segments": 0,
+              "modeled_wse_m5_v1_nwm_hourly_held_intervals": 3,
+              "modeled_wse_m5_v1_cnf_monthly_held_intervals": 1,
+              "modeled_wse_m5_v1_cnf_monthly_values": 2
             },
             "raw_hourly_csv_item_ids": {
-              "WY2021": null,
-              "WY2022": null,
-              "WY2023": null
+              "WY2021": "6b1e8c8a67d1450e8b064f8ce6befa25",
+              "WY2022": "0bc3e3b24ac24399a4d11595d670abb2",
+              "WY2023": "64cbf74ae3d149278a36d90a6f19aaae"
             },
-            "published_at_utc": null
+            "published_at_utc": "2026-10-27T21:49:04Z",
+            "service_name": "creek_water_visualization_modeled_wse_m5_v1",
+            "service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m5-v1, Jarrett steep-creek roughness)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "modeled_wse_m5_v1_creek_segments": 3338,
+              "modeled_wse_m5_v1_cnf_monthly_held_intervals": 1144270,
+              "modeled_wse_m5_v1_cnf_monthly_values": 3004200,
+              "modeled_wse_m5_v1_nwm_hourly_held_intervals": 1376408,
+              "modeled_wse_versions": 1
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true,
+            "public_sharing": {
+              "access": "public",
+              "shared_at_utc": "2026-10-28T16:41:48Z",
+              "access_before": "private"
+            }
           },
           "channel_from_modeled_wse_version": {
             "product": "modeled-wse",
