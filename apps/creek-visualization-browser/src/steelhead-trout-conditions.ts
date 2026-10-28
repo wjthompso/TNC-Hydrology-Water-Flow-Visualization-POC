@@ -20,6 +20,7 @@
 // guessed.
 
 import { DRY_BELOW_DEPTH_M } from './display-depth-floor';
+import type { SteelheadBasisNote } from './steelhead-trout-references';
 import type { WaterSurfaceConditionBands } from './water-surface-elevation-chart';
 
 export type SteelheadLifeStage = 'eggs' | 'juveniles' | 'adults';
@@ -37,7 +38,7 @@ export type SteelheadCondition =
 export const STEELHEAD_LIFE_STAGES: readonly SteelheadLifeStage[] = ['eggs', 'juveniles', 'adults'];
 
 /** Short, always-visible caveat; the long form lives in the research document and the code comment above. */
-export const REVIEW_CAVEAT = 'Research under human review (AI generated). Ranges are provisional; water depth only.';
+export const REVIEW_CAVEAT = 'Expert review of these ranges is still under way, so they are provisional. Water depth only.';
 
 interface DepthBand {
   /** Depth (m) below which the water is Unsuitable. */
@@ -48,14 +49,20 @@ interface DepthBand {
   rangeText: Record<SteelheadDepthClass, string>;
   /** The depth range alone, for the map legend. */
   legendText: Record<SteelheadDepthClass, string>;
-  /** Where each edge comes from, shown under "Where the ranges come from". */
-  basis: readonly string[];
+  /** Where each edge comes from, shown under "Where the ranges come from", with links to the papers. */
+  basis: readonly SteelheadBasisNote[];
 }
 
 interface LifeStageRule {
   label: string;
-  /** Months (1 = January) the stage is in the creek, first to last, wrapping the year end; null is year-round. */
+  /**
+   * Months (1 = January) of the stage's typical season, first to last, wrapping the year end; null is year-round.
+   * The months are the research's population-wide timing for Southern California steelhead. They are not an
+   * observation that fish or eggs are in Jalama Creek, and the wording everywhere says "typical".
+   */
   seasonMonths: readonly [number, number] | null;
+  /** Names the season for the legend, such as "Typical steelhead spawning season". */
+  seasonName: string;
   seasonText: string;
   /** Null when the research gives no defensible water-depth band for the stage. */
   depthBand: DepthBand | null;
@@ -66,17 +73,51 @@ interface LifeStageRule {
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
 export const STEELHEAD_LIFE_STAGE_RULES: Readonly<Record<SteelheadLifeStage, LifeStageRule>> = {
-  // Research: "Egg incubation: cool oxygenated intragravel flow ... stable WSE keeping redds wetted ... Still needs:
-  // temperature/DO, not WSE alone." The "≥8 in" in the gravel row is gravel depth, not water depth. No water-depth
-  // cutoff exists for eggs, so none is invented here. Spawn timing (Jan–May) is the egg-laying window; the
-  // document gives no separate incubation window, so eggs are not graded out of season.
+  // Eggs are laid in the nest (redd) the adult builds, so the depth that matters for them is the spawning depth.
+  // Research care sheet, "Spawning water depth": ~14 in (36 cm) optimum, range 6–36 in (Stoecker 2002, citing Bovee
+  // 1978). The care sheet adds "too shallow prevents redd building", but none of the papers checked on 2026-10-28
+  // says that, so the UI does not repeat it. Below 6 in (15 cm) is Unsuitable, 6–14 in is Marginal, and the 14 in
+  // optimum is Suitable; the research gives 36 cm as the optimum edge in two places (inches in the care sheet,
+  // "≥36 cm" in the water-centric table). Spawn timing is Jan–May (peak Feb–mid-Apr), so the band applies then and
+  // is out of season otherwise.
+  // This is a stand-in for the nest depth, not an incubation rule: "Egg incubation ... Still needs: temperature/DO,
+  // not WSE alone." The "≥8 in" in the gravel row is gravel depth, not water depth, and is not used.
   eggs: {
     label: 'Eggs',
-    seasonMonths: null,
-    seasonText: 'Spawning Jan–May (peak Feb–mid-Apr). The research gives no separate incubation window.',
-    depthBand: null,
-    noDepthBandText:
-      'The research gives no water-depth band for eggs. Incubation depends on cool, oxygenated water through the gravel (temperature and dissolved oxygen), which this app does not carry. Water level alone can only hint whether nests stay wet.',
+    seasonMonths: [1, 5],
+    seasonName: 'Typical steelhead spawning season',
+    seasonText: 'Typical steelhead spawning season: Jan–May',
+    depthBand: {
+      unsuitableBelowM: 0.15,
+      suitableFromM: 0.36,
+      rangeText: {
+        suitable: '≥ 36 cm (14 in): the spawning optimum for a nest.',
+        marginal: '15–36 cm: within the 6–36 in spawning range, below the optimum.',
+        unsuitable: 'Under 15 cm (6 in): below the low end of the spawning range.',
+      },
+      legendText: { suitable: '≥ 36 cm deep', marginal: '15–36 cm', unsuitable: 'under 15 cm' },
+      basis: [
+        {
+          text: 'Season: Hanson says spawning occurs in winter or spring, mostly January through March. The Jan–May window and the Feb to mid-April peak come from the CalTrout & UC Davis report. This is research timing for Southern California steelhead, not an observation at Jalama Creek.',
+          citations: [
+            { source: 'hanson2003', pdfPage: 2 },
+            { source: 'caltrout2017', pdfPage: 2, caution: 'page not yet checked' },
+          ],
+        },
+        { text: 'Eggs stay in the gravel after spawning, and the research gives no incubation length.' },
+        {
+          text: 'Good spawning depths: optimum about 14 in (36 cm), range about 6–36 in (Stoecker 2002, citing Bovee 1978).',
+          citations: [
+            { source: 'stoecker2002', pdfPage: 16, printedPage: 4 },
+            { source: 'scrParkway', section: 'Spawning', textFragment: 'optimal water depth for steelhead spawning' },
+          ],
+        },
+        {
+          text: 'Depth over the nest is a stand-in for egg conditions. Incubation also needs cool, oxygenated water through the gravel (temperature and dissolved oxygen), which this app does not carry.',
+        },
+        { text: 'Marginal is the span between the 6 in minimum and the 14 in optimum (derived, not a published band).' },
+      ],
+    },
   },
   // Research care sheet, "Rearing pool depth": juveniles prefer 10–20 in (25–51 cm); deep pools critical; shallow warm
   // pools lose oxygen. Freshwater rearing lasts 1–3 years, so the stage is in the creek year-round; summer low flow is
@@ -86,6 +127,7 @@ export const STEELHEAD_LIFE_STAGE_RULES: Readonly<Record<SteelheadLifeStage, Lif
   juveniles: {
     label: 'Juveniles',
     seasonMonths: null,
+    seasonName: 'Year-round',
     seasonText: 'Year-round (1–3 years in freshwater). Summer low flow is the limiting season.',
     depthBand: {
       unsuitableBelowM: DRY_BELOW_DEPTH_M,
@@ -97,14 +139,23 @@ export const STEELHEAD_LIFE_STAGE_RULES: Readonly<Record<SteelheadLifeStage, Lif
       },
       legendText: { suitable: '≥ 25 cm deep', marginal: 'under 25 cm', unsuitable: 'no water over the bed' },
       basis: [
-        'Suitable edge: juveniles prefer 10–20 in (25–51 cm) pools (Hanson 2003; CalTrout CESA petition 2021).',
-        'Unsuitable edge: no water over the bed. The research gives no shallower-pool cutoff, so this is the app\'s dry threshold, not a research value.',
+        {
+          text: 'Suitable edge: juveniles show a preference for depths of 10–20 in (25–51 cm) (Bovee 1978, cited by the CalTrout petition).',
+          citations: [{ source: 'caltrout2021Cesa', pdfPage: 12, printedPage: 11 }],
+        },
+        {
+          text: 'Deep pools are important habitat for juveniles, and drought shrinks pool depth in late summer and fall.',
+          citations: [{ source: 'hanson2003', pdfPage: 18 }],
+        },
+        {
+          text: "Unsuitable edge: no water over the bed. The research gives no shallower-pool cutoff, so this is the app's dry threshold, not a research value.",
+        },
       ],
     },
   },
-  // Research care sheet, "Migration water depth": ≥ 7 in (18 cm); shallower blocks passage. "Spawning water depth":
-  // ~14 in (36 cm) optimum, range 6–36 in; too shallow prevents redd building. The document also says "≥36 cm over clean
-  // gravel" in the water-centric table, so 36 cm is the spawning edge. Adults are migration plus spawning, so Marginal is
+  // Research care sheet, "Migration water depth": ≥ 7 in (18 cm) minimum for upstream migration. "Spawning water
+  // depth": ~14 in (36 cm) optimum, range 6–36 in. The document also says "≥36 cm over clean gravel" in the
+  // water-centric table, so 36 cm is the spawning edge. Adults are migration plus spawning, so Marginal is
   // the span between the two research values: passable (≥ 18 cm) but under the spawning optimum. That span is derived
   // from the two numbers, not a published band. Passage is a depth across a riffle; the app's depth is at one anchor
   // point, so it can overstate passability. Season: upstream run Dec–May (peak Jan–Mar); spawn Jan–May.
@@ -112,7 +163,8 @@ export const STEELHEAD_LIFE_STAGE_RULES: Readonly<Record<SteelheadLifeStage, Lif
   adults: {
     label: 'Adults',
     seasonMonths: [12, 5],
-    seasonText: 'In the creek Dec–May (upstream run peaks Jan–Mar; spawning Jan–May).',
+    seasonName: 'Typical steelhead run season',
+    seasonText: 'Typical steelhead run season: Dec–May (upstream run peaks Jan–Mar; spawning Jan–May)',
     depthBand: {
       unsuitableBelowM: 0.18,
       suitableFromM: 0.36,
@@ -123,9 +175,30 @@ export const STEELHEAD_LIFE_STAGE_RULES: Readonly<Record<SteelheadLifeStage, Lif
       },
       legendText: { suitable: '≥ 36 cm deep', marginal: '18–36 cm', unsuitable: 'under 18 cm' },
       basis: [
-        'Unsuitable edge: migration needs ≥ 7 in (18 cm); shallower blocks passage (SCR Parkway adult migration; Hanson 2003).',
-        'Suitable edge: spawning optimum ~14 in (36 cm), range 6–36 in (SCR Parkway spawning; Stoecker 2002).',
-        'Marginal is the span between those two values (derived, not a published band). December is migration-only, so Marginal there is stricter than the research requires.',
+        {
+          text: 'Season: upstream migration seldom begins before December and may extend into May, with most migration and spawning January through March (Hanson). The Jan–May spawning window comes from the CalTrout & UC Davis report. This is research timing for Southern California steelhead, not an observation at Jalama Creek.',
+          citations: [
+            { source: 'hanson2003', pdfPage: 2 },
+            { source: 'caltrout2017', pdfPage: 2, caution: 'page not yet checked' },
+          ],
+        },
+        {
+          text: 'Unsuitable edge: successful upstream migration needs at least 7 in (18 cm) of water.',
+          citations: [
+            { source: 'scrParkway', section: 'Adult migration', textFragment: 'minimum depth of 7 in' },
+            { source: 'caltrout2021Cesa', pdfPage: 12, printedPage: 11 },
+          ],
+        },
+        {
+          text: 'Suitable edge: spawning optimum about 14 in (36 cm), range about 6–36 in (Stoecker 2002, citing Bovee 1978).',
+          citations: [
+            { source: 'stoecker2002', pdfPage: 16, printedPage: 4 },
+            { source: 'scrParkway', section: 'Spawning', textFragment: 'optimal water depth for steelhead spawning' },
+          ],
+        },
+        {
+          text: 'Marginal is the span between those two values (derived, not a published band). December is migration-only, so Marginal there is stricter than the research requires.',
+        },
       ],
     },
   },
@@ -138,12 +211,12 @@ export const STEELHEAD_CONDITION_DISPLAY: Readonly<
   suitable: { label: 'Suitable', glyph: '✓', colorHex: '#22c55e' },
   marginal: { label: 'Marginal', glyph: '!', colorHex: '#facc15' },
   unsuitable: { label: 'Unsuitable', glyph: '✕', colorHex: '#dc2626' },
-  'out-of-season': { label: 'Out of season', glyph: '–', colorHex: '#64748b' },
+  'out-of-season': { label: 'Outside typical season', glyph: '–', colorHex: '#64748b' },
 };
 
 const monthFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'numeric' });
 
-/** True when the stage is in the creek at this time (Pacific time, like the rest of the app's dates). */
+/** True when this time falls in the stage's typical season (Pacific time, like the rest of the app's dates). */
 export function isSteelheadStageInSeason(stage: SteelheadLifeStage, timeUtcMs: number): boolean {
   const months = STEELHEAD_LIFE_STAGE_RULES[stage].seasonMonths;
   if (!months) return true;
@@ -180,22 +253,28 @@ export function classifySteelheadCondition(
   return classifyDepth(rule.depthBand, waterSurfaceElevationM - bedElevationM);
 }
 
-/** Chart bands for one segment, or null when the stage has no depth band. */
+/**
+ * Chart bands for one segment, or null when the stage has no depth band.
+ * `zeroDepthChartValueM` is the charted value that means zero depth over the bed: 0 when the chart
+ * plots depth above the bed, and the bed's height above the gauge datum for the observed gauge
+ * segment, whose chart plots gauge height. Classes use depth over the bed, same as the map.
+ */
 export function steelheadChartBands(
   stage: SteelheadLifeStage,
-  bedElevationM: number,
+  zeroDepthChartValueM: number,
 ): WaterSurfaceConditionBands | null {
   const rule = STEELHEAD_LIFE_STAGE_RULES[stage];
   const band = rule.depthBand;
   if (!band) return null;
   return {
     stageLabel: rule.label,
-    bedElevationM,
+    zeroDepthChartValueM,
     marginalFromDepthM: band.unsuitableBelowM,
     suitableFromDepthM: band.suitableFromM,
     isOutOfSeason: (timeUtcMs) => !isSteelheadStageInSeason(stage, timeUtcMs),
-    describe(waterSurfaceElevationM, timeUtcMs) {
-      const condition = classifySteelheadCondition(stage, waterSurfaceElevationM, bedElevationM, timeUtcMs);
+    describe(chartValueM, timeUtcMs) {
+      // Zero depth maps to a bed of 0 here, so the chart value minus its zero point is the depth.
+      const condition = classifySteelheadCondition(stage, chartValueM - zeroDepthChartValueM, 0, timeUtcMs);
       if (condition === 'not-rated') return '';
       const display = STEELHEAD_CONDITION_DISPLAY[condition];
       return `${display.glyph} ${display.label} for ${rule.label.toLowerCase()}`;

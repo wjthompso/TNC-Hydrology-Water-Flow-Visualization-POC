@@ -24,11 +24,11 @@ Chart bands are drawn in WSE space: each band edge is `bed + threshold`, so band
 
 | Life stage | In season | Unsuitable | Marginal | Suitable | Research basis |
 |---|---|---|---|---|---|
-| Eggs | none graded (spawning Jan–May) | no depth band | no depth band | no depth band | Research: egg incubation "needs temperature/DO, not WSE alone"; its only egg-adjacent depth, "≥ 8 in", is gravel depth. The UI says there is no water-depth band instead of inventing one. |
+| Eggs | Jan–May (spawning) | < 15 cm (6 in) | 15–36 cm | ≥ 36 cm (14 in) | Eggs are laid in the nest the adult builds, so the spawning depth stands in for them: ~14 in (36 cm) optimum, range 6–36 in, too shallow prevents nest building. Marginal is the span between the 6 in minimum and the optimum (derived, not a published band). Egg incubation also needs temperature and oxygen, which the app does not carry; the UI says so. The "≥ 8 in" in the gravel row is gravel depth and is not used. |
 | Juveniles | year-round (summer low flow is the limiting season) | < 1 cm (no water over the bed) | 1–25 cm | ≥ 25 cm (10 in) | Rearing pool depth: juveniles prefer 10–20 in; deep pools critical; shallow warm pools lose oxygen. The research gives no shallower cutoff, so Unsuitable is the app's own dry threshold (`DRY_BELOW_DEPTH_M`), not a research value. Deeper is not penalized. |
 | Adults | Dec–May | < 18 cm (7 in) | 18–36 cm | ≥ 36 cm (14 in) | Migration depth ≥ 7 in (18 cm), shallower blocks passage; spawning depth ~14 in (36 cm) optimum, range 6–36 in. Marginal is the span between the two research values (derived, not a published band). |
 
-Season: upstream run Dec–May (peak Jan–Mar); spawn Jan–May (peak Feb–mid-Apr). Out of season the map shows gray, and the chart hatches that time.
+Season: a stage's months are the research's population-wide timing for Southern California steelhead, not an observation at Jalama Creek, so the UI calls them *typical*: Eggs read "Typical steelhead spawning season: Jan–May" (peak Feb–mid-Apr), Adults read "Typical steelhead run season: Dec–May" (upstream run peaks Jan–Mar). Eggs stay in the gravel after spawning and the research gives no incubation length, so the Jan–May window is when nests are built, not when eggs are present. Outside the typical season the map shows gray ("Outside typical season") and the chart hatches that time.
 
 ### What changed from the first draft
 
@@ -40,7 +40,7 @@ Season: upstream run Dec–May (peak Jan–Mar); spawn Jan–May (peak Feb–mid
 | Juveniles Suitable edge | 0.09 m (CDFW 0.3 ft) | **0.25 m** (10 in preferred pool depth) |
 | Juveniles Marginal band | 0.01–0.09 m | **0.01–0.25 m** |
 | Juveniles season | all year, Jun–Nov critical | year-round, summer limiting (research gives no months) |
-| Eggs | 0.09 / 0.24 m, Jan–Jun | **no depth band**, no season grading |
+| Eggs | 0.09 / 0.24 m, Jan–Jun | first pass on the research document: no depth band. Now **0.15 / 0.36 m, Jan–May**, using the spawning depths as a stand-in for the nest (FBT-025 found that "no band" read as a bug) |
 | Citations | CDFW, Bjornn & Reiser, USBR, CalSalmon | the research document's citations (Hanson 2003, SCR Parkway, Stoecker 2002, CalTrout 2021) |
 
 The prototype and the two mockup PNGs still show the first-draft numbers; they are superseded by this table.
@@ -67,7 +67,7 @@ The prototype and the two mockup PNGs still show the first-draft numbers; they a
 - **Placement:** a new section between **Time** and the chart, because it changes both the chart and the map. Proximity (Gestalt) puts it next to what it affects.
 - **Switch** (`role="switch"`), off by default. Off keeps today's app exactly as it is (blue water, amber selection).
 - **Life stage** (`role="radiogroup"`), Eggs · Juveniles · Adults in life-cycle order, default Adults. The buttons reuse the unit toggle's cyan `aria-checked` styling (consistency, Nielsen heuristic 4). They are disabled while the switch is off.
-- **Season line** under the control, such as "In season Dec–May (upstream migration and spawning)."
+- **Season line** under the control, such as "Typical steelhead spawning season: Jan–May" (Eggs) or "Typical steelhead run season: Dec–May" (Adults).
 - **Depth thresholds** `<details>` with a **Provisional** badge: the three ranges and their sources (visibility of system status, plus honesty about uncertainty).
 - **Scope line:** "Water depth only; temperature and oxygen are not checked."
 

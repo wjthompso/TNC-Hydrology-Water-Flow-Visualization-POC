@@ -50,7 +50,7 @@ const BAND_HEADROOM_M = 0.05;
 /** A zone label is drawn only when its zone is at least this tall (px). */
 const BAND_LABEL_MIN_HEIGHT = 14;
 
-const NO_SELECTION_TEXT = 'Click creek water on the map to see its water depth over time.';
+const NO_SELECTION_TEXT = 'Click any creek segment on the map to see its water depth over time.';
 /** Full instructions live in the chart's info tip (index.html); this is the short idle prompt. */
 const HOVER_HINT_TEXT = 'Hover the chart to read a value.';
 
@@ -105,10 +105,12 @@ export interface WaterSurfaceElevationChartElements {
   sourceLabel: HTMLElement;
   hoverReadout: HTMLElement;
   plot: HTMLElement;
+  /** Grayed overlay above the plot while there are no values; it holds `emptyMessage`, the creek, and the arrow. */
+  emptyState: HTMLElement;
   emptyMessage: HTMLElement;
   /** Range slider under the plot. */
   overview: HTMLElement;
-  /** Row holding the zoom readout and the reset button; hidden with the plot. */
+  /** Row holding the zoom readout and the reset button. */
   zoomRow: HTMLElement;
   zoomReadout: HTMLElement;
   resetZoomButton: HTMLButtonElement;
@@ -467,6 +469,9 @@ export function createWaterSurfaceElevationChart(
     if (!series) {
       line.setAttribute('d', '');
       bandGroup.replaceChildren();
+      // Empty axes with no values keep the plot's shape; the empty-state overlay grays and explains them.
+      axisGroup.append(...emptyAxisElements(frame, unit));
+      mirrorEmptyAxisMargin(axisGroup, frame.width);
       hide(cursor);
       hideCursorTag();
       cursorTimeUtcMs = null;
@@ -712,15 +717,24 @@ export function createWaterSurfaceElevationChart(
     if (elements.currentTime) elements.currentTime.textContent = '';
     elements.currentValue.textContent = '';
     elements.overview.classList.remove('cursor-grabbing');
-    for (const element of [elements.plot, elements.overview, elements.zoomRow]) element.classList.add('hidden');
-    elements.emptyMessage.classList.remove('hidden');
+    // The plot keeps its height; with no chart bound, the overlay stays grayed and says nothing.
+    setEmptyState(false);
   });
+
+  /**
+   * The grayed overlay above the plot. `awaitingSelection` adds the bouncing arrow and the small creek that
+   * show people where to click; other empty cases (no readings, no bed) show their message without them.
+   */
+  function setEmptyState(awaitingSelection: boolean): void {
+    elements.emptyState.dataset.awaitingSelection = String(awaitingSelection);
+  }
 
   // --- Public API --------------------------------------------------------------
   const setSeries = (next: WaterSurfaceElevationSeries | null, emptyText = NO_SELECTION_TEXT): void => {
     const previous = series;
     series = next ? prepareSeries(next) : null;
     if (next && !series) emptyText = `No water depth readings for Creek Segment ${next.segmentId}.`;
+    const awaitingSelection = next === null && emptyText === NO_SELECTION_TEXT;
     // A new segment or a different record resets the zoom; a reload of the same record keeps it.
     const sameRecord =
       previous !== null &&
@@ -732,9 +746,12 @@ export function createWaterSurfaceElevationChart(
     elements.segmentLabel.textContent = next ? `Creek Segment ${next.segmentId}` : '';
     elements.sourceLabel.textContent = series ? series.sourceLabel : '';
     elements.emptyMessage.textContent = series ? '' : emptyText;
-    elements.emptyMessage.classList.toggle('hidden', series !== null);
-    for (const element of [elements.plot, elements.overview, elements.zoomRow]) {
-      element.classList.toggle('hidden', series === null);
+    // The plot, slider, and zoom row stay on screen so the panel never changes height. With no values the
+    // overlay grays them; the crosshair cursor only shows when a click would do something.
+    elements.emptyState.classList.toggle('hidden', series !== null);
+    setEmptyState(awaitingSelection);
+    for (const element of [elements.plot, elements.overview]) {
+      element.classList.toggle('cursor-crosshair', series !== null);
     }
     render();
   };
@@ -950,6 +967,39 @@ function linePath(
     drawing = true;
   }
   return commands.join('');
+}
+
+/**
+ * The chart's frame with no values: the high and low rules, each labeled with only the unit ("ft" or "m"),
+ * so the empty plot reads as a depth chart before any number exists.
+ */
+function emptyAxisElements(frame: PlotFrame, unit: WaterLevelUnit): SVGElement[] {
+  const left = PLOT_INSET.left;
+  const right = left + frame.plotWidth;
+  const top = PLOT_INSET.top;
+  const bottom = top + frame.plotHeight;
+  return [top, bottom].flatMap((y) => [
+    createSvgElement('line', { class: 'stroke-slate-700', x1: String(left), x2: String(right), y1: String(y), y2: String(y) }),
+    svgText(unit, { x: String(left - 4), y: String(y), 'text-anchor': 'end', 'dominant-baseline': 'middle' }),
+  ]);
+}
+
+/**
+ * Empty state only: shortens each rule so the space after its right end equals the space before the unit
+ * label on the left. The rules reach the plot's right edge once values exist. Needs a laid-out SVG to
+ * measure the labels; when the chart is hidden (all measurements 0) the rules keep their full length.
+ */
+function mirrorEmptyAxisMargin(axisGroup: SVGGElement, plotSvgWidth: number): void {
+  let leftMargin: number;
+  try {
+    leftMargin = Math.min(...Array.from(axisGroup.querySelectorAll('text'), (label) => label.getBBox().x));
+  } catch {
+    return; // Firefox throws when the SVG is not rendered.
+  }
+  if (!Number.isFinite(leftMargin) || leftMargin <= 0) return;
+  for (const rule of axisGroup.querySelectorAll('line')) {
+    rule.setAttribute('x2', String(plotSvgWidth - leftMargin));
+  }
 }
 
 function axisElements(

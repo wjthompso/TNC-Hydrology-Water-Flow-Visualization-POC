@@ -182,6 +182,7 @@ export interface SelectionSnapshot {
   chartPointCount: number;
   chartCursorTimeUtcMs: number | null;
   chartHoverTimeUtcMs: number | null;
+  chartConditionBandsStageLabel: string | null;
 }
 
 export async function readSelection(page: Page): Promise<SelectionSnapshot> {
@@ -196,6 +197,7 @@ export async function readSelection(page: Page): Promise<SelectionSnapshot> {
       chartPointCount: chart?.pointCount ?? 0,
       chartCursorTimeUtcMs: chart?.cursorTimeUtcMs ?? null,
       chartHoverTimeUtcMs: chart?.hoverTimeUtcMs ?? null,
+      chartConditionBandsStageLabel: chart?.conditionBandsStageLabel ?? null,
     };
   });
 }
@@ -205,6 +207,9 @@ export async function chartPointFor(
   page: Page,
   timeUtcMs: number,
 ): Promise<{ x: number; y: number; reading: { timeUtcMs: number; valueM: number } }> {
+  // The chart sits low in the scrolling control panel, so its low readings can lie below the window.
+  // Scroll the whole plot into view first. The scroll is instant, so the pixels read next are final.
+  await page.locator('#wse-chart-plot').evaluate((plot) => plot.scrollIntoView({ block: 'nearest', behavior: 'instant' }));
   const point = await page.evaluate((time) => {
     const chart = window.__TNC_TEST__?.waterSurfaceElevationChart;
     if (!chart) throw new Error('The Water-Surface Elevation Chart is missing from the test seam.');

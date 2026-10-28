@@ -806,8 +806,11 @@ export async function startModeledCreekExperience(
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
       troutConditions: {
         controls: troutConditions,
-        bedElevationM: (segmentId) =>
-          store.seriesAt(segmentId.split('-')[0], state.selectedTimeUtcMs)?.anchorBedElevationMBySegmentId.get(segmentId) ?? null,
+        // The modeled chart plots depth above the anchor bed, so zero depth is 0 wherever a bed exists.
+        zeroDepthChartValueM: (segmentId) =>
+          store.seriesAt(segmentId.split('-')[0], state.selectedTimeUtcMs)?.anchorBedElevationMBySegmentId.has(segmentId)
+            ? 0
+            : null,
       },
       lifetime,
     });

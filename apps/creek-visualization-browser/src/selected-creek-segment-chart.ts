@@ -44,6 +44,7 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
   const hoverReadout = document.getElementById('wse-chart-hover');
   const plot = document.getElementById('wse-chart-plot');
   const emptyMessage = document.getElementById('wse-chart-empty');
+  const emptyState = document.getElementById('wse-chart-empty-state');
   const overview = document.getElementById('wse-chart-overview');
   const zoomRow = document.getElementById('wse-chart-zoom-row');
   const zoomReadout = document.getElementById('wse-chart-zoom-readout');
@@ -57,6 +58,7 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
     !hoverReadout ||
     !plot ||
     !emptyMessage ||
+    !emptyState ||
     !overview ||
     !zoomRow ||
     !zoomReadout ||
@@ -69,6 +71,7 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
     sourceLabel,
     hoverReadout,
     plot,
+    emptyState,
     emptyMessage,
     overview,
     zoomRow,
@@ -116,12 +119,13 @@ export function bindSelectedCreekSegmentChart(input: {
   /** Called with the time of the chart reading a person clicked or dragged to. */
   onChartTimeClicked: (timeUtcMs: number) => void;
   /**
-   * Steelhead trout conditions (UCS-293): the switch and life stage, plus the segment's bed elevation
-   * (m NAVD88, null when the dataset has none), which turns the research depths into chart bands.
+   * Steelhead trout conditions (UCS-293): the switch and life stage, plus the charted value (m) that
+   * means zero depth over the segment's bed (null when the dataset has no bed for it), which places
+   * the research depths on the chart's axis.
    */
   troutConditions?: {
     controls: SteelheadTroutConditionsControls;
-    bedElevationM: (segmentId: string) => number | null;
+    zeroDepthChartValueM: (segmentId: string) => number | null;
   };
   /** Ending it unbinds the click, the chart, and the highlight. */
   lifetime?: ExperienceLifetime;
@@ -170,13 +174,13 @@ export function bindSelectedCreekSegmentChart(input: {
     if (!trout) return;
     const { enabled, lifeStage } = trout.controls.state;
     const segmentId = selection.selectedSegmentId;
-    const bedElevationM = enabled && segmentId ? trout.bedElevationM(segmentId) : null;
-    const key = `${enabled}|${lifeStage}|${segmentId}|${bedElevationM}`;
+    const zeroDepthChartValueM = enabled && segmentId ? trout.zeroDepthChartValueM(segmentId) : null;
+    const key = `${enabled}|${lifeStage}|${segmentId}|${zeroDepthChartValueM}`;
     if (key === shownBandsKey) return;
     shownBandsKey = key;
-    const bands = bedElevationM === null ? null : steelheadChartBands(lifeStage, bedElevationM);
+    const bands = zeroDepthChartValueM === null ? null : steelheadChartBands(lifeStage, zeroDepthChartValueM);
     chart.setConditionBands(bands);
-    trout.controls.setSegmentNote(segmentNoteFor(enabled, lifeStage, segmentId, bedElevationM));
+    trout.controls.setSegmentNote(segmentNoteFor(enabled, lifeStage, segmentId, zeroDepthChartValueM));
   };
   if (input.troutConditions) {
     input.troutConditions.controls.onChange(() => {
@@ -204,11 +208,12 @@ function segmentNoteFor(
   enabled: boolean,
   lifeStage: Parameters<typeof steelheadChartBands>[0],
   segmentId: string | null,
-  bedElevationM: number | null,
+  zeroDepthChartValueM: number | null,
 ): string {
   if (!enabled || STEELHEAD_LIFE_STAGE_RULES[lifeStage].depthBand === null) return '';
-  if (segmentId === null) return 'Select a creek segment on the map to see its bands on the chart.';
-  if (bedElevationM === null) {
+  // With no segment selected the chart's own empty state tells people to click one, so nothing repeats it here.
+  if (segmentId === null) return '';
+  if (zeroDepthChartValueM === null) {
     return 'This segment has no bed elevation in the dataset, so its depth, chart bands, and map color cannot be computed.';
   }
   return '';

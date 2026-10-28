@@ -14,6 +14,12 @@ import {
   type SteelheadDepthClass,
   type SteelheadLifeStage,
 } from './steelhead-trout-conditions';
+import {
+  steelheadCitationHref,
+  steelheadCitationLabel,
+  type SteelheadBasisNote,
+  type SteelheadCitation,
+} from './steelhead-trout-references';
 
 export interface SteelheadTroutConditionsState {
   readonly enabled: boolean;
@@ -38,7 +44,7 @@ const SWATCH_CLASS: Record<SteelheadDepthClass | 'out-of-season', string> = {
   'out-of-season': 'bg-slate-500',
 };
 
-const NOT_RATED_LEGEND_TEXT = 'Standard blue: not rated (no bed elevation for this segment, or no depth band)';
+const NOT_RATED_LEGEND_TEXT = 'Standard blue: not rated (no bed elevation for this segment)';
 
 let shared: { enabled: boolean; lifeStage: SteelheadLifeStage } = { enabled: false, lifeStage: 'adults' };
 
@@ -78,14 +84,14 @@ export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetim
     if (toggle) toggle.checked = shared.enabled;
     if (!shared.enabled) return;
 
-    if (seasonLine) seasonLine.textContent = `${rule.label}: ${rule.seasonText}`;
+    if (seasonLine) seasonLine.textContent = rule.seasonText;
     noBandLine?.classList.toggle('hidden', band !== null);
     if (noBandLine) noBandLine.textContent = rule.noDepthBandText ?? '';
     rangesList?.classList.toggle('hidden', band === null);
     rangesList?.replaceChildren(
       ...(band ? DEPTH_CLASSES.map((condition) => rangeRow(condition, band.rangeText[condition])) : []),
     );
-    basisList?.replaceChildren(...(band ? band.basis : [rule.noDepthBandText ?? '']).map(listItem));
+    basisList?.replaceChildren(...(band ? band.basis : [{ text: rule.noDepthBandText ?? '' }]).map(basisItem));
 
     if (legendTitle) legendTitle.textContent = `Trout conditions · ${rule.label}`;
     legendRows?.replaceChildren(
@@ -93,7 +99,13 @@ export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetim
         ? DEPTH_CLASSES.map((condition) => legendRow(condition, STEELHEAD_CONDITION_DISPLAY[condition].label, band.legendText[condition]))
         : []),
       ...(rule.seasonMonths
-        ? [legendRow('out-of-season', 'Out of season', `${rule.label} are in the creek ${formatSteelheadSeason(shared.lifeStage)}`)]
+        ? [
+            legendRow(
+              'out-of-season',
+              STEELHEAD_CONDITION_DISPLAY['out-of-season'].label,
+              `${rule.seasonName} is ${formatSteelheadSeason(shared.lifeStage)}`,
+            ),
+          ]
         : []),
       notRatedRow(),
     );
@@ -181,8 +193,25 @@ function notRatedRow(): HTMLElement {
   return row;
 }
 
-function listItem(text: string): HTMLElement {
+/** One note under "Where the ranges come from": its text, then a link to each paper at the cited page. */
+function basisItem(note: SteelheadBasisNote): HTMLElement {
   const item = document.createElement('li');
-  item.textContent = text;
+  item.append(note.text);
+  for (const citation of note.citations ?? []) {
+    item.append(' ', citationLink(citation));
+    if (citation.caution) item.append(` (${citation.caution})`);
+  }
   return item;
+}
+
+/** Opens in a new tab so the sidebar and the person's place on the map stay as they were. */
+function citationLink(citation: SteelheadCitation): HTMLAnchorElement {
+  const link = document.createElement('a');
+  link.href = steelheadCitationHref(citation);
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.className =
+    'text-cyan-300 underline hover:text-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300';
+  link.textContent = `[${steelheadCitationLabel(citation)}]`;
+  return link;
 }
