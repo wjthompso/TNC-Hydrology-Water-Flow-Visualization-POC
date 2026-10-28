@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_MODELED_WSE_SERVICE_URL?: string;
   /** Water surface elevation polygons FeatureServer URL. */
   readonly VITE_WSE_POLYGONS_SERVICE_URL?: string;
+  /** Exact ribbon rings FeatureServer URL; default: the polygons service name plus `_rings`. */
+  readonly VITE_WSE_POLYGON_RINGS_SERVICE_URL?: string;
   /** Observed Creek Gauge Data FeatureServer URL (public). */
   readonly VITE_CREEK_GAUGE_SERVICE_URL?: string;
   /** "true" shows the California Natural Flows monthly Dataset; default hidden. */

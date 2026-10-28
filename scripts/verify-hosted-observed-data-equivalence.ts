@@ -129,7 +129,7 @@ function pointsClose(a: readonly number[], b: readonly number[]): boolean {
 const configuration = creekDataSourceConfiguration;
 process.stdout.write(
   `Hosted observed gauge equivalence check\n  gauge service: ${configuration.creekGaugeServiceUrl}\n` +
-    `  modeled WSE: ${configuration.modeledWseServiceUrl}\n  WSE polygons: ${configuration.wsePolygonsServiceUrl}\n` +
+    `  modeled WSE: ${configuration.observedGaugeModeledWseServiceUrl}\n  WSE polygons: ${configuration.observedGaugeWsePolygonsServiceUrl}\n` +
     `  shipped files: ${path.relative(REPOSITORY_ROOT, SHIPPED_ROOT)}\n\n`,
 );
 
@@ -148,8 +148,8 @@ const shipped: ShippedFiles = {
 const startedAt = performance.now();
 const { files: hostedFiles, droppedDuplicateCount } = await loadHostedObservedGauge(
   {
-    modeledWseServiceUrl: configuration.modeledWseServiceUrl,
-    wsePolygonsServiceUrl: configuration.wsePolygonsServiceUrl,
+    modeledWseServiceUrl: configuration.observedGaugeModeledWseServiceUrl,
+    wsePolygonsServiceUrl: configuration.observedGaugeWsePolygonsServiceUrl,
     creekGaugeServiceUrl: configuration.creekGaugeServiceUrl,
   },
   { fetchImplementation: countingFetch },

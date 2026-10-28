@@ -24,7 +24,8 @@ import {
   buildSegmentPaths,
 } from '../apps/creek-visualization-browser/vite-plugins/modeled-water-data-plugin.ts';
 import {
-  creekDataSourceConfiguration,
+  M1_V1_MODELED_WSE_SERVICE_URL,
+  M1_V1_WSE_POLYGONS_SERVICE_URL,
 } from '../apps/creek-visualization-browser/src/creek-data-source-configuration.ts';
 import type { HostedAdapterOptions } from '../apps/creek-visualization-browser/src/hosted-adapter-options.ts';
 import {
@@ -385,7 +386,8 @@ function pointsClose(a: readonly number[], b: readonly number[]): boolean {
 // Main
 
 const totalStartedAt = performance.now();
-const configuration = creekDataSourceConfiguration;
+// The m1-v1 services; the default pairing (m5-v1 on the m3-v2 ribbon) has its own check, verify-hosted-default-modeled-data-equivalence.ts.
+const configuration = { modeledWseServiceUrl: M1_V1_MODELED_WSE_SERVICE_URL, wsePolygonsServiceUrl: M1_V1_WSE_POLYGONS_SERVICE_URL };
 process.stdout.write(
   `Hosted modeled data equivalence check\n  modeled WSE: ${configuration.modeledWseServiceUrl}\n` +
     `  WSE polygons: ${configuration.wsePolygonsServiceUrl}\n  local: ${path.relative(REPOSITORY_ROOT, EXTENT_ROOT)}\n`,

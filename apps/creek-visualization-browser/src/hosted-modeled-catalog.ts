@@ -7,8 +7,15 @@
  * `wse-polygon-methods.json` (read by `readWsePolygonMethodList`).
  *
  * Time Series `paths` use the same relative layout as the local pipeline
- * output, so the existing per-flowline / per-water-year keying keeps working;
- * in hosted mode a path names the flowline and water year to query, not a file.
+ * output (`<method-id>/v<version>/time-series/…`), so the existing
+ * per-flowline / per-water-year keying keeps working; in hosted mode a path
+ * names the flowline and water year to query, not a file.
+ *
+ * Each service publishes one Data-Product Version. The method list pairs the
+ * two the way the dev middleware pairs saved versions: polygons built from
+ * modeled WSE `m3-v2` draw a modeled version solved on that channel (m5-v1's
+ * `derivation_json.method.channelFromModeledWseVersion`), and that pairing is
+ * the default.
  */
 
 import {
@@ -60,6 +67,16 @@ export interface HostedModeledWseVersion {
   readonly modeledWseServiceUrl: string;
   readonly versionLabel: string;
   readonly methodId: string;
+  readonly methodVersion: number;
+  /** `<method-id>/v<version>`, the Stage 3 version folder its Time Series paths start with. */
+  readonly modeledWsePath: string;
+  /**
+   * `junction-wse` (m1): Held WSE Intervals per segment and per junction, junction WSE stored.
+   * `junction-depth` (m2 to m5): per segment, with both junction depths; beds on the Creek Segments layer.
+   */
+  readonly timeSeriesLayout: 'junction-wse' | 'junction-depth';
+  /** The version whose channel this one was solved on (`<method-id>/v<version>`), e.g. m3 v2 for m5; null for most. */
+  readonly channelFromModeledWsePath: string | null;
   readonly segmentNetworkVersion: string;
   readonly layerIds: ModeledWseLayerIds;
   /** Time range per published Dataset: [first, last] timestamp, inclusive, UTC ms. */
@@ -69,6 +86,12 @@ export interface HostedModeledWseVersion {
 }
 
 interface ModeledWseDerivationJson {
+  readonly method?: {
+    label?: string;
+    description?: string;
+    timeSeriesFields?: Record<string, unknown>;
+    channelFromModeledWseVersion?: { methodId?: string; version?: number };
+  };
   readonly datasets?: readonly {
     datasetId?: string;
     publisherId?: string;
@@ -117,10 +140,19 @@ export async function loadHostedModeledWseVersion(
 
   const versionLabel = stringOrEmpty(attributes.version_label);
   const prefix = `modeled_wse_${versionLabel.replace(/-/g, '_')}`;
+  const methodId = stringOrEmpty(attributes.method_id);
+  const methodVersion = numberOrNull(attributes.version_number) ?? 1;
+  const derivation = parseJsonAttribute<ModeledWseDerivationJson>(attributes.derivation_json, {});
+  const channel = derivation.method?.channelFromModeledWseVersion;
   return {
     modeledWseServiceUrl: request.modeledWseServiceUrl,
     versionLabel,
-    methodId: stringOrEmpty(attributes.method_id),
+    methodId,
+    methodVersion,
+    modeledWsePath: `${methodId}/v${methodVersion}`,
+    timeSeriesLayout: derivation.method?.timeSeriesFields && 'junctionDepthUpstreamM' in derivation.method.timeSeriesFields ? 'junction-depth' : 'junction-wse',
+    channelFromModeledWsePath:
+      typeof channel?.methodId === 'string' && typeof channel.version === 'number' ? `${channel.methodId}/v${channel.version}` : null,
     segmentNetworkVersion: requiredText(attributes.segment_network_version, 'segment_network_version'),
     layerIds: resolveLayerIdsFromArcgisTableNames(attributes.arcgis_table_names, FALLBACK_MODELED_WSE_LAYER_IDS, {
       creekSegments: `${prefix}_creek_segments`,
@@ -130,7 +162,7 @@ export async function loadHostedModeledWseVersion(
       versions: 'modeled_wse_versions',
     }),
     timeRangeUtcMsByDatasetId: readTimeRanges(stringOrEmpty(attributes.water_years)),
-    derivation: parseJsonAttribute<ModeledWseDerivationJson>(attributes.derivation_json, {}),
+    derivation,
   };
 }
 
@@ -176,6 +208,7 @@ export function buildHostedModeledCatalog(
   catalogOptions: BuildHostedModeledCatalogOptions,
 ): {
   segmentNetworkVersion: string;
+  modeledWseVersion: { methodId: string; version: number; versionLabel: string; path: string };
   publishers: { publisherId: string; name: string }[];
   datasets: {
     datasetId: string;
@@ -219,6 +252,12 @@ export function buildHostedModeledCatalog(
   const publisherIds = [...new Set(datasets.map((dataset) => dataset.publisherId))].sort();
   return {
     segmentNetworkVersion: version.segmentNetworkVersion,
+    modeledWseVersion: {
+      methodId: version.methodId,
+      version: version.methodVersion,
+      versionLabel: version.versionLabel,
+      path: version.modeledWsePath,
+    },
     publishers: publisherIds.map((publisherId) => ({
       publisherId,
       name: PUBLISHER_NAME_BY_ID[publisherId] ?? publisherId,
@@ -234,14 +273,14 @@ export function buildHostedModeledCatalog(
   };
 }
 
-/** Same relative layout as Stage 3: `<dataset>/<variable>/<comid>/WY<year>.json` (hourly) or `<comid>.json`. */
+/** Same relative layout as Stage 3: `<method-id>/v<n>/time-series/<dataset>/<variable>/<comid>/WY<year>.json` (hourly) or `…/<comid>.json`. */
 function timeSeriesPaths(
   datasetId: string,
   timeStep: string,
   tncComids: readonly string[],
   version: HostedModeledWseVersion,
 ): string[] {
-  const folder = `${TIME_SERIES_FOLDER}/${datasetId}/${WATER_SURFACE_ELEVATION_VARIABLE_ID}`;
+  const folder = `${version.modeledWsePath}/${TIME_SERIES_FOLDER}/${datasetId}/${WATER_SURFACE_ELEVATION_VARIABLE_ID}`;
   if (timeStep !== 'hourly') {
     return tncComids.map((tncComid) => `${folder}/${tncComid}.json`);
   }
@@ -272,6 +311,8 @@ export interface HostedWsePolygonMethodVersion {
   readonly browserDrawing: string;
   /** Same relative path as local output; the store keys polygon sets by it. */
   readonly path: string;
+  /** `<method-id>/v<version>` of the modeled WSE version the polygons were built from, when the row names one. */
+  readonly builtFromModeledWsePath?: string;
 }
 
 export interface HostedWsePolygonMethods {
@@ -279,6 +320,8 @@ export interface HostedWsePolygonMethods {
   readonly methodList: { defaultMethodId: string; versions: HostedWsePolygonMethodVersion[] };
   /** Polygon layer id per method version, keyed by `wsePolygonMethodKey` (`<method-id>@v<version>`). */
   readonly polygonLayerIdByMethodKey: ReadonlyMap<string, number>;
+  /** `…_channel_ribbons` table id per channel ribbon method version key. */
+  readonly channelRibbonsTableIdByMethodKey: ReadonlyMap<string, number>;
   /** Parsed `parameters_json` per method version key. */
   readonly parametersByMethodKey: ReadonlyMap<string, unknown>;
 }
@@ -299,22 +342,14 @@ export async function loadHostedWsePolygonMethods(
     withHostedTransport(options, {
       layerUrl: layerUrl(request.wsePolygonsServiceUrl, versionsTableId),
       where: "status <> 'retired'",
-      outFields: [
-        'version_label',
-        'status',
-        'derivation_summary',
-        'derivation_json',
-        'pipeline_method_id',
-        'pipeline_method_version',
-        'browser_drawing',
-        'parameters_json',
-        'arcgis_table_names',
-      ],
+      // Every field: later versions add some (`built_from_modeled_wse_version`) that m1-v1's row does not have.
+      outFields: ['*'],
       orderByFields: ['pipeline_method_id', 'pipeline_method_version'],
     }),
   );
 
   const polygonLayerIdByMethodKey = new Map<string, number>();
+  const channelRibbonsTableIdByMethodKey = new Map<string, number>();
   const parametersByMethodKey = new Map<string, unknown>();
   const versions = rows.map(({ attributes }) => {
     const methodId = requiredText(attributes.pipeline_method_id, 'pipeline_method_id');
@@ -326,6 +361,11 @@ export async function loadHostedWsePolygonMethods(
       versions: 'wse_polygon_versions',
     });
     polygonLayerIdByMethodKey.set(methodKey, layerIds.wsePolygons);
+    const channelRibbonsTableId = parseJsonAttribute<Record<string, unknown>>(attributes.arcgis_table_names, {})[
+      `${polygonLayerName}_channel_ribbons`
+    ];
+    if (typeof channelRibbonsTableId === 'number') channelRibbonsTableIdByMethodKey.set(methodKey, channelRibbonsTableId);
+    const builtFromModeledWsePath = modeledWsePathOfVersionReference(stringOrEmpty(attributes.built_from_modeled_wse_version));
     parametersByMethodKey.set(methodKey, parseJsonAttribute<unknown>(attributes.parameters_json, null));
 
     const derivation = parseJsonAttribute<{ wse_polygon_generation_method?: { label?: string } }>(
@@ -340,6 +380,7 @@ export async function loadHostedWsePolygonMethods(
       description: stringOrEmpty(attributes.derivation_summary).replace(/\s*Built from [^]*$/, ''),
       browserDrawing: stringOrEmpty(attributes.browser_drawing) || 'sloped-between-junctions',
       path: `${WATER_SURFACE_POLYGONS_STAGE_FOLDER}/${methodId}/v${version}`,
+      builtFromModeledWsePath,
       status: stringOrEmpty(attributes.status),
     };
   });
@@ -356,10 +397,58 @@ export async function loadHostedWsePolygonMethods(
         description: entry.description,
         browserDrawing: entry.browserDrawing,
         path: entry.path,
+        ...(entry.builtFromModeledWsePath ? { builtFromModeledWsePath: entry.builtFromModeledWsePath } : {}),
       })),
     },
     polygonLayerIdByMethodKey,
+    channelRibbonsTableIdByMethodKey,
     parametersByMethodKey,
+  };
+}
+
+/** `modeled-wse/m3-flowline-profile-manning-depth/m3-v2` → `m3-flowline-profile-manning-depth/v2`; undefined otherwise. */
+function modeledWsePathOfVersionReference(reference: string): string | undefined {
+  const match = /^modeled-wse\/([^/]+)\/m\d+-v(\d+)$/.exec(reference);
+  return match ? `${match[1]}/v${Number(match[2])}` : undefined;
+}
+
+/**
+ * `wse-polygon-methods.json` shape for one polygons service and one modeled WSE service: the polygon versions, the
+ * published modeled WSE version with the channel it was solved on (so `readWsePolygonMethodList` forms the channel
+ * pairing), and that version's method as the default Time Series.
+ */
+export function buildHostedWsePolygonMethodList(
+  polygonMethods: HostedWsePolygonMethods,
+  version: HostedModeledWseVersion,
+): {
+  defaultMethodId: string;
+  defaultModeledWseMethodId: string;
+  versions: HostedWsePolygonMethodVersion[];
+  modeledWseVersions: {
+    methodId: string;
+    version: number;
+    versionLabel: string;
+    label: string;
+    description: string;
+    path: string;
+    channelFromModeledWsePath: string | null;
+  }[];
+} {
+  return {
+    defaultMethodId: polygonMethods.methodList.defaultMethodId,
+    defaultModeledWseMethodId: version.methodId,
+    versions: polygonMethods.methodList.versions,
+    modeledWseVersions: [
+      {
+        methodId: version.methodId,
+        version: version.methodVersion,
+        versionLabel: version.versionLabel,
+        label: version.derivation.method?.label ?? version.methodId,
+        description: version.derivation.method?.description ?? '',
+        path: version.modeledWsePath,
+        channelFromModeledWsePath: version.channelFromModeledWsePath,
+      },
+    ],
   };
 }
 

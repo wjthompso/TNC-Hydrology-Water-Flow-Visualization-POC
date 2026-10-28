@@ -11,6 +11,11 @@
  *   is its junction's series, set to null wherever the segment's own value is
  *   null (Stage 3 rule).
  *
+ * Depth-style versions (m2 to m5, `timeSeriesLayout: 'junction-depth'`) store
+ * segment rows only, each with `wse_m` and both junction depths; the static
+ * beds (`anchorBedElevationM`, `junctionBed*M`) come from the Creek Segments
+ * layer. Their files carry no junction WSE (the browser adds bed and depth).
+ *
  * A Held WSE Interval holds `wse_m` from `valid_from_utc` (inclusive) to
  * `valid_until_utc` (exclusive). A timestamp no interval covers is null.
  */
@@ -21,7 +26,7 @@ import {
   type HostedModeledDatasetId,
   type HostedModeledWseVersion,
 } from './hosted-modeled-catalog.ts';
-import type { HostedCreekSegmentNetwork } from './hosted-creek-segment-network.ts';
+import type { HostedCreekSegment, HostedCreekSegmentNetwork } from './hosted-creek-segment-network.ts';
 import {
   layerUrl,
   numberOrNull,
@@ -31,7 +36,7 @@ import {
   withHostedTransport,
   type HostedAdapterOptions,
 } from './hosted-adapter-options.ts';
-import { queryAllRows } from './hosted-feature-service-query.ts';
+import { queryAllRows, type HostedFeatureRow } from './hosted-feature-service-query.ts';
 
 export const HOUR_MS = 3_600_000;
 const WATER_SURFACE_ELEVATION_VARIABLE_ID = 'water-surface-elevation';
@@ -45,12 +50,26 @@ export interface HostedTimeSeriesFile {
   segments: HostedTimeSeriesSegment[];
 }
 
-export interface HostedTimeSeriesSegment {
+export type HostedTimeSeriesSegment = HostedJunctionWseSegment | HostedJunctionDepthSegment;
+
+export interface HostedJunctionWseSegment {
   segmentId: string;
   values: (number | null)[];
   junctionWseUpstreamM: (number | null)[];
   junctionWseDownstreamM: (number | null)[];
   /** Present (true) only for a Drainage-Area Ratio Transfer segment; absent means false. */
+  drainageAreaRatioTransfer?: true;
+}
+
+/** Stage 3 field order of m3 to m5. */
+export interface HostedJunctionDepthSegment {
+  segmentId: string;
+  values: (number | null)[];
+  anchorBedElevationM: number | null;
+  junctionDepthUpstreamM: (number | null)[];
+  junctionDepthDownstreamM: (number | null)[];
+  junctionBedUpstreamM: number | null;
+  junctionBedDownstreamM: number | null;
   drainageAreaRatioTransfer?: true;
 }
 
@@ -79,6 +98,7 @@ export async function loadHostedTimeSeriesForFlowline(
       ? version.layerIds.nationalWaterModelIntervals
       : version.layerIds.californiaNaturalFlowsIntervals;
 
+  const depthLayout = version.timeSeriesLayout === 'junction-depth';
   const whereClauses = [`tnc_comid = ${sqlString(tncComid)}`];
   if (datasetId === NATIONAL_WATER_MODEL_HOURLY_DATASET_ID && timestampsUtcMs.length > 0) {
     // Time overlap with [first timestamp, last timestamp + 1 hour).
@@ -94,10 +114,17 @@ export async function loadHostedTimeSeriesForFlowline(
           withHostedTransport(options, {
             layerUrl: layerUrl(version.modeledWseServiceUrl, intervalsLayerId),
             where: whereClauses.join(' AND '),
-            outFields: ['location_kind', 'location_id', 'valid_from_utc', 'valid_until_utc', 'wse_m'],
-            orderByFields: ['location_kind', 'location_id', 'valid_from_utc'],
+            outFields: depthLayout
+              ? ['segment_id', 'valid_from_utc', 'valid_until_utc', ...DEPTH_INTERVAL_VALUE_FIELDS]
+              : ['location_kind', 'location_id', 'valid_from_utc', 'valid_until_utc', 'wse_m'],
+            orderByFields: depthLayout ? ['segment_id', 'valid_from_utc'] : ['location_kind', 'location_id', 'valid_from_utc'],
           }),
         );
+
+  const file = { segmentNetworkVersion: network.segmentNetworkVersion, datasetId, variableId: WATER_SURFACE_ELEVATION_VARIABLE_ID, timestampsUtcMs };
+  if (depthLayout) {
+    return { ...file, segments: junctionDepthSegments(flowlineSegments, rows, timestampsUtcMs) } as HostedTimeSeriesFile;
+  }
 
   const seriesByLocationKey = new Map<string, (number | null)[]>();
   for (const { attributes } of rows) {
@@ -117,11 +144,11 @@ export async function loadHostedTimeSeriesForFlowline(
   }
 
   const emptySeries = (): (number | null)[] => new Array<number | null>(timestampsUtcMs.length).fill(null);
-  const segments = flowlineSegments.map((segment): HostedTimeSeriesSegment => {
+  const segments = flowlineSegments.map((segment): HostedJunctionWseSegment => {
     const values = seriesByLocationKey.get(locationKey('segment', segment.segmentId)) ?? emptySeries();
     const upstreamJunction = seriesByLocationKey.get(locationKey('junction', segment.upstreamJunctionId));
     const downstreamJunction = seriesByLocationKey.get(locationKey('junction', segment.downstreamJunctionId));
-    const timeSeriesSegment: HostedTimeSeriesSegment = {
+    const timeSeriesSegment: HostedJunctionWseSegment = {
       segmentId: segment.segmentId,
       values,
       junctionWseUpstreamM: junctionWseForSegment(values, upstreamJunction),
@@ -131,13 +158,50 @@ export async function loadHostedTimeSeriesForFlowline(
     return timeSeriesSegment;
   });
 
-  return {
-    segmentNetworkVersion: network.segmentNetworkVersion,
-    datasetId,
-    variableId: WATER_SURFACE_ELEVATION_VARIABLE_ID,
-    timestampsUtcMs,
-    segments,
-  };
+  return { ...file, segments } as HostedTimeSeriesFile;
+}
+
+const DEPTH_INTERVAL_VALUE_FIELDS = ['wse_m', 'junction_depth_upstream_m', 'junction_depth_downstream_m'] as const;
+
+/** Depth-style segments in flowline order: the three held series per segment plus its beds from the Creek Segments layer. */
+function junctionDepthSegments(
+  flowlineSegments: readonly HostedCreekSegment[],
+  rows: readonly HostedFeatureRow[],
+  timestampsUtcMs: readonly number[],
+): HostedJunctionDepthSegment[] {
+  const emptySeries = (): (number | null)[] => new Array<number | null>(timestampsUtcMs.length).fill(null);
+  const seriesBySegmentId = new Map<string, Record<(typeof DEPTH_INTERVAL_VALUE_FIELDS)[number], (number | null)[]>>();
+  for (const { attributes } of rows) {
+    const segmentId = stringOrEmpty(attributes.segment_id);
+    let series = seriesBySegmentId.get(segmentId);
+    if (!series) {
+      series = { wse_m: emptySeries(), junction_depth_upstream_m: emptySeries(), junction_depth_downstream_m: emptySeries() };
+      seriesBySegmentId.set(segmentId, series);
+    }
+    for (const field of DEPTH_INTERVAL_VALUE_FIELDS) {
+      fillHeldInterval(
+        series[field],
+        timestampsUtcMs,
+        numberOrNull(attributes.valid_from_utc),
+        numberOrNull(attributes.valid_until_utc),
+        numberOrNull(attributes[field]),
+      );
+    }
+  }
+  return flowlineSegments.map((segment): HostedJunctionDepthSegment => {
+    const series = seriesBySegmentId.get(segment.segmentId);
+    const timeSeriesSegment: HostedJunctionDepthSegment = {
+      segmentId: segment.segmentId,
+      values: series?.wse_m ?? emptySeries(),
+      anchorBedElevationM: segment.beds?.anchorBedElevationM ?? null,
+      junctionDepthUpstreamM: series?.junction_depth_upstream_m ?? emptySeries(),
+      junctionDepthDownstreamM: series?.junction_depth_downstream_m ?? emptySeries(),
+      junctionBedUpstreamM: segment.beds?.junctionBedUpstreamM ?? null,
+      junctionBedDownstreamM: segment.beds?.junctionBedDownstreamM ?? null,
+    };
+    if (segment.drainageAreaRatioTransfer) timeSeriesSegment.drainageAreaRatioTransfer = true;
+    return timeSeriesSegment;
+  });
 }
 
 function locationKey(locationKind: string, locationId: string): string {

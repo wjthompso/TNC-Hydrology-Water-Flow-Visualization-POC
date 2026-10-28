@@ -11,17 +11,37 @@
  * Layer and table ids are discovered at runtime from each service's versions
  * table (`arcgis_table_names`). The constants below are the published ids and
  * serve as the fallback when discovery is unavailable.
+ *
+ * Every Data-Product Version has its own service. The modeled experience opens
+ * the default pairing: WSE polygons `m3-v2` (the channel ribbon) drawn with
+ * modeled WSE `m5-v1`, which was solved on the ribbon's channel. Pointing both
+ * service URLs at the `m1-v1` services (below) opens junction-sloped `m1-v1`
+ * instead. The observed gauge experience keeps reading the `m1-v1` services:
+ * its observed water surface elevations need elevation buckets.
  */
 
 export type CreekDataSourceKind = 'hosted' | 'local';
 
 export const DEFAULT_ARCGIS_PORTAL_URL = 'https://dangermondpreserve-spatial.com/portal';
 
+/** Modeled WSE `m5-v1` (Jarrett steep-creek roughness), the default modeled experience's Time Series. */
 export const DEFAULT_MODELED_WSE_SERVICE_URL =
+  'https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m5_v1/FeatureServer';
+
+/** WSE polygons `m3-v2` (channel ribbon on the raw lidar bed), the default modeled experience's polygons. */
+export const DEFAULT_WSE_POLYGONS_SERVICE_URL =
+  'https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons_m3_v2/FeatureServer';
+
+/** Modeled WSE `m1-v1`, the first published version (Manning rating curve). */
+export const M1_V1_MODELED_WSE_SERVICE_URL =
   'https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse/FeatureServer';
 
-export const DEFAULT_WSE_POLYGONS_SERVICE_URL =
+/** WSE polygons `m1-v1` (junction-sloped terrain fill, elevation buckets), built from modeled WSE `m1-v1`. */
+export const M1_V1_WSE_POLYGONS_SERVICE_URL =
   'https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_wse_polygons/FeatureServer';
+
+/** The exact-rings table's id in a channel ribbon's rings service (its only table). */
+export const WSE_POLYGON_RINGS_TABLE_ID = 0;
 
 /** Public feature service of the observed USGS gauge readings ("Creek Gauge Data" is layer 2). */
 export const DEFAULT_CREEK_GAUGE_SERVICE_URL =
@@ -55,6 +75,14 @@ export interface CreekDataSourceConfiguration {
   readonly arcgisPortalUrl: string;
   readonly modeledWseServiceUrl: string;
   readonly wsePolygonsServiceUrl: string;
+  /**
+   * Exact station-ordered rings of a channel ribbon version, read instead of its polygon layer's geometry (ArcGIS split the
+   * self-crossing rings on publishing). Default: the polygons service name plus `_rings`.
+   */
+  readonly wsePolygonRingsServiceUrl: string;
+  /** The observed gauge experience's Creek Segments and junction-sloped polygons (`m1-v1`). */
+  readonly observedGaugeModeledWseServiceUrl: string;
+  readonly observedGaugeWsePolygonsServiceUrl: string;
   readonly creekGaugeServiceUrl: string;
   readonly showCaliforniaNaturalFlowsMonthly: boolean;
 }
@@ -67,6 +95,7 @@ export interface CreekDataSourceEnvironment {
   readonly VITE_ARCGIS_PORTAL_URL?: string;
   readonly VITE_MODELED_WSE_SERVICE_URL?: string;
   readonly VITE_WSE_POLYGONS_SERVICE_URL?: string;
+  readonly VITE_WSE_POLYGON_RINGS_SERVICE_URL?: string;
   readonly VITE_CREEK_GAUGE_SERVICE_URL?: string;
   readonly VITE_SHOW_CALIFORNIA_NATURAL_FLOWS_MONTHLY?: string;
 }
@@ -98,9 +127,17 @@ function resolveDataSourceKind(environment: CreekDataSourceEnvironment): CreekDa
   return isDevelopmentOrTestMode ? 'local' : 'hosted';
 }
 
+/** `…/creek_water_visualization_wse_polygons_m3_v2/FeatureServer` → `…/creek_water_visualization_wse_polygons_m3_v2_rings/FeatureServer`. */
+export function wsePolygonRingsServiceUrlOf(wsePolygonsServiceUrl: string): string {
+  return withoutTrailingSlash(wsePolygonsServiceUrl).replace(/\/FeatureServer$/i, '_rings/FeatureServer');
+}
+
 export function resolveCreekDataSourceConfiguration(
   environment: CreekDataSourceEnvironment,
 ): CreekDataSourceConfiguration {
+  const wsePolygonsServiceUrl = withoutTrailingSlash(
+    nonEmptyOrDefault(environment.VITE_WSE_POLYGONS_SERVICE_URL, DEFAULT_WSE_POLYGONS_SERVICE_URL),
+  );
   return Object.freeze({
     dataSource: resolveDataSourceKind(environment),
     arcgisPortalUrl: withoutTrailingSlash(
@@ -109,9 +146,12 @@ export function resolveCreekDataSourceConfiguration(
     modeledWseServiceUrl: withoutTrailingSlash(
       nonEmptyOrDefault(environment.VITE_MODELED_WSE_SERVICE_URL, DEFAULT_MODELED_WSE_SERVICE_URL),
     ),
-    wsePolygonsServiceUrl: withoutTrailingSlash(
-      nonEmptyOrDefault(environment.VITE_WSE_POLYGONS_SERVICE_URL, DEFAULT_WSE_POLYGONS_SERVICE_URL),
+    wsePolygonsServiceUrl,
+    wsePolygonRingsServiceUrl: withoutTrailingSlash(
+      nonEmptyOrDefault(environment.VITE_WSE_POLYGON_RINGS_SERVICE_URL, wsePolygonRingsServiceUrlOf(wsePolygonsServiceUrl)),
     ),
+    observedGaugeModeledWseServiceUrl: M1_V1_MODELED_WSE_SERVICE_URL,
+    observedGaugeWsePolygonsServiceUrl: M1_V1_WSE_POLYGONS_SERVICE_URL,
     creekGaugeServiceUrl: withoutTrailingSlash(
       nonEmptyOrDefault(environment.VITE_CREEK_GAUGE_SERVICE_URL, DEFAULT_CREEK_GAUGE_SERVICE_URL),
     ),

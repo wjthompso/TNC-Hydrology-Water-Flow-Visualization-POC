@@ -28,7 +28,12 @@ async function loadHostedCreekVisualizationData(): Promise<LoadedCreekVisualizat
     ]);
     await configureArcgisRequestAuthentication({ arcgisPortalUrl: creekDataSourceConfiguration.arcgisPortalUrl });
     const observedWsePropagation = await fetchJson(OBSERVED_WSE_PROPAGATION_PATH);
-    const { files } = await loadHostedObservedGauge({ ...creekDataSourceConfiguration, observedWsePropagation });
+    const { files } = await loadHostedObservedGauge({
+      modeledWseServiceUrl: creekDataSourceConfiguration.observedGaugeModeledWseServiceUrl,
+      wsePolygonsServiceUrl: creekDataSourceConfiguration.observedGaugeWsePolygonsServiceUrl,
+      creekGaugeServiceUrl: creekDataSourceConfiguration.creekGaugeServiceUrl,
+      observedWsePropagation,
+    });
     return assembleLoadedCreekVisualization(files, JALAMA_STATION_ID);
   } catch (error) {
     console.error(error);

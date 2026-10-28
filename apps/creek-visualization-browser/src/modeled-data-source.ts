@@ -14,7 +14,7 @@
 // validate both sources the same way.
 
 import { configureArcgisRequestAuthentication } from './arcgis-request-authentication';
-import { creekDataSourceConfiguration } from './creek-data-source-configuration';
+import { creekDataSourceConfiguration, WSE_POLYGON_RINGS_TABLE_ID } from './creek-data-source-configuration';
 import { HostedFeatureServiceAuthenticationError } from './hosted-feature-service-query';
 import { modeledDataUrl } from './modeled-water-catalog';
 import { fetchJson } from './modeled-water-data-store';
@@ -27,6 +27,7 @@ import {
 } from './hosted-creek-segment-network';
 import {
   buildHostedModeledCatalog,
+  buildHostedWsePolygonMethodList,
   loadHostedModeledWseVersion,
   loadHostedWsePolygonMethods,
   type HostedModeledDatasetId,
@@ -34,7 +35,11 @@ import {
   type HostedWsePolygonMethods,
 } from './hosted-modeled-catalog';
 import { loadHostedTimeSeriesForFlowline } from './hosted-modeled-water-surface-elevation';
-import { loadHostedWaterSurfacePolygonsForFlowline } from './hosted-water-surface-polygons';
+import {
+  loadHostedChannelRibbonPolygonsForFlowline,
+  loadHostedWaterSurfacePolygonsForFlowline,
+} from './hosted-water-surface-polygons';
+import { drawsChannelRibbonRungs, type WsePolygonBrowserDrawing } from './wse-polygon-generation-methods';
 
 /** Extent-relative paths of the local files (dev middleware). */
 export const LOCAL_MODELED_FILE_PATHS = {
@@ -102,6 +107,7 @@ export interface HostedModeledDataSourceOptions {
   readonly arcgisPortalUrl: string;
   readonly modeledWseServiceUrl: string;
   readonly wsePolygonsServiceUrl: string;
+  readonly wsePolygonRingsServiceUrl: string;
   readonly showCaliforniaNaturalFlowsMonthly: boolean;
 }
 
@@ -130,7 +136,8 @@ export function createHostedModeledDataSource(options: HostedModeledDataSourceOp
       });
     },
     async loadWsePolygonMethodList(extentId) {
-      return (await loadContext(extentId)).polygonMethods.methodList;
+      const { polygonMethods, version } = await loadContext(extentId);
+      return buildHostedWsePolygonMethodList(polygonMethods, version);
     },
     async loadReachCrosswalk(extentId) {
       return buildReachCrosswalkFile((await loadContext(extentId)).network);
@@ -144,9 +151,23 @@ export function createHostedModeledDataSource(options: HostedModeledDataSourceOp
     },
     async loadPolygonSets(extentId, methodPath, tncComid) {
       const { network, polygonMethods } = await loadContext(extentId);
-      const polygonLayerId = polygonMethods.polygonLayerIdByMethodKey.get(methodKeyOfPath(methodPath));
+      const methodKey = methodKeyOfPath(methodPath);
+      const polygonLayerId = polygonMethods.polygonLayerIdByMethodKey.get(methodKey);
       if (polygonLayerId === undefined) {
         throw new Error(`No hosted WSE polygon layer for ${methodPath}.`);
+      }
+      const method = polygonMethods.methodList.versions.find((entry) => entry.path === methodPath);
+      if (method && drawsChannelRibbonRungs(method.browserDrawing as WsePolygonBrowserDrawing)) {
+        const channelRibbonsTableId = polygonMethods.channelRibbonsTableIdByMethodKey.get(methodKey);
+        if (channelRibbonsTableId === undefined) throw new Error(`No hosted channel ribbons table for ${methodPath}.`);
+        return loadHostedChannelRibbonPolygonsForFlowline({
+          wsePolygonsServiceUrl: options.wsePolygonsServiceUrl,
+          channelRibbonsTableId,
+          wsePolygonRingsServiceUrl: options.wsePolygonRingsServiceUrl,
+          ringsTableId: WSE_POLYGON_RINGS_TABLE_ID,
+          network,
+          tncComid,
+        });
       }
       return loadHostedWaterSurfacePolygonsForFlowline({
         wsePolygonsServiceUrl: options.wsePolygonsServiceUrl,
@@ -157,6 +178,9 @@ export function createHostedModeledDataSource(options: HostedModeledDataSourceOp
     },
     async loadTimeSeries(extentId, catalogPath) {
       const { version, network } = await loadContext(extentId);
+      if (!catalogPath.startsWith(`${version.modeledWsePath}/`)) {
+        throw new Error(`The hosted modeled WSE service publishes ${version.modeledWsePath}, not ${catalogPath}.`);
+      }
       const request = timeSeriesRequestOfPath(catalogPath);
       return loadHostedTimeSeriesForFlowline({ version, network, ...request });
     },
@@ -209,6 +233,7 @@ async function buildHostedContext(options: HostedModeledDataSourceOptions): Prom
     modeledWseServiceUrl: options.modeledWseServiceUrl,
     creekSegmentsLayerId: version.layerIds.creekSegments,
     segmentNetworkVersion: version.segmentNetworkVersion,
+    withBeds: version.timeSeriesLayout === 'junction-depth',
   });
   return { version, network, polygonMethods };
 }

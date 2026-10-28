@@ -47,6 +47,9 @@ const CREEK_SEGMENT_FIELDS = [
   'transfer_distance_m',
 ] as const;
 
+/** Static beds the depth-style versions (m2 to m5) add to the layer; m1's layer has none. */
+const CREEK_SEGMENT_BED_FIELDS = ['anchor_bed_elevation_m', 'junction_bed_upstream_m', 'junction_bed_downstream_m'] as const;
+
 /** One row of the creek segments layer, in browser naming. */
 export interface HostedCreekSegment {
   readonly segmentId: string;
@@ -69,6 +72,14 @@ export interface HostedCreekSegment {
   readonly transferDistanceM: number | null;
   /** Flowline vertices in vertex-index order (start → end), as stored in the layer. */
   readonly pathWgs84: readonly LonLat[];
+  /** Beds of a depth-style version, m NAVD88 (`anchorBedElevationM`, `junctionBed*M` of its Time Series); null when not loaded. */
+  readonly beds: HostedCreekSegmentBeds | null;
+}
+
+export interface HostedCreekSegmentBeds {
+  readonly anchorBedElevationM: number | null;
+  readonly junctionBedUpstreamM: number | null;
+  readonly junctionBedDownstreamM: number | null;
 }
 
 export interface HostedCreekSegmentNetwork {
@@ -86,6 +97,8 @@ export interface LoadHostedCreekSegmentNetworkRequest {
   readonly segmentNetworkVersion: string;
   /** Load only this TNC flowline's Creek Segments (the observed gauge needs one flowline). Default: all. */
   readonly tncComid?: string;
+  /** Also load the depth-style bed columns. Default: false (m1's layer has none). */
+  readonly withBeds?: boolean;
 }
 
 export async function loadHostedCreekSegmentNetwork(
@@ -96,14 +109,14 @@ export async function loadHostedCreekSegmentNetwork(
     withHostedTransport(options, {
       layerUrl: layerUrl(request.modeledWseServiceUrl, request.creekSegmentsLayerId),
       where: request.tncComid === undefined ? '1=1' : `tnc_comid = ${sqlString(request.tncComid)}`,
-      outFields: CREEK_SEGMENT_FIELDS,
+      outFields: request.withBeds ? [...CREEK_SEGMENT_FIELDS, ...CREEK_SEGMENT_BED_FIELDS] : CREEK_SEGMENT_FIELDS,
       orderByFields: ['segment_id'],
       returnGeometry: true,
       outSpatialReferenceWkid: WGS84_WKID,
     }),
   );
 
-  const segments = rows.map((row) => readCreekSegment(row.attributes, row.geometry));
+  const segments = rows.map((row) => readCreekSegment(row.attributes, row.geometry, Boolean(request.withBeds)));
   segments.sort(
     (a, b) => compareText(a.tncComid, b.tncComid) || a.vertexIndexStart - b.vertexIndexStart,
   );
@@ -121,6 +134,7 @@ export async function loadHostedCreekSegmentNetwork(
 function readCreekSegment(
   attributes: Record<string, unknown>,
   geometry: Record<string, unknown> | undefined,
+  withBeds: boolean,
 ): HostedCreekSegment {
   const segmentId = stringOrEmpty(attributes.segment_id);
   const nhdplusV2Comid = stringOrEmpty(attributes.nhdplusv2_comid);
@@ -142,6 +156,13 @@ function readCreekSegment(
     drainageAreaRatioTransfer: attributes.drainage_area_ratio_transfer === 1,
     transferDistanceM: numberOrNull(attributes.transfer_distance_m),
     pathWgs84: readPolylinePath(geometry),
+    beds: withBeds
+      ? {
+          anchorBedElevationM: numberOrNull(attributes.anchor_bed_elevation_m),
+          junctionBedUpstreamM: numberOrNull(attributes.junction_bed_upstream_m),
+          junctionBedDownstreamM: numberOrNull(attributes.junction_bed_downstream_m),
+        }
+      : null,
   };
 }
 
