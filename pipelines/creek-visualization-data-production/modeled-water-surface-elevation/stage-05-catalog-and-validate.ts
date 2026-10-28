@@ -1,4 +1,5 @@
 import path from 'node:path';
+import process from 'node:process';
 import { readJson } from '../json-files.ts';
 import { repositoryRoot } from '../constants.ts';
 import { loadCreekSegmentNetwork } from './creek-segment-network.ts';
@@ -26,10 +27,19 @@ import {
   type WaterSurfacePolygonSetsFile,
 } from './stage-file-formats.ts';
 import { runStage, runStageEntryPoint, type StageResult } from './stage-manifest.ts';
-import { requireSavedCurrentModeledWseVersion, type CurrentModeledWseVersion } from './modeled-wse-version.ts';
+import { requireSavedModeledWseVersion, type CurrentModeledWseVersion } from './modeled-wse-version.ts';
+import { readSavedModeledWseVersion } from './modeled-wse-derivation-methods/modeled-wse-derivation-method-outputs.ts';
+import type { ModeledWseDerivationMethodConfig } from './modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
+import {
+  CURRENT_MODELED_WSE_DERIVATION_METHOD,
+  DEFAULT_MODELED_WSE_DERIVATION_METHOD_ID,
+  modeledWseDerivationMethodById,
+  requestedModeledWseDerivationMethod,
+} from './modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
 import type { WsePolygonBrowserDrawing } from './wse-polygon-generation-methods/wse-polygon-generation-method.ts';
 import {
   listSavedWsePolygonMethodVersions,
+  readSavedBuiltFromModeledWseVersion,
   type SavedWsePolygonMethodVersion,
 } from './wse-polygon-generation-methods/wse-polygon-generation-method-outputs.ts';
 import { DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID } from './wse-polygon-generation-methods/wse-polygon-generation-method-registry.ts';
@@ -41,8 +51,9 @@ import { DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID } from './wse-polygon-generati
  * `modeled-water-surface-elevation-validation.ts` and run once per saved method version. A violation
  * in the default method's newest version (the one the browser opens) fails the stage; a violation in
  * any other version is a warning, and the catalog marks that version `validationPassed: false`.
- * Time Series paths are relative to `03-time-series/` and start with the current modeled WSE version folder
- * (`<method-id>/v<version>/time-series/…`); each file holds one TNC flowline.
+ * Time Series paths are relative to `03-time-series/` and start with the validated modeled WSE version folder
+ * (`<method-id>/v<version>/time-series/…`); each file holds one TNC flowline. Without `--modeled-wse-method=`, that version is
+ * the one the browser draws on the default method's newest version (see `modeledWseMethodToValidate`).
  */
 
 const crossSectionsDirectory = stageDirectory('crossSections');
@@ -74,6 +85,38 @@ function defaultMethodVersion(saved: readonly SavedWsePolygonMethodVersion[]): S
     );
   }
   return newest;
+}
+
+/**
+ * `--modeled-wse-method=<id>` when given. Otherwise the Time Series the browser opens: the default Modeled WSE Derivation Method
+ * when this extent has it saved on the channel the default polygon version was built on (a channel pairing, checked by
+ * fingerprint like the dev middleware does), else the current method, as before the default pairing existed.
+ */
+async function modeledWseMethodToValidate(saved: readonly SavedWsePolygonMethodVersion[]): Promise<ModeledWseDerivationMethodConfig> {
+  if (process.argv.some((argument) => argument.startsWith('--modeled-wse-method='))) {
+    return requestedModeledWseDerivationMethod(process.argv);
+  }
+  const polygons = defaultMethodVersion(saved);
+  const builtFrom = await readSavedBuiltFromModeledWseVersion(waterSurfacePolygonsDirectory, polygons.methodId, polygons.version);
+  const defaultMethod = modeledWseDerivationMethodById(DEFAULT_MODELED_WSE_DERIVATION_METHOD_ID);
+  const channel = (await readSavedModeledWseVersion(stageDirectory('timeSeries'), defaultMethod.id, defaultMethod.version))
+    ?.channelFromModeledWseVersion;
+  const drawsDefaultMethod =
+    channel && builtFrom
+      ? channel.methodId === builtFrom.methodId && channel.version === builtFrom.version && channel.methodSha256 === builtFrom.methodSha256
+      : false;
+  return drawsDefaultMethod ? defaultMethod : CURRENT_MODELED_WSE_DERIVATION_METHOD;
+}
+
+/**
+ * A channel ribbon draws a value above its top rung at the top rung's width (its METHOD.md), so for those drawings a value above the
+ * ladder ceiling is a warning, not a failure. Every other check, and every check of the other drawings, gates.
+ */
+function gatingFailures(checks: readonly ValidationCheck[], browserDrawing: WsePolygonBrowserDrawing): ValidationCheck[] {
+  const drawsAboveCeiling = browserDrawing === 'channel-ribbon-depth' || browserDrawing === 'channel-ribbon-pool-filled';
+  return checks.filter(
+    (entry) => !entry.passed && !(drawsAboveCeiling && entry.check === MODELED_WSE_VALIDATION_CHECKS.valuesWithinLadder),
+  );
 }
 
 async function polygonSetFilesOf(versionDirectory: string): Promise<string[]> {
@@ -178,10 +221,11 @@ async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Pr
   let polygonSetFileCount = 0;
   for (const saved of savedVersions) {
     const checked = await validateMethodVersion(saved, timeSeriesDirectory, segmentIds, crossSections);
+    const passed = gatingFailures(checked.validation.checks, saved.method.browserDrawing).length === 0;
     if (saved === defaultVersion) {
       defaultValidation = checked.validation;
       polygonSetFileCount = checked.polygonSetFileCount;
-    } else if (!checked.validation.passed) {
+    } else if (!passed) {
       warnings.push(`WSE Polygon Generation Method ${saved.relativePath} fails validation; see validation-report.json.`);
     }
     methodVersions.push({
@@ -193,11 +237,11 @@ async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Pr
       path: saved.relativePath,
       completedAt: saved.completedAt,
       methodSha256: saved.method.methodSha256,
-      validationPassed: checked.validation.passed,
+      validationPassed: passed,
     });
     methodVersionReports.push({
       path: saved.relativePath,
-      passed: checked.validation.passed,
+      passed,
       waterSurfacePolygonSetFiles: checked.polygonSetFileCount,
       checks: checked.validation.checks,
     });
@@ -243,10 +287,11 @@ async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Pr
     wsePolygonGenerationMethods: { defaultPath: defaultVersion.relativePath, versions: methodVersions },
   };
   const { checks, valuesChecked } = validation;
+  const failed = gatingFailures(checks, defaultVersion.method.browserDrawing);
   // The top-level result is the default method's newest version, which the browser opens and the stage gates on.
   const validationReport = {
     segmentNetworkVersion: expectedVersion,
-    passed: validation.passed,
+    passed: failed.length === 0,
     wsePolygonGenerationMethodPath: defaultVersion.relativePath,
     creekSegments: segmentIds.length,
     timeSeriesFiles: timeSeries.reduce((sum, entry) => sum + entry.paths.length, 0),
@@ -260,7 +305,9 @@ async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Pr
   await writeReadableJson(catalogPath, catalog);
   await writeReadableJson(reportPath, validationReport);
 
-  const failed = checks.filter((entry) => !entry.passed);
+  for (const entry of checks.filter((check) => !check.passed && !failed.includes(check))) {
+    warnings.push(`${defaultVersion.relativePath}: ${entry.check} ${entry.violations} value(s), e.g. ${entry.examples[0]} Drawn at the top rung's width.`);
+  }
   if (failed.length > 0) {
     const details = failed.map((entry) => `- ${entry.check} ${entry.violations} violation(s), e.g. ${entry.examples[0]}`).join('\n');
     throw new Error(
@@ -293,7 +340,10 @@ async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Pr
 }
 
 await runStageEntryPoint(async () => {
-  const modeledWse = await requireSavedCurrentModeledWseVersion('05-catalog');
+  const modeledWse = await requireSavedModeledWseVersion(
+    '05-catalog',
+    await modeledWseMethodToValidate(await listSavedWsePolygonMethodVersions(waterSurfacePolygonsDirectory)),
+  );
   const timeSeriesDirectory = modeledWse.outputDirectory;
   const timeSeriesPaths = [...(await listTimeSeriesFiles(timeSeriesDirectory)).values()].flat();
   // Every saved method version is an input, so a new version or a rerun of one reruns this stage.
@@ -323,6 +373,7 @@ await runStageEntryPoint(async () => {
       derivations: CATALOG.datasets.map((dataset) => timeSeriesDerivation(publisherNameOf(dataset.publisherId), CATALOG.derivedBy)),
       checks: MODELED_WSE_VALIDATION_CHECKS,
       defaultWsePolygonGenerationMethodId: DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
+      defaultModeledWseDerivationMethodId: DEFAULT_MODELED_WSE_DERIVATION_METHOD_ID,
     },
     run: () => buildCatalogAndValidate(modeledWse),
   });

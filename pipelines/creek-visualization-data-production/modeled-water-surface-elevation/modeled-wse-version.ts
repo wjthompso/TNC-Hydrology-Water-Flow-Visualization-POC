@@ -10,6 +10,7 @@ import {
 import {
   modeledWseVersionLabel,
   modeledWseVersionRelativePath,
+  type ModeledWseDerivationMethodConfig,
   type RecordedModeledWseDerivationMethod,
 } from './modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
 import { readSavedModeledWseVersion } from './modeled-wse-derivation-methods/modeled-wse-derivation-method-outputs.ts';
@@ -65,12 +66,13 @@ async function refuseFlatLayout(stage: string): Promise<void> {
   }
 }
 
-async function currentVersionWithFingerprint(): Promise<CurrentModeledWseVersion> {
+async function currentVersionWithFingerprint(method: ModeledWseDerivationMethodConfig = config): Promise<CurrentModeledWseVersion> {
+  const relativePath = modeledWseVersionRelativePath(method.id, method.version);
   return {
-    method: await fingerprintModeledWseDerivationMethod(config),
-    versionLabel: CURRENT_MODELED_WSE_VERSION_LABEL,
-    relativePath: CURRENT_MODELED_WSE_VERSION_RELATIVE_PATH,
-    outputDirectory: currentModeledWseVersionDirectory(),
+    method: await fingerprintModeledWseDerivationMethod(method),
+    versionLabel: modeledWseVersionLabel(method),
+    relativePath,
+    outputDirectory: path.join(stageDirectory('timeSeries'), relativePath),
   };
 }
 
@@ -109,8 +111,16 @@ export async function refuseToOverwriteADifferentModeledWseVersion(stage: string
  * the code. Otherwise they would read Time Series made by other code than the stage believes.
  */
 export async function requireSavedCurrentModeledWseVersion(stage: string): Promise<CurrentModeledWseVersion> {
+  return requireSavedModeledWseVersion(stage, config);
+}
+
+/** `requireSavedCurrentModeledWseVersion` for a method chosen by the stage (Stage 5 reads the default pairing's Time Series). */
+export async function requireSavedModeledWseVersion(
+  stage: string,
+  method: ModeledWseDerivationMethodConfig,
+): Promise<CurrentModeledWseVersion> {
   await refuseFlatLayout(stage);
-  const current = await currentVersionWithFingerprint();
+  const current = await currentVersionWithFingerprint(method);
   const saved = await readSavedModeledWseVersion(stageDirectory('timeSeries'), current.method.id, current.method.version);
   if (!saved) {
     throw new Error(

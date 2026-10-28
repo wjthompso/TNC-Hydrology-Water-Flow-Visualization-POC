@@ -15,8 +15,12 @@ export const WSE_POLYGON_GENERATION_METHODS: readonly WsePolygonGenerationMethod
   FLOWLINE_CHANNEL_RIBBON_METHOD,
 ];
 
-/** Stage 4 runs this method without `--wse-polygon-method=`; the browser opens its newest version. */
-export const DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID = JUNCTION_SLOPED_TERRAIN_FILL_METHOD.id;
+/**
+ * Stage 4 runs this method without `--wse-polygon-method=`; the browser opens its newest version, and Stage 5 fails on that
+ * version. The channel ribbon replaced junction-sloped terrain fill on 2026-10-28: its v2 sits on the raw lidar bed and is drawn
+ * with the default Modeled WSE Derivation Method (`DEFAULT_MODELED_WSE_DERIVATION_METHOD_ID`, m5) through a channel pairing.
+ */
+export const DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID = FLOWLINE_CHANNEL_RIBBON_METHOD.id;
 
 export function wsePolygonGenerationMethodById(methodId: string): WsePolygonGenerationMethodConfig {
   const method = WSE_POLYGON_GENERATION_METHODS.find((candidate) => candidate.id === methodId);

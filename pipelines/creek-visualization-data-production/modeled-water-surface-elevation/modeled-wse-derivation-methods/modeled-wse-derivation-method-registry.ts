@@ -25,6 +25,15 @@ export const MODELED_WSE_DERIVATION_METHODS: readonly ModeledWseDerivationMethod
 export const CURRENT_MODELED_WSE_DERIVATION_METHOD: ModeledWseDerivationMethodConfig =
   M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD;
 
+/**
+ * The Time Series the browser draws when the URL names none, and the one Stage 5 validates the default WSE Polygon Generation
+ * Method's newest version against. m5's Jarrett (1984) roughness rises with slope, so steep-creek water runs slower and deeper
+ * than with m3's fixed Manning n. It is solved on m3 v2's channel, which `flowline-channel-ribbon` v2 was built on, so it is drawn
+ * on that ribbon through a channel pairing. An extent without it saved on the default polygons' channel keeps the polygons' own
+ * Time Series. This is not the method Stages 0–3 run (`CURRENT_MODELED_WSE_DERIVATION_METHOD`).
+ */
+export const DEFAULT_MODELED_WSE_DERIVATION_METHOD_ID = M5_FLOWLINE_PROFILE_JARRETT_DEPTH_METHOD.id;
+
 export function modeledWseDerivationMethodById(methodId: string): ModeledWseDerivationMethodConfig {
   const method = MODELED_WSE_DERIVATION_METHODS.find((candidate) => candidate.id === methodId);
   if (!method) {

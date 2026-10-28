@@ -127,6 +127,16 @@ function checkOneTncFlowlineFile(input: {
   return tncComid;
 }
 
+/**
+ * The bed a depth-layout method (m2–m5) solved on at the WSE Anchor Point, written per segment as `anchorBedElevationM`.
+ * It can differ from Stage 1's bed (m3 v2 and later use the raw lidar's lowest point), so their values are checked against it;
+ * m1 files have no such field and keep Stage 1's bed.
+ */
+function anchorBedOf(segment: WaterSurfaceElevationTimeSeriesFile['segments'][number]): number | undefined {
+  const anchorBed = (segment as { anchorBedElevationM?: unknown }).anchorBedElevationM;
+  return typeof anchorBed === 'number' ? anchorBed : undefined;
+}
+
 /** Returns the report; never throws for a violation. */
 export async function validateModeledWaterSurfaceElevationOutputs(inputs: {
   expectedSegmentNetworkVersion: string;
@@ -219,7 +229,7 @@ export async function validateModeledWaterSurfaceElevationOutputs(inputs: {
         if (values.length !== file.timestampsUtcMs.length) {
           report.fail(CHECKS.coversEverySegment, `${relativePath} ${segmentId} has ${values.length} values for ${file.timestampsUtcMs.length} timestamps.`);
         }
-        const bed = bedBySegmentId.get(segmentId);
+        const bed = anchorBedOf(segment) ?? bedBySegmentId.get(segmentId);
         const ceiling = ceilingBySegmentId.get(segmentId);
         if (bed === undefined) report.fail(CHECKS.valuesAtOrAboveBed, `${segmentId} has no Stage 1 bed elevation.`);
         if (ceiling === undefined) report.fail(CHECKS.valuesWithinLadder, `${segmentId} has no Stage 4 polygon ladder.`);
