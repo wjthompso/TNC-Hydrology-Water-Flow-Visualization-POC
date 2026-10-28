@@ -2,6 +2,10 @@
 
 This file is the canonical glossary. The [Linear Glossary](https://linear.app/ucsb-spatial-center/document/glossary-a3c56f69f036) is a synced copy. A term is added, renamed, or redefined only after explicit developer approval.
 
+## Anchor Water Depth
+
+The water depth above the creek bed at a Creek Segment's WSE Anchor Point: water-surface elevation (WSE) minus the anchor bed elevation, clamped at 0 (the `anchorDepthM` that `heldWaterDepthAt` computes). The Water-Surface Elevation Chart plots it, in feet by default or meters. The observed gauge segment's equivalent is its gauge height, shown as the feature service reports it with no datum added. An inferred neighbour segment shows its inferred WSE minus its own bed, which equals the gauge segment's observed water depth (UCS-301).
+
 ## Bank-overlap margin
 
 The small outward horizontal distance by which a prepared water-surface polygon is extended past the modeled waterline, so that the surrounding bank terrain depth-occludes the polygon's jagged 1 m rim. The margin is bounded by the Creek Segment corridor, so it cannot bleed into a neighbouring creek. Current value: 2 m. Implemented as an isotropic dilation of the wet mask before the water-surface polygon is traced, in `pipelines/creek-visualization-data-production/water-surface-polygon-generation.ts`, which Stage 4 of the modeled water-surface elevation pipeline uses to trace the polygons both observed and modeled water draw.
@@ -156,7 +160,7 @@ The absolute height of the water surface, expressed in NAVD88 (North American Ve
 
 ## Water-Surface Elevation Chart
 
-Short for Water-Surface Elevation Time Series Chart. A line chart of the Selected Creek Segment's water-surface elevation over time, from the active Dataset, with a time cursor at the selected time. Hovering reads the time and value under the pointer without changing the time; clicking a time moves the time slider there, so the map follows. Holding the button and dragging along the plot scrubs the selected time; a hover with the button up does not. For an hourly modeled Dataset it shows the water year that holds the selected time (UCS-279).
+Short for Water-Surface Elevation Time Series Chart. A line chart of the Selected Creek Segment's Anchor Water Depth over time (feet by default, with a meters switch), from the active Dataset, with a time cursor at the selected time. Hovering reads the time and value under the pointer without changing the time; clicking a time moves the time slider there, so the map follows. Holding the button and dragging along the plot scrubs the selected time; a hover with the button up does not. For an hourly modeled Dataset it shows the water year that holds the selected time (UCS-279).
 
 ## WSE Anchor Point
 

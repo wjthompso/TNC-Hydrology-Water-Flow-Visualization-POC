@@ -14,6 +14,14 @@
 // junction water-surface elevations the Time Series carry and cut the slope at
 // the same junction bisectors Stage 4 cut the polygons at.
 //
+// Anchor bed for m1 (UCS-301): Stage 3 of `m1-drainage-area-ratio-manning-rating-curve`
+// writes no `anchorBedElevationM`, but its WSE Anchor Point bed already exists:
+// the representative cross-section's thalweg, Stage 1's `segments[].bedElevationM`,
+// where Stage 2's rating-curve ladder starts and zero discharge lands. An m1
+// Time Series file is served with that bed added to each segment that lacks
+// one, so the Water-Surface Elevation Chart can plot Anchor Water Depth. A
+// segment Stage 1 has no record for keeps no bed.
+//
 // WSE Polygon Generation Methods: `wse-polygon-methods.json` lists every saved
 // method version of the extent (read from each version's Stage 4 manifest),
 // and each version folder gets its own computed flowline index at
@@ -53,6 +61,7 @@ import {
   DEFAULT_MODELED_WSE_DERIVATION_METHOD_ID,
   MODELED_WSE_DERIVATION_METHODS,
 } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
+import { M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD } from '../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 
 export const MODELED_WATER_DATA_URL_PREFIX = '/modeled-water-surface-elevation-data/';
 const FLOWLINE_INDEX_FILE = 'flowline-index.json';
@@ -121,8 +130,14 @@ interface CachedIndex {
   body: string;
 }
 
+interface CachedStageOneBeds {
+  fingerprint: string;
+  bedElevationMBySegmentId: Map<string, number>;
+}
+
 const indexCache = new Map<string, Promise<CachedIndex>>();
 const segmentPathsCache = new Map<string, Promise<CachedIndex>>();
+const stageOneBedsCache = new Map<string, Promise<CachedStageOneBeds>>();
 
 export function modeledWaterDataPlugin(): Plugin {
   return {
@@ -167,6 +182,13 @@ export function modeledWaterDataPlugin(): Plugin {
             }
             respondJson(response, paths.body);
             return;
+          }
+          if (isM1TimeSeriesFile(rest)) {
+            const body = await m1TimeSeriesWithAnchorBeds(extentRoot, rest);
+            if (body !== null) {
+              respondJson(response, body);
+              return;
+            }
           }
           const filePath =
             rest.length === 1 && rest[0] === REACH_CROSSWALK_FILE
@@ -494,6 +516,69 @@ export async function buildSegmentPaths(snapshotPath: string, crossSectionsPath:
       typeof crossSections.segmentNetworkVersion === 'string' ? crossSections.segmentNetworkVersion : null,
     segments,
   };
+}
+
+/** `03-time-series/m1-drainage-area-ratio-manning-rating-curve/v<version>/time-series/…/<file>.json`. */
+function isM1TimeSeriesFile(rest: readonly string[]): boolean {
+  return (
+    rest[0] === TIME_SERIES_STAGE_FOLDER &&
+    rest[1] === M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD.id &&
+    rest[3] === 'time-series' &&
+    rest[rest.length - 1]?.endsWith('.json') === true
+  );
+}
+
+/**
+ * The m1 Time Series file with each segment's WSE Anchor Point bed added as
+ * `anchorBedElevationM` (see the header). A bed the file already carries is
+ * kept. Null when the file or Stage 1 output is missing, so the caller answers 404.
+ */
+async function m1TimeSeriesWithAnchorBeds(extentRoot: string, rest: readonly string[]): Promise<string | null> {
+  const beds = await loadStageOneBeds(extentRoot);
+  if (!beds) return null;
+  let file: { segments?: unknown };
+  try {
+    file = JSON.parse(await readFile(path.join(extentRoot, ...rest), 'utf8')) as { segments?: unknown };
+  } catch {
+    return null;
+  }
+  for (const segment of (Array.isArray(file.segments) ? file.segments : []) as Record<string, unknown>[]) {
+    const existing = segment.anchorBedElevationM;
+    if (typeof existing === 'number' && Number.isFinite(existing)) continue;
+    const bedM = beds.get(String(segment.segmentId));
+    if (bedM !== undefined) segment.anchorBedElevationM = bedM;
+  }
+  return JSON.stringify(file);
+}
+
+/** Stage 1's representative bed per Creek Segment, rebuilt when `cross-sections.json` changes. */
+async function loadStageOneBeds(extentRoot: string): Promise<Map<string, number> | null> {
+  const crossSectionsPath = path.join(extentRoot, CROSS_SECTIONS_FILE);
+  let fingerprint: string;
+  try {
+    const fileStat = await stat(crossSectionsPath);
+    fingerprint = `${fileStat.size}:${fileStat.mtimeMs}`;
+  } catch {
+    return null;
+  }
+  const cached = await stageOneBedsCache.get(extentRoot)?.catch(() => null);
+  if (cached && cached.fingerprint === fingerprint) return cached.bedElevationMBySegmentId;
+  const building = readFile(crossSectionsPath, 'utf8').then((text) => {
+    const crossSections = JSON.parse(text) as { segments?: unknown };
+    const bedElevationMBySegmentId = new Map<string, number>();
+    for (const record of (Array.isArray(crossSections.segments) ? crossSections.segments : []) as {
+      segmentId?: unknown;
+      bedElevationM?: unknown;
+    }[]) {
+      const bedM = record.bedElevationM;
+      if (typeof record.segmentId === 'string' && typeof bedM === 'number' && Number.isFinite(bedM)) {
+        bedElevationMBySegmentId.set(record.segmentId, bedM);
+      }
+    }
+    return { fingerprint, bedElevationMBySegmentId };
+  });
+  stageOneBedsCache.set(extentRoot, building);
+  return (await building).bedElevationMBySegmentId;
 }
 
 /**

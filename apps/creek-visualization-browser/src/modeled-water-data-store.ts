@@ -58,7 +58,8 @@ export interface LoadedTimeSeries {
   /**
    * Creek-bed elevation under the segment's anchor cross-section, m NAVD88
    * (optional field `anchorBedElevationM`; written by depth-based modeled WSE
-   * methods such as `m2-multi-section-manning-depth`).
+   * methods such as `m2-multi-section-manning-depth`, and added to local m1
+   * files by the dev middleware from Stage 1's representative bed).
    */
   anchorBedElevationMBySegmentId: ReadonlyMap<string, number>;
   /**

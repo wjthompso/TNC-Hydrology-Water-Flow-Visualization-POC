@@ -3,6 +3,7 @@ import { createArcGISSceneRenderer, type WaterGraphicGeometryIdentity } from './
 import type { ElevationBucket, LoadedCreekVisualization } from './creek-data-contract';
 import { inferredWaterSegmentGeometry } from './inferred-water-segment-geometry';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
+import { FEET_TO_METERS, gaugeHeightFtFromWaterSurfaceElevationM } from './observed-gauge-readings';
 import {
   bindObservationTimelineControls,
   type PlaybackSpeedControl,
@@ -17,11 +18,19 @@ import {
   resolveSelectedTimeCreekState,
   type SegmentWaterPlacement,
 } from './selected-time-creek-state-resolver';
+import { anchorWaterDepthSeriesM } from './water-level-units';
 
-const OBSERVED_CHART_SOURCE_LABEL = 'Observed at USGS gauge 11120600, Jalama Creek near Lompoc (m NAVD88)';
+const OBSERVED_CHART_SOURCE_LABEL = 'Observed at USGS gauge 11120600, Jalama Creek near Lompoc (gauge height)';
 /** Inferred water is a guess made from the gauge; it is never labeled as measured. */
 const INFERRED_CHART_SOURCE_LABEL =
-  'Inferred from the USGS gauge 11120600 reading, not measured here: this segment\'s bed plus the gauge segment\'s water depth (m NAVD88)';
+  'Inferred from the USGS gauge 11120600 reading, not measured here: the gauge segment\'s water depth applied to this segment\'s bed';
+
+/** The gauge segment's chart shows the gauge height the feature service reports (feet, converted to meters). */
+function gaugeHeightSeriesM(waterSurfaceElevationM: readonly (number | null)[]): (number | null)[] {
+  return waterSurfaceElevationM.map((wseM) =>
+    wseM === null ? null : gaugeHeightFtFromWaterSurfaceElevationM(wseM) * FEET_TO_METERS,
+  );
+}
 
 export interface AttachCreekVisualizationOptions {
   data: LoadedCreekVisualization;
@@ -83,6 +92,7 @@ export function attachCreekVisualization(
   };
 
   const pinnedBySegmentId = new Map<string, number>();
+  const chartDepthBySourceSeries = new WeakMap<readonly (number | null)[], readonly (number | null)[]>();
   let selectedCreekSegmentChart: SelectedCreekSegmentChart | null = null;
 
   const renderer = createArcGISSceneRenderer(
@@ -154,16 +164,28 @@ export function attachCreekVisualization(
       waterGraphics: renderer,
       chartElements,
       chartContentForSegment: (segmentId) => {
-        const observedValuesM = options.data.waterSurfaceElevationMBySegmentId.get(segmentId);
-        const inferredValuesM = options.data.propagation?.inferredWaterSurfaceElevationMBySegmentId.get(segmentId);
-        const valuesM = observedValuesM ?? inferredValuesM;
-        if (!valuesM) return { emptyText: `No observed readings for Creek Segment ${segmentId}.` };
+        const observedWseM = options.data.waterSurfaceElevationMBySegmentId.get(segmentId);
+        const inferredWseM = options.data.propagation?.inferredWaterSurfaceElevationMBySegmentId.get(segmentId);
+        const wseM = observedWseM ?? inferredWseM;
+        if (!wseM) return { emptyText: `No observed readings for Creek Segment ${segmentId}.` };
+        // The chart redraws only when the arrays change, so each source array maps to one depth array.
+        let depthM = chartDepthBySourceSeries.get(wseM);
+        if (!depthM) {
+          if (observedWseM) {
+            depthM = gaugeHeightSeriesM(observedWseM);
+          } else {
+            const bedElevationM = options.data.propagation?.nodesById.get(segmentId)?.bedElevationM;
+            if (bedElevationM === undefined) return { emptyText: `No bed elevation for Creek Segment ${segmentId}.` };
+            depthM = anchorWaterDepthSeriesM(wseM, bedElevationM);
+          }
+          chartDepthBySourceSeries.set(wseM, depthM);
+        }
         return {
           series: {
             segmentId,
-            sourceLabel: observedValuesM ? OBSERVED_CHART_SOURCE_LABEL : INFERRED_CHART_SOURCE_LABEL,
+            sourceLabel: observedWseM ? OBSERVED_CHART_SOURCE_LABEL : INFERRED_CHART_SOURCE_LABEL,
             timestampsUtcMs: options.data.timestampsUtcMs,
-            valuesM,
+            depthM,
           },
         };
       },

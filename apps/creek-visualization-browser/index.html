@@ -214,7 +214,7 @@
         >
           <div class="relative mb-1 flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <h2 id="wse-chart-title" class="text-base font-medium leading-snug text-slate-200">Water level (water-surface elevation, WSE)</h2>
+              <h2 id="wse-chart-title" class="text-base font-medium leading-snug text-slate-200">Water depth</h2>
               <span id="wse-chart-segment" class="text-sm text-amber-300"></span>
             </div>
             <!--
@@ -243,32 +243,32 @@
             id="water-level-unit-toggle"
             class="mt-2 grid grid-cols-2 gap-1"
             role="group"
-            aria-label="Water level unit"
+            aria-label="Water depth unit"
           >
             <button
               type="button"
-              data-water-level-unit="wse-navd88-m"
+              data-water-level-unit="ft"
               aria-pressed="true"
-              title="Water-surface elevation (WSE) in meters above the NAVD88 vertical datum."
+              title="Show Anchor Water Depth in feet."
               class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
-              WSE (m NAVD88)
+              ft
             </button>
             <button
               type="button"
-              data-water-level-unit="wse-navd88-ft"
+              data-water-level-unit="m"
               aria-pressed="false"
-              title="Water-surface elevation (WSE) in feet above the NAVD88 vertical datum."
+              title="Show Anchor Water Depth in meters."
               class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
-              WSE (ft NAVD88)
+              m
             </button>
           </div>
           <div
             id="wse-chart-plot"
             class="mt-2 hidden h-48 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
             role="img"
-            aria-label="Water-surface elevation over time for the selected Creek Segment. Click a time to select it, or drag left or right to scrub."
+            aria-label="Water depth over time for the selected Creek Segment. Click a time to select it, or drag left or right to scrub."
           ></div>
           <div
             id="wse-chart-overview"

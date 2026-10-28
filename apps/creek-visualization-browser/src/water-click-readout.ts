@@ -942,7 +942,7 @@ function describeAnchorPosition(segment: WaterClickReadout['segment']): string {
 
 function formatLength(valueM: number | null, unit: WaterLevelUnit): string {
   if (valueM === null) return NOT_AVAILABLE;
-  return unit === 'wse-navd88-m' ? `${valueM.toFixed(3)} m` : `${toWaterLevelUnit(valueM, unit).toFixed(2)} ft`;
+  return unit === 'm' ? `${valueM.toFixed(3)} m` : `${toWaterLevelUnit(valueM, unit).toFixed(2)} ft`;
 }
 
 function formatSigned(valueM: number | null, unit: WaterLevelUnit): string {

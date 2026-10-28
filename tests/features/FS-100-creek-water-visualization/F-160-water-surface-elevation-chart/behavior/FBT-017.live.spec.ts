@@ -22,8 +22,12 @@ import {
   topDownPoseOverBucket,
 } from '../../F-150-selected-creek-segment/behavior/selected-creek-segment-page.ts';
 
+/** Published gauge datum for Jalama Near Lompoc, feet NAVD88 (glossary: Gauge datum). */
+const GAUGE_DATUM_FT = 83.34;
+const METERS_PER_FOOT = 0.3048;
+
 /** Methodology: see the FBT-017 catalog entry. */
-test('Hovering over the chart shows the time and elevation under the pointer without moving the time slider.', async ({
+test('Hovering over the chart shows the time and water depth under the pointer without moving the time slider.', async ({
   page,
 }) => {
   const watch = watchLiveServices(page);
@@ -42,7 +46,7 @@ test('Hovering over the chart shows the time and elevation under the pointer wit
     await clickSegmentWater(page, { segmentId: GAUGE_SEGMENT_ID, bucket });
     await expect.poll(async () => (await readSelection(page)).chartPointCount).toBeGreaterThan(0);
 
-    // Hover the chart at the 2026-01-03T15:15Z flood peak. The readout shows the time and elevation under the pointer.
+    // Hover the chart at the 2026-01-03T15:15Z flood peak. The readout shows the time and the gauge height (feet, the chart's default unit) under the pointer.
     const sliderBefore = await readTimeSlider(page);
     const identityBefore = (await readSeam(page)).waterGraphicGeometryIdentity;
     const target = await chartPointFor(page, floodPeakObservation().timeUtcMs);
@@ -52,8 +56,10 @@ test('Hovering over the chart shows the time and elevation under the pointer wit
     const hoverTimeUtcMs = (await readSelection(page)).chartHoverTimeUtcMs as number;
     const hoverReading = readingAt(hoverTimeUtcMs);
     expect(hoverReading, 'the hovered time has a committed gauge reading').not.toBeNull();
+    // The gauge segment's chart shows the gauge height: the committed elevation minus the gauge datum, in feet.
+    const hoverGaugeHeightFt = (hoverReading as number) / METERS_PER_FOOT - GAUGE_DATUM_FT;
     await expect(page.locator('#wse-chart-hover')).toHaveText(
-      `${formatPacificTime(hoverTimeUtcMs)} · ${(hoverReading as number).toFixed(2)} m`,
+      `${formatPacificTime(hoverTimeUtcMs)} · ${hoverGaugeHeightFt.toFixed(2)} ft`,
     );
 
     // Hold the pointer still briefly so a delayed time change would show.

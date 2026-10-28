@@ -1361,7 +1361,7 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
   const refresh = (): void => {
     if (!open) return;
     unit = readWaterLevelUnit();
-    unitToggle.setPressed(unit === 'wse-navd88-m' ? 0 : 1);
+    unitToggle.setPressed(unit === 'm' ? 0 : 1);
     refreshMarker();
     refreshReadout();
   };
@@ -1373,8 +1373,8 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
     else saveWaterLevelUnit(next);
     refresh();
   };
-  unitToggle.buttons[0].addEventListener('click', () => chooseUnit('wse-navd88-m'));
-  unitToggle.buttons[1].addEventListener('click', () => chooseUnit('wse-navd88-ft'));
+  unitToggle.buttons[0].addEventListener('click', () => chooseUnit('m'));
+  unitToggle.buttons[1].addEventListener('click', () => chooseUnit('ft'));
   copyButton.addEventListener('click', () => {
     if (latestReadout) options.copyJson(JSON.stringify(latestReadout, null, 2));
   });
