@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { modeledWseVersionRelativePath } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method.ts';
 import { CURRENT_MODELED_WSE_DERIVATION_METHOD } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/modeled-wse-derivation-method-registry.ts';
+import { M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD } from '../../../../../pipelines/creek-visualization-data-production/modeled-water-surface-elevation/modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { utm10nToWgs84 } from '../../../../../pipelines/creek-visualization-data-production/utm-geometry.ts';
 
 export const JALAMA_EXTENT_ID = 'jalama-gauge-reach';
@@ -171,6 +172,33 @@ export function readWaterSurfaceElevationsAt(input: {
   const slot = file.timestampsUtcMs.indexOf(input.timeUtcMs);
   if (slot < 0) return null;
   return new Map(file.segments.map((segment) => [segment.segmentId, segment.values[slot] ?? null]));
+}
+
+/**
+ * The bed elevation (m NAVD88) at a Creek Segment's WSE Anchor Point: the Stage 3 file's
+ * `anchorBedElevationM`, or for m1, which never writes it, Stage 1's representative bed
+ * (the thalweg its rating curve starts at). Null when neither has one.
+ */
+export function readAnchorBedElevationM(input: {
+  extentId: string;
+  datasetId: string;
+  comid: string;
+  timeUtcMs: number;
+  segmentId: string;
+}): number | null {
+  const file = JSON.parse(
+    readFileSync(
+      path.join(
+        localPipelineOutputDirectory(input.extentId),
+        hourlyTimeSeriesRelativePath(input.datasetId, input.comid, input.timeUtcMs),
+      ),
+      'utf8',
+    ),
+  ) as { segments: { segmentId: string; anchorBedElevationM?: number | null }[] };
+  const bedM = file.segments.find((segment) => segment.segmentId === input.segmentId)?.anchorBedElevationM;
+  if (typeof bedM === 'number' && Number.isFinite(bedM)) return bedM;
+  if (CURRENT_MODELED_WSE_DERIVATION_METHOD.id !== M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD.id) return null;
+  return readCrossSections(input.extentId).bySegmentId.get(input.segmentId)?.bedElevationM ?? null;
 }
 
 // ---------------------------------------------------------------------------

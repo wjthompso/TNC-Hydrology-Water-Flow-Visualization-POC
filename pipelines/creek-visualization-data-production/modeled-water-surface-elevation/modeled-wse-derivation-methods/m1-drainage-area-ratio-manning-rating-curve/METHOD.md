@@ -119,7 +119,7 @@ Every segment's Time Series carries `junctionWseUpstreamM` and `junctionWseDowns
 
 ## Output
 
-Stage 3 writes one WSE Time Series per Dataset and TNC flowline to `03-time-series/m1-drainage-area-ratio-manning-rating-curve/v<version>/time-series/<datasetId>/water-surface-elevation/…` (see [File layout](../../METHODOLOGY.md#file-layout)). The Stage 3 manifest records this method's fingerprint (`methodSha256`); a stage stops instead of overwriting a saved version whose code or parameters changed ([Version bump rule](../../METHODOLOGY.md#version-bump-rule)). Each Creek Segment carries `values`, `junctionWseUpstreamM`, `junctionWseDownstreamM`, and, on transfer segments only, `drainageAreaRatioTransfer: true`.
+Stage 3 writes one WSE Time Series per Dataset and TNC flowline to `03-time-series/m1-drainage-area-ratio-manning-rating-curve/v<version>/time-series/<datasetId>/water-surface-elevation/…` (see [File layout](../../METHODOLOGY.md#file-layout)). The Stage 3 manifest records this method's fingerprint (`methodSha256`); a stage stops instead of overwriting a saved version whose code or parameters changed ([Version bump rule](../../METHODOLOGY.md#version-bump-rule)). Each Creek Segment carries `values`, `junctionWseUpstreamM`, `junctionWseDownstreamM`, and, on transfer segments only, `drainageAreaRatioTransfer: true`. The files carry no `anchorBedElevationM`. The WSE Anchor Point bed is Stage 1's `segments[].bedElevationM`, the representative section's thalweg, where the Stage 2 ladder starts. The browser's development middleware adds that bed to each served m1 Time Series segment so the Water-Surface Elevation Chart can plot Anchor Water Depth (UCS-301).
 
 ## Version history
 

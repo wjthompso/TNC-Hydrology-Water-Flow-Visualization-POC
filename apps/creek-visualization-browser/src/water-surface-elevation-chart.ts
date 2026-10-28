@@ -1,5 +1,5 @@
-// Water-Surface Elevation Chart (UCS-279): one Creek Segment's water-surface
-// elevation over time, drawn as a dependency-free SVG line, with a time cursor
+// Water-Surface Elevation Chart (UCS-279): one Creek Segment's Anchor Water
+// Depth over time (UCS-301), drawn as a dependency-free SVG line, with a time cursor
 // at the selected time. Hovering reads the value under the pointer without
 // changing the time. Clicking selects the time of the nearest reading, which
 // the caller passes to the time slider so the map follows.
@@ -7,7 +7,7 @@
 // A range slider under the chart (Plotly style) zooms the time axis: it shows
 // the whole record in miniature with the zoom window outlined. Drag a window
 // edge to resize it, drag inside it to pan, or drag outside it to brush a new
-// window. The elevation axis rescales to the readings inside the window, so a
+// window. The depth axis rescales to the readings inside the window, so a
 // short outlier fills the chart. Double-click the chart or press Reset zoom to
 // show the whole record again.
 //
@@ -17,10 +17,10 @@
 
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { formatObservationTime } from './observation-timeline-controls';
-import { formatWaterLevel, type WaterLevelUnit } from './water-level-units';
+import { DEFAULT_WATER_LEVEL_UNIT, formatWaterLevel, type WaterLevelUnit } from './water-level-units';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-/** Room for the elevation labels on the left and the date labels below. */
+/** Room for the depth labels on the left and the date labels below. */
 /**
  * `top` leaves a headroom band above the highest reading for the blue value
  * tag on the time cursor, so the tag never covers the line or its peak.
@@ -50,7 +50,7 @@ const BAND_HEADROOM_M = 0.05;
 /** A zone label is drawn only when its zone is at least this tall (px). */
 const BAND_LABEL_MIN_HEIGHT = 14;
 
-const NO_SELECTION_TEXT = 'Click creek water on the map to see its water-surface elevation over time.';
+const NO_SELECTION_TEXT = 'Click creek water on the map to see its water depth over time.';
 /** Full instructions live in the chart's info tip (index.html); this is the short idle prompt. */
 const HOVER_HINT_TEXT = 'Hover the chart to read a value.';
 
@@ -75,8 +75,8 @@ export interface WaterSurfaceElevationSeries {
   /** Where the values come from, such as "Observed at USGS gauge 11120600". */
   sourceLabel: string;
   timestampsUtcMs: readonly number[];
-  /** Meters NAVD88, parallel to `timestampsUtcMs`. Null is a missing reading. */
-  valuesM: readonly (number | null)[];
+  /** Water depth in meters (Anchor Water Depth), parallel to `timestampsUtcMs`. Null is a missing reading. */
+  depthM: readonly (number | null)[];
 }
 
 /**
@@ -87,14 +87,17 @@ export interface WaterSurfaceElevationSeries {
 export interface WaterSurfaceConditionBands {
   /** Names the zones for the chart's label, such as "Adults". */
   stageLabel: string;
-  /** Bed elevation, m NAVD88, that turns depths into the chart's water-surface elevations. */
-  bedElevationM: number;
+  /**
+   * The charted value (m) that means zero depth over the bed. It is 0 for a chart of depth above the
+   * bed, and above 0 for the observed gauge segment, whose gauge height reads from the gauge datum.
+   */
+  zeroDepthChartValueM: number;
   marginalFromDepthM: number;
   suitableFromDepthM: number;
   /** True for times the zones do not apply to; the chart hatches them. */
   isOutOfSeason(timeUtcMs: number): boolean;
-  /** Short class text for a reading, appended to the hover readout; empty for none. */
-  describe(waterSurfaceElevationM: number, timeUtcMs: number): string;
+  /** Short class text for a charted reading, appended to the hover readout; empty for none. */
+  describe(chartValueM: number, timeUtcMs: number): string;
 }
 
 export interface WaterSurfaceElevationChartElements {
@@ -128,7 +131,7 @@ export interface WaterSurfaceElevationChartState {
   readonly cursorTimeUtcMs: number | null;
   /** Time of the reading under the pointer; null when the pointer is not over the chart. */
   readonly hoverTimeUtcMs: number | null;
-  /** The reading the selected time resolves to, m NAVD88; null when the selected time has none. */
+  /** The reading the selected time resolves to, m depth; null when the selected time has none. */
   readonly selectedValueM: number | null;
   readonly unit: WaterLevelUnit;
   /** Stage label of the condition bands drawn now; null when none are drawn. */
@@ -163,7 +166,7 @@ function heldReadingIndex(series: PreparedSeries, timeUtcMs: number): number {
   if (index >= timestamps.length || timestamps[index] > timeUtcMs) index -= 1;
   if (index < 0) return -1;
   if (timeUtcMs - timestamps[index] > series.stepMs * 1.5) return -1;
-  return isFiniteNumber(series.valuesM[index]) ? index : -1;
+  return isFiniteNumber(series.depthM[index]) ? index : -1;
 }
 
 interface PreparedSeries extends WaterSurfaceElevationSeries {
@@ -200,7 +203,7 @@ type OverviewDrag =
 export function createWaterSurfaceElevationChart(
   elements: WaterSurfaceElevationChartElements,
   onSelectTime: (timeUtcMs: number) => void,
-  initialUnit: WaterLevelUnit = 'wse-navd88-m',
+  initialUnit: WaterLevelUnit = DEFAULT_WATER_LEVEL_UNIT,
   lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): WaterSurfaceElevationChart {
   const listening = { signal: lifetime.signal };
@@ -310,7 +313,7 @@ export function createWaterSurfaceElevationChart(
     if (!series) return null;
     const index = nearestFiniteIndex(series, timeUtcMs);
     if (index < 0) return null;
-    return { timeUtcMs: series.timestampsUtcMs[index], valueM: series.valuesM[index] as number };
+    return { timeUtcMs: series.timestampsUtcMs[index], valueM: series.depthM[index] as number };
   };
 
   // --- Zoom window -----------------------------------------------------------
@@ -367,7 +370,7 @@ export function createWaterSurfaceElevationChart(
   const selectedValueM = (): number | null => {
     if (!series || selectedTimeUtcMs === null) return null;
     const index = heldReadingIndex(series, selectedTimeUtcMs);
-    return index < 0 ? null : (series.valuesM[index] as number);
+    return index < 0 ? null : (series.depthM[index] as number);
   };
 
   /** Time and value under the chart; always shown while a series is loaded, zoomed or not. */
@@ -450,7 +453,7 @@ export function createWaterSurfaceElevationChart(
     hoverDot.setAttribute('visibility', 'visible');
     const parts = [formatObservationTime(reading.timeUtcMs), formatWaterLevel(reading.valueM, unit)];
     if (conditionBands) {
-      parts.push(`depth ${formatWaterLevel(reading.valueM - conditionBands.bedElevationM, unit)}`);
+      parts.push(`depth over bed ${formatWaterLevel(reading.valueM - conditionBands.zeroDepthChartValueM, unit)}`);
       const condition = conditionBands.describe(reading.valueM, reading.timeUtcMs);
       if (condition) parts.push(condition);
     }
@@ -717,7 +720,7 @@ export function createWaterSurfaceElevationChart(
   const setSeries = (next: WaterSurfaceElevationSeries | null, emptyText = NO_SELECTION_TEXT): void => {
     const previous = series;
     series = next ? prepareSeries(next) : null;
-    if (next && !series) emptyText = `No water-surface elevation readings for Creek Segment ${next.segmentId}.`;
+    if (next && !series) emptyText = `No water depth readings for Creek Segment ${next.segmentId}.`;
     // A new segment or a different record resets the zoom; a reload of the same record keeps it.
     const sameRecord =
       previous !== null &&
@@ -838,7 +841,7 @@ function formatWindowEdge(timeUtcMs: number, window: TimeWindow): string {
 function prepareSeries(series: WaterSurfaceElevationSeries): PreparedSeries | null {
   let minM = Number.POSITIVE_INFINITY;
   let maxM = Number.NEGATIVE_INFINITY;
-  for (const value of series.valuesM) {
+  for (const value of series.depthM) {
     if (!isFiniteNumber(value)) continue;
     minM = Math.min(minM, value);
     maxM = Math.max(maxM, value);
@@ -885,7 +888,7 @@ function valueRangeIn(series: PreparedSeries, window: TimeWindow): ValueRange | 
   let maxM = Number.NEGATIVE_INFINITY;
   for (let index = lowerBound(timestamps, window.startUtcMs); index < timestamps.length; index += 1) {
     if (timestamps[index] > window.endUtcMs) break;
-    const value = series.valuesM[index];
+    const value = series.depthM[index];
     if (!isFiniteNumber(value)) continue;
     minM = Math.min(minM, value);
     maxM = Math.max(maxM, value);
@@ -921,7 +924,7 @@ function linePath(
   for (let index = lowerBound(timestamps, window.startUtcMs); index < timestamps.length; index += 1) {
     const timeUtcMs = timestamps[index];
     if (timeUtcMs > window.endUtcMs) break;
-    const value = series.valuesM[index];
+    const value = series.depthM[index];
     if (!isFiniteNumber(value)) {
       pendingBreak = true;
       continue;
@@ -995,8 +998,8 @@ function axisElements(
 /** Widens the range to the bed and to just past the green edge. */
 function rangeIncludingBands(range: ValueRange, bands: WaterSurfaceConditionBands): ValueRange {
   return {
-    minM: Math.min(range.minM, bands.bedElevationM),
-    maxM: Math.max(range.maxM, bands.bedElevationM + bands.suitableFromDepthM + BAND_HEADROOM_M),
+    minM: Math.min(range.minM, bands.zeroDepthChartValueM),
+    maxM: Math.max(range.maxM, bands.zeroDepthChartValueM + bands.suitableFromDepthM + BAND_HEADROOM_M),
   };
 }
 
@@ -1010,8 +1013,8 @@ function bandElements(
   const left = PLOT_INSET.left;
   const top = PLOT_INSET.top;
   const bottom = top + frame.plotHeight;
-  const marginalEdgeY = clamp(yForValue(bands.bedElevationM + bands.marginalFromDepthM), top, bottom);
-  const suitableEdgeY = clamp(yForValue(bands.bedElevationM + bands.suitableFromDepthM), top, bottom);
+  const marginalEdgeY = clamp(yForValue(bands.zeroDepthChartValueM + bands.marginalFromDepthM), top, bottom);
+  const suitableEdgeY = clamp(yForValue(bands.zeroDepthChartValueM + bands.suitableFromDepthM), top, bottom);
   const zones = [
     { label: 'Suitable', from: top, to: suitableEdgeY, class: 'fill-green-500/20' },
     { label: 'Marginal', from: suitableEdgeY, to: marginalEdgeY, class: 'fill-yellow-400/20' },
@@ -1112,8 +1115,8 @@ function nearestFiniteIndex(series: PreparedSeries, timeUtcMs: number): number {
   let before = low - 1;
   let after = low;
   while (before >= 0 || after < timestamps.length) {
-    const beforeOk = before >= 0 && isFiniteNumber(series.valuesM[before]);
-    const afterOk = after < timestamps.length && isFiniteNumber(series.valuesM[after]);
+    const beforeOk = before >= 0 && isFiniteNumber(series.depthM[before]);
+    const afterOk = after < timestamps.length && isFiniteNumber(series.depthM[after]);
     if (beforeOk && afterOk) {
       return timeUtcMs - timestamps[before] <= timestamps[after] - timeUtcMs ? before : after;
     }

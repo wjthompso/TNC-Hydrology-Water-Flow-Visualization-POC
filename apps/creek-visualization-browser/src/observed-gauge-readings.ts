@@ -49,6 +49,15 @@ export function waterSurfaceElevationMFromGaugeHeightFt(gaugeHeightFt: number): 
   return Number(((gaugeHeightFt + GAUGE_DATUM_FT) * FEET_TO_METERS).toFixed(3));
 }
 
+/**
+ * The gauge height (feet) that produced a published water-surface elevation:
+ * the inverse of `waterSurfaceElevationMFromGaugeHeightFt`. Differs from the
+ * original reading by at most the 3-decimal rounding of the meters (0.0016 ft).
+ */
+export function gaugeHeightFtFromWaterSurfaceElevationM(waterSurfaceElevationM: number): number {
+  return waterSurfaceElevationM / FEET_TO_METERS - GAUGE_DATUM_FT;
+}
+
 export function readApprovalStatus(value: unknown): ObservedApprovalStatus | null {
   return value === 'Provisional' || value === 'Approved' ? value : null;
 }

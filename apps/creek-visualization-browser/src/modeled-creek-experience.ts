@@ -62,6 +62,7 @@ import {
   type LoadedFlowline,
   type LoadedTimeSeries,
 } from './modeled-water-data-store';
+import { anchorWaterDepthSeriesM } from './water-level-units';
 import { createModeledWaterSceneRenderer } from './modeled-water-scene-renderer';
 import { buildModeledSegmentInspection, type ModeledSegmentInspection } from './modeled-segment-inspection';
 import { modeledDataSource } from './modeled-data-source';
@@ -759,25 +760,38 @@ export async function startModeledCreekExperience(
     lifetime,
   );
 
+  /** One depth array per loaded WSE array, so the chart sees the same content until a new file lands. */
+  const anchorWaterDepthByWseSeries = new WeakMap<readonly (number | null)[], readonly (number | null)[]>();
+
   /**
    * The chart shows the Time Series file that covers the selected time: the
    * water year for hourly Datasets, the whole record otherwise. Only that file
-   * is in memory, so a click on the chart always lands on a loaded value.
+   * is in memory, so a click on the chart always lands on a loaded value. It
+   * charts Anchor Water Depth: the file's WSE minus the segment's anchor bed.
    */
   const chartContentForSegment = (segmentId: string): SegmentChartContent => {
     const tncComid = segmentId.split('-')[0];
     const series = store.seriesAt(tncComid, state.selectedTimeUtcMs);
-    if (!series) return { emptyText: `Loading modeled water-surface elevation for Creek Segment ${segmentId}…` };
-    const valuesM = series.valuesBySegmentId.get(segmentId);
-    if (!valuesM) return { emptyText: `${datasetLabel} has no values for Creek Segment ${segmentId}.` };
+    if (!series) return { emptyText: `Loading modeled water depth for Creek Segment ${segmentId}…` };
+    const wseM = series.valuesBySegmentId.get(segmentId);
+    if (!wseM) return { emptyText: `${datasetLabel} has no values for Creek Segment ${segmentId}.` };
+    const anchorBedElevationM = series.anchorBedElevationMBySegmentId.get(segmentId);
+    if (anchorBedElevationM === undefined) {
+      return { emptyText: `No anchor bed elevation for Creek Segment ${segmentId}.` };
+    }
+    let depthM = anchorWaterDepthByWseSeries.get(wseM);
+    if (!depthM) {
+      depthM = anchorWaterDepthSeriesM(wseM, anchorBedElevationM);
+      anchorWaterDepthByWseSeries.set(wseM, depthM);
+    }
     const coverage =
       selected.dataset.timeStep === 'hourly' ? `, water year ${waterYearOf(state.selectedTimeUtcMs)}` : '';
     return {
       series: {
         segmentId,
-        sourceLabel: `Modeled, ${datasetLabel}${coverage} (m NAVD88)`,
+        sourceLabel: `Modeled, ${datasetLabel}${coverage}`,
         timestampsUtcMs: series.timestampsUtcMs,
-        valuesM,
+        depthM,
       },
     };
   };

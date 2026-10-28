@@ -271,8 +271,9 @@
         >
           <div class="relative mb-1 flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <h2 id="wse-chart-title" class="text-base font-medium leading-snug text-slate-200">Water level (water-surface elevation, WSE)</h2>
-              <span id="wse-chart-segment" class="text-sm text-amber-300"></span>
+              <h2 id="wse-chart-title" class="text-base font-medium leading-snug text-slate-200">Water depth</h2>
+              <!-- min-h-5 keeps the label's line, so the panel does not grow when a segment is picked. -->
+              <span id="wse-chart-segment" class="block min-h-5 text-sm text-amber-300"></span>
             </div>
             <!--
               The data source and the chart instructions sit in the info tip, so the
@@ -300,40 +301,73 @@
             id="water-level-unit-toggle"
             class="mt-2 grid grid-cols-2 gap-1"
             role="group"
-            aria-label="Water level unit"
+            aria-label="Water depth unit"
           >
             <button
               type="button"
-              data-water-level-unit="wse-navd88-m"
+              data-water-level-unit="ft"
               aria-pressed="true"
-              title="Water-surface elevation (WSE) in meters above the NAVD88 vertical datum."
+              title="Show Anchor Water Depth in feet."
               class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
-              WSE (m NAVD88)
+              ft
             </button>
             <button
               type="button"
-              data-water-level-unit="wse-navd88-ft"
+              data-water-level-unit="m"
               aria-pressed="false"
-              title="Water-surface elevation (WSE) in feet above the NAVD88 vertical datum."
+              title="Show Anchor Water Depth in meters."
               class="cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-200 aria-pressed:bg-cyan-400 aria-pressed:text-slate-950 aria-pressed:hover:bg-cyan-300"
             >
-              WSE (ft NAVD88)
+              m
             </button>
           </div>
-          <div
-            id="wse-chart-plot"
-            class="mt-2 hidden h-48 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
-            role="img"
-            aria-label="Water-surface elevation over time for the selected Creek Segment. Click a time to select it, or drag left or right to scrub."
-          ></div>
+          <!--
+            The plot, range slider, and zoom row are always on screen, so the panel never changes height:
+            they show values when a Creek Segment is selected, and a grayed empty state when it is not.
+            The empty state (water-surface-elevation-chart.ts fills the axes; the creek, arrow, and text
+            are here) sits over the plot. Its message element is wse-chart-empty, which also carries
+            "no readings" and "no bed" messages; the creek and arrow show only while nothing is selected.
+          -->
+          <div class="relative mt-2">
+            <div
+              id="wse-chart-plot"
+              class="h-48 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/60"
+              role="img"
+              aria-label="Water depth over time for the selected Creek Segment. Click a time to select it, or drag left or right to scrub."
+            ></div>
+            <div
+              id="wse-chart-empty-state"
+              data-awaiting-selection="true"
+              class="group pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-md bg-slate-700/40 px-4 text-center"
+            >
+              <p id="wse-chart-empty" role="status" class="max-w-[15rem] text-balance text-sm font-medium leading-snug text-slate-100"></p>
+              <div aria-hidden="true" class="flex flex-col items-center group-data-[awaiting-selection=false]:hidden">
+                <!-- The arrow bounces up and down toward the creek; reduced motion keeps it still. -->
+                <span class="text-cyan-300 motion-safe:animate-bounce">
+                  <svg viewBox="0 0 24 28" class="h-6 w-6 fill-none stroke-current" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3v20M4.5 15.5 12 24l7.5-8.5" />
+                  </svg>
+                </span>
+                <!--
+                  Water waves: three identical rows of the same sine wave (two wavelengths), all spanning x=5 to x=53,
+                  centered in the 64-unit box with room for the round caps. The middle row is the lighter cyan.
+                -->
+                <svg viewBox="0 0 64 40" class="mt-1 h-10 w-16 overflow-visible fill-none stroke-cyan-400" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 8q6-7 12 0t12 0t12 0t12 0" />
+                  <path d="M5 20q6-7 12 0t12 0t12 0t12 0" class="stroke-cyan-300" />
+                  <path d="M5 32q6-7 12 0t12 0t12 0t12 0" />
+                </svg>
+              </div>
+            </div>
+          </div>
           <div
             id="wse-chart-overview"
-            class="mt-1 hidden h-10 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/40"
+            class="mt-1 h-10 w-full cursor-crosshair touch-none select-none rounded-md bg-slate-950/40"
             role="group"
             aria-label="Zoom range. Drag a handle to resize, drag inside to pan, or drag outside to pick a new range. Double-click to show the whole record."
           ></div>
-          <div id="wse-chart-zoom-row" class="mt-1 hidden items-center justify-between gap-2 [&:not(.hidden)]:flex">
+          <div id="wse-chart-zoom-row" class="mt-1 flex items-center justify-between gap-2">
             <span id="wse-chart-zoom-readout" class="truncate text-sm text-slate-400"></span>
             <button
               id="wse-chart-reset-zoom"
@@ -344,7 +378,6 @@
             </button>
           </div>
           <p id="wse-chart-hover" class="mt-1 min-h-5 text-sm text-slate-400"></p>
-          <p id="wse-chart-empty" class="text-sm leading-relaxed text-slate-400"></p>
         </section>
 
         <section id="modeled-panel" class="pointer-events-auto mb-4 hidden border-t border-slate-700 pt-3">

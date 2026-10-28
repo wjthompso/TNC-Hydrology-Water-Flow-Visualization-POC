@@ -80,8 +80,8 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
 }
 
 /**
- * Binds the WSE (m NAVD88) / WSE (ft NAVD88) buttons. The choice is
- * remembered across reloads and Dataset switches.
+ * Binds the ft / m depth buttons. The choice is remembered across reloads
+ * and Dataset switches; feet is the default.
  */
 function bindWaterLevelUnitToggle(
   onChange: (unit: WaterLevelUnit) => void,
@@ -144,7 +144,7 @@ export function bindSelectedCreekSegmentChart(input: {
     // Same segment and same arrays means the same picture; skip the redraw.
     const key =
       'series' in content
-        ? `${segmentId}|${identityOf(content.series.valuesM)}|${identityOf(content.series.timestampsUtcMs)}`
+        ? `${segmentId}|${identityOf(content.series.depthM)}|${identityOf(content.series.timestampsUtcMs)}`
         : `${segmentId}|${content.emptyText}`;
     if (key === shownContentKey) return;
     shownContentKey = key;
