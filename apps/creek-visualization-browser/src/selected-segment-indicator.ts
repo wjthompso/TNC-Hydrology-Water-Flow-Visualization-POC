@@ -108,8 +108,6 @@ export function formatIndicatorDistance(distanceM: number): string {
 
 export function bindSelectedSegmentIndicator(input: SelectedSegmentIndicatorInput): SelectedSegmentIndicator {
   const { view } = input;
-  (window as unknown as Record<string, unknown>).__TMP_VIEW = view; // TEMP-DEBUG
-  (window as unknown as Record<string, unknown>).__TMP_LOC = () => { const id = input.selectedSegmentId(); return id ? input.segmentLocation(id) : null; }; // TEMP-DEBUG
   const lifetime = input.lifetime ?? createExperienceLifetime();
   const elements = readIndicatorElements();
   if (!elements) return { update() {} };
@@ -144,8 +142,8 @@ export function bindSelectedSegmentIndicator(input: SelectedSegmentIndicatorInpu
     }
 
     // The bubble leaves the safe area's center along the ray toward the segment, so the arrow, drawn from the
-    // bubble along that same ray, points straight at the segment. A segment behind the camera projects mirrored
-    // through the view center, so its direction is taken from there instead.
+    // bubble along that same ray, points straight at the segment. A segment behind the camera has no true
+    // screen location; its direction from the view center is the one that turns the camera toward it.
     const safeArea = safeAreaRectangle(view.width, view.height, panel);
     const rayOrigin = inFront ? rectangleCenter(safeArea) : { x: view.width / 2, y: view.height / 2 };
     const angleDegrees = projected ? screenAngleDegrees(rayOrigin, projected) : 180;
