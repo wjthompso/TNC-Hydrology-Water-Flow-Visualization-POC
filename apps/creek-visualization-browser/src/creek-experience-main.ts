@@ -458,6 +458,7 @@ function readModeledPanelElements(): {
   transferToggleLabel: HTMLElement;
   centerlineToggle: HTMLInputElement;
   centerlineToggleLabel: HTMLElement;
+  namedCreekPins: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
   legendLabel: HTMLElement | null;
@@ -469,12 +470,14 @@ function readModeledPanelElements(): {
   const transferToggleLabel = document.getElementById('transfer-water-toggle-label');
   const centerlineToggle = document.getElementById('centerline-toggle');
   const centerlineToggleLabel = document.getElementById('centerline-toggle-label');
+  const namedCreekPins = document.getElementById('named-creek-pins');
   if (
     !(modeledPanel instanceof HTMLElement) ||
     !(transferToggle instanceof HTMLInputElement) ||
     !(transferToggleLabel instanceof HTMLElement) ||
     !(centerlineToggle instanceof HTMLInputElement) ||
-    !(centerlineToggleLabel instanceof HTMLElement)
+    !(centerlineToggleLabel instanceof HTMLElement) ||
+    !(namedCreekPins instanceof HTMLElement)
   ) {
     throw new Error('The modeled water panel is missing.');
   }
@@ -484,6 +487,7 @@ function readModeledPanelElements(): {
     transferToggleLabel,
     centerlineToggle,
     centerlineToggleLabel,
+    namedCreekPins,
     title: document.getElementById('experience-title'),
     subtitle: document.getElementById('experience-subtitle'),
     legendLabel: document.getElementById('legend-water-label'),

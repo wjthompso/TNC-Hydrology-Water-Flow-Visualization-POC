@@ -19,6 +19,10 @@ export default defineConfig({
   },
   server: {
     port: process.env.PORT ? parseInt(process.env.PORT) : 5173,
+    // The Playwright test server (playwright.config.ts sets VITE_TEST_MODE) does not watch files. Saving a
+    // source file while a test runs would otherwise reload the page under it and fail the test with
+    // "Execution context was destroyed" or "seam is missing". Your own `npm run dev` keeps live reload.
+    watch: process.env.VITE_TEST_MODE === 'true' ? null : undefined,
     proxy: {
       // The USGS 3DEP ImageServer has no CORS headers for localhost. The custom
       // elevation layer fetches tiles through this same-origin path instead.

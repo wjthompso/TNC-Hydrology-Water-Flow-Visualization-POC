@@ -553,6 +553,27 @@
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-160-water-surface-elevation-chart/behavior/FBT-024.live.spec.ts"
     },
     {
+      "id": "FBT-025",
+      "name": "Turning on steelhead trout conditions draws red, yellow, and green depth bands behind a modeled creek segment's water depth chart for each life stage: Eggs, Juveniles, and Adults.",
+      "methodology": "Why it matters: when a creek segment has water depths, a person who turns on steelhead trout conditions expects to see which depths are Unsuitable, Marginal, and Suitable for the life stage they chose; a stage that shows no bands, or tells them the segment cannot be rated, leaves them unable to read the chart. How it checks: opens the locally served page on the “Inferred Creek WSE — hourly (from NOAA National Water Model v3.0 flows)” Dataset for the jalama-gauge-reach extent at 2023-02-01T00:00Z (Jan 31, 2023, 4:00 PM PST), moves the camera instantly to a fixed straight-down pose 150 m above gauge Creek Segment 27714637-026's water, waits for the modeled loads and a finished frame, and clicks the segment's water with the real mouse at a pixel where SceneView.hitTest reports it. It waits for the chart to draw that segment, checks the sidebar's Steelhead trout conditions box, then, for Eggs, Juveniles, and Adults in that order, presses that life stage's button. For each stage it fails unless the chart reports that stage as the one its bands are drawn for, the chart plot contains one green, one yellow, and one red band rectangle, the stage's no-depth-band note is hidden, and the sidebar's segment note says nothing about a missing bed elevation. What is real: the browser page, ArcGIS SceneView, the developer's local m1 modeled pipeline output (Stage 3 Time Series and Stage 1 cross-sections) served by the development middleware, the real mouse click and button presses, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. When the local pipeline output is missing the result is inconclusive with a message naming the pipeline command. What is test-only: the camera command and the read-only seam that reports which stage the chart's bands are drawn for. What it does not check: where the band edges sit (the research depths are a provisional reference, still under review), the map colors, the hatch for out-of-season time, other segments, Datasets, hours, or extents, the meters button, observed or inferred water, or temperature and oxygen.",
+      "category": "feature-behavior",
+      "owner": "F-160",
+      "additionalFeatureAssociations": [
+        "F-140"
+      ],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-160-water-surface-elevation-chart/behavior/FBT-025.live.spec.ts"
+    },
+    {
       "id": "FBT-131",
       "name": "Playing at 0.5×, 1×, 2×, 5×, and 10× advances the observation slider by about 5, 10, 20, 50, and 100 slots in one second.",
       "methodology": "Opens the local page on the timeline fixture while the test server has VITE_TEST_MODE set. That path runs the real Play button, time slider, and speed buttons through the production timeline control, on a 500-slot stand-in clock. The ArcGIS scene, imagery, terrain, and published gauge series are not loaded, and the test fails if the page requests ArcGIS. For each of 0.5×, 1×, 2×, 5×, and 10×, the test pauses, returns the slider to the first slot, clicks that speed button, clicks Play, and reads the slider index at the start and end of one second inside the page. The slot count must sit within 10% of the target for that elapsed time, and the margin is never tighter than one slot, so 1× passes at 9–11 slots in one second. It does not check water, button highlight color, reverse playback, or a chosen calendar date.",

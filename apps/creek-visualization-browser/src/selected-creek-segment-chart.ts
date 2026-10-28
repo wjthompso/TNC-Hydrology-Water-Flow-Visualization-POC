@@ -14,7 +14,11 @@ import {
   type WaterSurfaceElevationChartState,
   type WaterSurfaceElevationSeries,
 } from './water-surface-elevation-chart';
+import type { LonLat } from './creek-data-contract';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
+import { bindSelectedSegmentIndicator } from './selected-segment-indicator';
+import type { SteelheadTroutConditionsControls } from './steelhead-trout-conditions-controls';
+import { STEELHEAD_LIFE_STAGE_RULES, steelheadChartBands } from './steelhead-trout-conditions';
 import { isWaterLevelUnit, readWaterLevelUnit, saveWaterLevelUnit, type WaterLevelUnit } from './water-level-units';
 
 /** What the chart shows for a segment: its series, or a message saying why there is none yet. */
@@ -42,6 +46,7 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
   const hoverReadout = document.getElementById('wse-chart-hover');
   const plot = document.getElementById('wse-chart-plot');
   const emptyMessage = document.getElementById('wse-chart-empty');
+  const emptyState = document.getElementById('wse-chart-empty-state');
   const overview = document.getElementById('wse-chart-overview');
   const zoomRow = document.getElementById('wse-chart-zoom-row');
   const zoomReadout = document.getElementById('wse-chart-zoom-readout');
@@ -55,6 +60,7 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
     !hoverReadout ||
     !plot ||
     !emptyMessage ||
+    !emptyState ||
     !overview ||
     !zoomRow ||
     !zoomReadout ||
@@ -67,6 +73,7 @@ export function readWaterSurfaceElevationChartElements(): WaterSurfaceElevationC
     sourceLabel,
     hoverReadout,
     plot,
+    emptyState,
     emptyMessage,
     overview,
     zoomRow,
@@ -113,7 +120,21 @@ export function bindSelectedCreekSegmentChart(input: {
   chartContentForSegment: (segmentId: string) => SegmentChartContent;
   /** Called with the time of the chart reading a person clicked or dragged to. */
   onChartTimeClicked: (timeUtcMs: number) => void;
-  /** Ending it unbinds the click, the chart, and the highlight. */
+  /**
+   * Steelhead trout conditions (UCS-293): the switch and life stage, plus the charted value (m) that
+   * means zero depth over the segment's bed (null when the dataset has no bed for it), which places
+   * the research depths on the chart's axis.
+   */
+  troutConditions?: {
+    controls: SteelheadTroutConditionsControls;
+    zeroDepthChartValueM: (segmentId: string) => number | null;
+  };
+  /**
+   * A longitude/latitude on a segment. With it, an off-screen Selected Creek Segment gets a bubble on the
+   * screen edge pointing toward it; without it, no bubble.
+   */
+  segmentLocationWgs84?: (segmentId: string) => LonLat | null;
+  /** Ending it unbinds the click, the chart, the highlight, and the off-screen bubble. */
   lifetime?: ExperienceLifetime;
 }): SelectedCreekSegmentChart {
   const lifetime = input.lifetime ?? createExperienceLifetime();
@@ -142,7 +163,50 @@ export function bindSelectedCreekSegmentChart(input: {
     else chart.setSeries(null, content.emptyText);
   };
 
-  const selection = bindCreekSegmentSelection(input.view, input.waterGraphics, showContentFor, lifetime);
+  const selection = bindCreekSegmentSelection(
+    input.view,
+    input.waterGraphics,
+    (segmentId) => {
+      showContentFor(segmentId);
+      applyConditionBands();
+      offScreenIndicator?.update();
+    },
+    lifetime,
+  );
+
+  const offScreenIndicator = input.segmentLocationWgs84
+    ? bindSelectedSegmentIndicator({
+        view: input.view,
+        selectedSegmentId: () => selection.selectedSegmentId,
+        segmentLocation: input.segmentLocationWgs84,
+        lifetime,
+      })
+    : null;
+
+  // Condition bands follow the selected segment, the switch, and the life stage. The key skips redraws
+  // when playback calls refresh() with nothing changed.
+  let shownBandsKey: string | null = null;
+  const applyConditionBands = (): void => {
+    const trout = input.troutConditions;
+    if (!trout) return;
+    const { enabled, lifeStage } = trout.controls.state;
+    const segmentId = selection.selectedSegmentId;
+    const zeroDepthChartValueM = enabled && segmentId ? trout.zeroDepthChartValueM(segmentId) : null;
+    const key = `${enabled}|${lifeStage}|${segmentId}|${zeroDepthChartValueM}`;
+    if (key === shownBandsKey) return;
+    shownBandsKey = key;
+    const bands = zeroDepthChartValueM === null ? null : steelheadChartBands(lifeStage, zeroDepthChartValueM);
+    chart.setConditionBands(bands);
+    trout.controls.setSegmentNote(segmentNoteFor(enabled, lifeStage, segmentId, zeroDepthChartValueM));
+  };
+  if (input.troutConditions) {
+    input.troutConditions.controls.onChange(() => {
+      selection.setTroutConditionsHighlight(input.troutConditions?.controls.state.enabled ?? false);
+      applyConditionBands();
+    });
+    selection.setTroutConditionsHighlight(input.troutConditions.controls.state.enabled);
+    applyConditionBands();
+  }
 
   return {
     selection,
@@ -151,9 +215,25 @@ export function bindSelectedCreekSegmentChart(input: {
     refresh() {
       selection.refresh();
       showContentFor(selection.selectedSegmentId);
+      applyConditionBands();
     },
     selectSegment: (segmentId) => selection.select(segmentId),
   };
+}
+
+function segmentNoteFor(
+  enabled: boolean,
+  lifeStage: Parameters<typeof steelheadChartBands>[0],
+  segmentId: string | null,
+  zeroDepthChartValueM: number | null,
+): string {
+  if (!enabled || STEELHEAD_LIFE_STAGE_RULES[lifeStage].depthBand === null) return '';
+  // With no segment selected the chart's own empty state tells people to click one, so nothing repeats it here.
+  if (segmentId === null) return '';
+  if (zeroDepthChartValueM === null) {
+    return 'This segment has no bed elevation in the dataset, so its depth, chart bands, and map color cannot be computed.';
+  }
+  return '';
 }
 
 /** A stable id per array object, so a reloaded Time Series reads as new content. */

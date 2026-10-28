@@ -96,6 +96,8 @@ declare global {
         readonly isZoomed: boolean;
         readonly cursorTimeUtcMs: number | null;
         readonly hoverTimeUtcMs: number | null;
+        /** Stage label of the condition bands drawn now (such as "Eggs"); null when none are drawn. */
+        readonly conditionBandsStageLabel: string | null;
         clientPointForTime(timeUtcMs: number): { readonly x: number; readonly y: number } | null;
         overviewClientXForTime(timeUtcMs: number): number | null;
         nearestReading(timeUtcMs: number): { readonly timeUtcMs: number; readonly valueM: number } | null;

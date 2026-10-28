@@ -37,7 +37,13 @@ import {
   DRAINAGE_AREA_RATIO_TRANSFER_LEGEND_LABEL,
   DRAINAGE_AREA_RATIO_TRANSFER_TOGGLE_LABEL,
 } from './drainage-area-ratio-transfer-labels';
-import { CREEK_CENTERLINE_TOGGLE_LABEL, createCreekCenterlineOverlay } from './creek-centerline-overlay';
+import {
+  CREEK_CENTERLINE_TOGGLE_LABEL,
+  createCreekCenterlineOverlay,
+  flowlinePathsByTncComid,
+} from './creek-centerline-overlay';
+import { createNamedCreekNavigation } from './named-creek-navigation';
+import { groupNamedCreeks } from './named-creeks';
 import { renderModeledDatasetAbout } from './modeled-dataset-info-panel';
 import { bindDatasetAboutDialog } from './dataset-about-dialog';
 import {
@@ -76,6 +82,8 @@ import {
 import { bucketForWaterSurfaceElevation } from './selected-time-creek-state-resolver';
 import type { BedParallelWaterDepth, JunctionWaterSurface } from './sloped-water-surface';
 import { showLoadingMessage } from './loading-spinner';
+import { bindSteelheadTroutConditionsControls } from './steelhead-trout-conditions-controls';
+import { classifySteelheadCondition } from './steelhead-trout-conditions';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 import {
   MAX_FLOWLINES_IN_VIEW,
@@ -187,6 +195,8 @@ export interface ModeledExperienceElements {
   /** Shows the TNC flowline centerlines and vertex dots; unchecked when the experience starts. */
   centerlineToggle: HTMLInputElement;
   centerlineToggleLabel: HTMLElement;
+  /** Map-sized container the floating creek labels are added to. */
+  namedCreekPins: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
   legendLabel: HTMLElement | null;
@@ -382,6 +392,9 @@ export async function startModeledCreekExperience(
   /** Crosswalk flags are the fallback until every Time Series file carries its own. */
   const crosswalkTransferIds: ReadonlySet<string> = crosswalk?.transferSegmentIds ?? new Set();
   let selectedCreekSegmentChart: SelectedCreekSegmentChart | null = null;
+  // Steelhead trout conditions (UCS-293). Bed elevation is the Time Series file's optional anchorBedElevationM,
+  // so segments from a dataset or method without it are not rated.
+  const troutConditions = bindSteelheadTroutConditionsControls(lifetime);
 
   const renderer = createModeledWaterSceneRenderer(view, segmentPaths, (identity) => {
     state.identity = Object.freeze(identity.map((item) => Object.freeze(item)));
@@ -396,6 +409,12 @@ export async function startModeledCreekExperience(
   // Added after the water layer so the lines draw over it. Hidden until the checkbox is ticked.
   const centerlines = createCreekCenterlineOverlay(view, segmentPaths);
   lifetime.onEnd(() => centerlines.dispose());
+
+  // Named creeks: highlighted, labelled, and zoom-to-able whenever the camera is high. No control to switch them on.
+  const namedCreeks = groupNamedCreeks(flowlinePathsByTncComid(segmentPaths));
+  if (namedCreeks.length > 0) {
+    createNamedCreekNavigation(view, namedCreeks, { pinContainer: elements.namedCreekPins }, lifetime);
+  }
   elements.centerlineToggle.addEventListener(
     'change',
     () => centerlines.setVisible(elements.centerlineToggle.checked),
@@ -596,10 +615,21 @@ export async function startModeledCreekExperience(
             junctionWaterSurface = heldJunctionWaterSurfaceAt(series, segmentId, timeUtcMs, holdMs);
           }
         }
+        const { enabled: troutEnabled, lifeStage } = troutConditions.state;
+        const troutCondition =
+          bucket && troutEnabled && series
+            ? classifySteelheadCondition(
+                lifeStage,
+                heldValueAt(series, segmentId, timeUtcMs, holdMs),
+                series.anchorBedElevationMBySegmentId.get(segmentId) ?? null,
+                timeUtcMs,
+              )
+            : undefined;
         placements.push({
           segmentId,
           bucket,
           drainageAreaRatioTransfer: isTransfer,
+          ...(troutCondition ? { troutCondition } : {}),
           junctionWaterSurface,
           ...(bedParallelWaterDepth ? { bedParallelWaterDepth } : {}),
           ...(bedParallelWaterDepth && drawsChannelRibbon(wsePolygonMethod) ? { channelRibbonBuckets: buckets, channelRibbonLiftM } : {}),
@@ -788,10 +818,21 @@ export async function startModeledCreekExperience(
       chartElements,
       chartContentForSegment,
       onChartTimeClicked: (timeUtcMs) => timeline.selectTime(timeUtcMs),
+      segmentLocationWgs84: (segmentId) => segmentCenters.get(segmentId) ?? null,
+      troutConditions: {
+        controls: troutConditions,
+        // The modeled chart plots depth above the anchor bed, so zero depth is 0 wherever a bed exists.
+        zeroDepthChartValueM: (segmentId) =>
+          store.seriesAt(segmentId.split('-')[0], state.selectedTimeUtcMs)?.anchorBedElevationMBySegmentId.has(segmentId)
+            ? 0
+            : null,
+      },
       lifetime,
     });
     selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
   }
+
+  troutConditions.onChange(() => applySelectedTime(state.selectedTimeUtcMs));
 
   elements.transferToggle.addEventListener(
     'change',

@@ -10,6 +10,10 @@
 // window. The depth axis rescales to the readings inside the window, so a
 // short outlier fills the chart. Double-click the chart or press Reset zoom to
 // show the whole record again.
+//
+// Optional condition bands (UCS-293) paint red / yellow / green zones behind
+// the line, with a hatch over times the zones do not apply to. The chart only
+// draws the bands it is given and knows nothing about what they mean.
 
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { formatObservationTime } from './observation-timeline-controls';
@@ -41,7 +45,23 @@ const MIN_WINDOW_READINGS = 4;
 /** Arrow keys move a window edge by this share of the record; Shift moves ten times as far. */
 const KEYBOARD_STEP_FRACTION = 0.01;
 
-const NO_SELECTION_TEXT = 'Click creek water on the map to see its water depth over time.';
+/** The axis reaches this far above the green edge, so the green zone has some height. */
+const BAND_HEADROOM_M = 0.05;
+/** A zone label is drawn only when its zone is at least this tall (px). */
+const BAND_LABEL_MIN_HEIGHT = 14;
+
+/** A new record's line rises from the plot's bottom edge over this long. */
+const LINE_RISE_MS = 600;
+/** Turning the zones on or off slides the line, axis, and zones to the new depth range over this long. */
+const RANGE_SLIDE_MS = 450;
+const BAND_FADE_IN_MS = 350;
+const BAND_FADE_OUT_MS = 250;
+/** Clicking away from a segment: the old line falls to the plot's bottom edge and fades out over this long. */
+const LEAVE_MS = 400;
+
+const easeOutCubic = (progress: number): number => 1 - (1 - progress) ** 3;
+
+const NO_SELECTION_TEXT = 'Click any creek segment on the map to see its water depth over time.';
 /** Full instructions live in the chart's info tip (index.html); this is the short idle prompt. */
 const HOVER_HINT_TEXT = 'Hover the chart to read a value.';
 
@@ -70,15 +90,38 @@ export interface WaterSurfaceElevationSeries {
   depthM: readonly (number | null)[];
 }
 
+/**
+ * Red / yellow / green zones for one Creek Segment, as depths above its bed.
+ * Below `marginalFromDepthM` is red, up to `suitableFromDepthM` is yellow, and
+ * from there up is green.
+ */
+export interface WaterSurfaceConditionBands {
+  /** Names the zones for the chart's label, such as "Adults". */
+  stageLabel: string;
+  /**
+   * The charted value (m) that means zero depth over the bed. It is 0 for a chart of depth above the
+   * bed, and above 0 for the observed gauge segment, whose gauge height reads from the gauge datum.
+   */
+  zeroDepthChartValueM: number;
+  marginalFromDepthM: number;
+  suitableFromDepthM: number;
+  /** True for times the zones do not apply to; the chart hatches them. */
+  isOutOfSeason(timeUtcMs: number): boolean;
+  /** Short class text for a charted reading, appended to the hover readout; empty for none. */
+  describe(chartValueM: number, timeUtcMs: number): string;
+}
+
 export interface WaterSurfaceElevationChartElements {
   segmentLabel: HTMLElement;
   sourceLabel: HTMLElement;
   hoverReadout: HTMLElement;
   plot: HTMLElement;
+  /** Grayed overlay above the plot while there are no values; it holds `emptyMessage`, the creek, and the arrow. */
+  emptyState: HTMLElement;
   emptyMessage: HTMLElement;
   /** Range slider under the plot. */
   overview: HTMLElement;
-  /** Row holding the zoom readout and the reset button; hidden with the plot. */
+  /** Row holding the zoom readout and the reset button. */
   zoomRow: HTMLElement;
   zoomReadout: HTMLElement;
   resetZoomButton: HTMLButtonElement;
@@ -104,6 +147,8 @@ export interface WaterSurfaceElevationChartState {
   /** The reading the selected time resolves to, m depth; null when the selected time has none. */
   readonly selectedValueM: number | null;
   readonly unit: WaterLevelUnit;
+  /** Stage label of the condition bands drawn now; null when none are drawn. */
+  readonly conditionBandsStageLabel: string | null;
   /** Viewport pixel of the line at the reading nearest the time; null when it cannot be drawn. */
   clientPointForTime(timeUtcMs: number): { x: number; y: number } | null;
   /** Viewport pixel of the range slider at a time, for dragging the zoom window. */
@@ -118,6 +163,8 @@ export interface WaterSurfaceElevationChart {
   setSelectedTime(timeUtcMs: number): void;
   /** Relabels the axis, readouts, and cursor value; the line itself does not change. */
   setUnit(unit: WaterLevelUnit): void;
+  /** Draws condition bands behind the line; null removes them. */
+  setConditionBands(bands: WaterSurfaceConditionBands | null): void;
   readonly state: WaterSurfaceElevationChartState;
 }
 
@@ -180,15 +227,29 @@ export function createWaterSurfaceElevationChart(
   let selectedTimeUtcMs: number | null = null;
   let cursorTimeUtcMs: number | null = null;
   let hoverTimeUtcMs: number | null = null;
+  let conditionBands: WaterSurfaceConditionBands | null = null;
   let frame: PlotFrame = measureFrame(elements.plot, PLOT_INSET, FALLBACK_SIZE);
   let overviewFrame: PlotFrame = measureFrame(elements.overview, OVERVIEW_INSET, FALLBACK_OVERVIEW_SIZE);
   let drag: OverviewDrag | null = null;
   let renderHandle: number | null = null;
 
+  // Motion state. The chart draws what these say on every frame, so a tween is a loop that moves a number
+  // from one value to another and redraws. Zooming and dragging never use them; those stay instant.
+  /** 0 draws the line flat on the plot's bottom edge, 1 draws it in full. */
+  let lineRise = 1;
+  let riseStartedMs: number | null = null;
+  /** The depth range on screen when the zones turned on or off; the slide starts here. */
+  let rescaleFrom: ValueRange | null = null;
+  let rescaleProgress = 1;
+  let rescaleStartedMs: number | null = null;
+  let motionHandle: number | null = null;
+  const prefersReducedMotion = (): boolean => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   // --- Main plot -----------------------------------------------------------
   const svg = createSvgElement('svg', { class: 'block h-full w-full overflow-visible' });
   svg.setAttribute('aria-hidden', 'true');
   const axisGroup = createSvgElement('g', {});
+  const bandGroup = createSvgElement('g', {});
   const line = createSvgElement('path', {
     class: 'fill-none stroke-cyan-300',
     'stroke-width': '1.5',
@@ -214,7 +275,7 @@ export function createWaterSurfaceElevationChart(
     'stroke-dasharray': '3 3',
   });
   const hoverDot = createSvgElement('circle', { class: 'fill-cyan-100 stroke-slate-900', r: '3' });
-  svg.append(axisGroup, line, cursor, cursorDot, hoverLine, hoverDot, cursorTag);
+  svg.append(bandGroup, axisGroup, line, cursor, cursorDot, hoverLine, hoverDot, cursorTag);
   elements.plot.append(svg);
 
   // --- Range slider --------------------------------------------------------
@@ -227,7 +288,10 @@ export function createWaterSurfaceElevationChart(
   const shadeBefore = createSvgElement('rect', { class: 'fill-slate-950/70' });
   const shadeAfter = createSvgElement('rect', { class: 'fill-slate-950/70' });
   const windowFrame = createSvgElement('rect', {
-    class: 'cursor-grab fill-transparent stroke-cyan-200/80',
+    // With no values the slider is inert: its frame stays drawn in light gray and ignores the pointer
+    // (the group is #wse-chart-overview).
+    class:
+      'cursor-grab fill-transparent stroke-cyan-200/80 transition-[stroke] duration-300 motion-reduce:transition-none group-data-[empty=true]:pointer-events-none group-data-[empty=true]:stroke-slate-400/70',
     'stroke-width': '1',
     rx: '2',
   });
@@ -251,6 +315,12 @@ export function createWaterSurfaceElevationChart(
     const span = visibleRange.maxM - visibleRange.minM || 1;
     const fraction = (valueM - visibleRange.minM) / span;
     return PLOT_INSET.top + (1 - fraction) * frame.plotHeight;
+  };
+
+  /** The line's own y: while a new record rises, every reading is pulled toward the plot's bottom edge. */
+  const lineYForValue = (valueM: number): number => {
+    const bottom = PLOT_INSET.top + frame.plotHeight;
+    return bottom - (bottom - yForValue(valueM)) * lineRise;
   };
 
   const domainSpanMs = (): number => (series ? series.lastUtcMs - series.firstUtcMs || 1 : 1);
@@ -386,7 +456,7 @@ export function createWaterSurfaceElevationChart(
       return;
     }
     cursorDot.setAttribute('cx', String(x));
-    cursorDot.setAttribute('cy', String(yForValue(valueM)));
+    cursorDot.setAttribute('cy', String(lineYForValue(valueM)));
     cursorDot.setAttribute('visibility', 'visible');
     const label = formatWaterLevel(valueM, unit);
     cursorTagText.textContent = label;
@@ -413,9 +483,15 @@ export function createWaterSurfaceElevationChart(
     const x = xForTime(reading.timeUtcMs);
     showVertical(hoverLine, x, PLOT_INSET.top, PLOT_INSET.top + frame.plotHeight);
     hoverDot.setAttribute('cx', String(x));
-    hoverDot.setAttribute('cy', String(yForValue(reading.valueM)));
+    hoverDot.setAttribute('cy', String(lineYForValue(reading.valueM)));
     hoverDot.setAttribute('visibility', 'visible');
-    elements.hoverReadout.textContent = `${formatObservationTime(reading.timeUtcMs)} · ${formatWaterLevel(reading.valueM, unit)}`;
+    const parts = [formatObservationTime(reading.timeUtcMs), formatWaterLevel(reading.valueM, unit)];
+    if (conditionBands) {
+      parts.push(`depth over bed ${formatWaterLevel(reading.valueM - conditionBands.zeroDepthChartValueM, unit)}`);
+      const condition = conditionBands.describe(reading.valueM, reading.timeUtcMs);
+      if (condition) parts.push(condition);
+    }
+    elements.hoverReadout.textContent = parts.join(' · ');
   };
 
   const renderMain = (): void => {
@@ -424,6 +500,10 @@ export function createWaterSurfaceElevationChart(
     axisGroup.replaceChildren();
     if (!series) {
       line.setAttribute('d', '');
+      bandGroup.replaceChildren();
+      // Empty axes with no values keep the plot's shape; the empty-state overlay grays and explains them.
+      axisGroup.append(...emptyAxisElements(frame, unit));
+      mirrorEmptyAxisMargin(axisGroup, frame.width);
       hide(cursor);
       hideCursorTag();
       cursorTimeUtcMs = null;
@@ -431,9 +511,23 @@ export function createWaterSurfaceElevationChart(
       clearHover();
       return;
     }
-    visibleRange = valueRangeIn(series, view) ?? { minM: series.minM, maxM: series.maxM };
+    let targetRange = valueRangeIn(series, view) ?? { minM: series.minM, maxM: series.maxM };
+    // With bands on, the axis reaches the bed and a little past the green edge, so every zone shows.
+    if (conditionBands) targetRange = rangeIncludingBands(targetRange, conditionBands);
+    // While the zones turn on or off, the drawn range slides from the old one to the target, and the line,
+    // axis labels, and zones all follow it.
+    visibleRange =
+      rescaleFrom && rescaleProgress < 1
+        ? {
+            minM: rescaleFrom.minM + (targetRange.minM - rescaleFrom.minM) * rescaleProgress,
+            maxM: rescaleFrom.maxM + (targetRange.maxM - rescaleFrom.maxM) * rescaleProgress,
+          }
+        : targetRange;
+    const bandsToDraw = conditionBands ?? fadingBands;
+    bandGroup.replaceChildren(...(bandsToDraw ? bandElements(bandsToDraw, view, frame, yForValue) : []));
+    cursor.setAttribute('class', conditionBands ? 'stroke-white' : 'stroke-amber-400');
     axisGroup.append(...axisElements(view, visibleRange, frame, yForValue, unit));
-    line.setAttribute('d', linePath(series, view, PLOT_INSET.left, frame.plotWidth, yForValue));
+    line.setAttribute('d', linePath(series, view, PLOT_INSET.left, frame.plotWidth, lineYForValue));
     drawCursor();
     clearHover();
   };
@@ -443,6 +537,16 @@ export function createWaterSurfaceElevationChart(
     overviewSvg.setAttribute('viewBox', `0 0 ${overviewFrame.width} ${overviewFrame.height}`);
     if (!series) {
       overviewLine.setAttribute('d', '');
+      // No values: the window still shows its frame and both handles across the whole width, in the
+      // disabled gray (see setSliderEnabled), so people see the zoom control that a selection will switch on.
+      const emptyHeight = overviewFrame.height;
+      const emptyLeft = OVERVIEW_INSET.left;
+      const emptyRight = OVERVIEW_INSET.left + overviewFrame.plotWidth;
+      setRect(shadeBefore, emptyLeft, 0, 0, emptyHeight);
+      setRect(shadeAfter, emptyRight, 0, 0, emptyHeight);
+      setRect(windowFrame, emptyLeft, 0.5, Math.max(1, emptyRight - emptyLeft), emptyHeight - 1);
+      placeHandle(startHandle, emptyLeft, emptyHeight, view.startUtcMs);
+      placeHandle(endHandle, emptyRight, emptyHeight, view.endUtcMs);
       return;
     }
     overviewLine.setAttribute(
@@ -490,6 +594,160 @@ export function createWaterSurfaceElevationChart(
       render();
     });
   }
+
+  // --- Motion ------------------------------------------------------------------
+  /** Advances the line rise and the range slide by one frame, redraws, and asks for the next frame while either runs. */
+  function tickMotion(nowMs: number): void {
+    motionHandle = null;
+    if (riseStartedMs !== null) {
+      const progress = clamp((nowMs - riseStartedMs) / LINE_RISE_MS, 0, 1);
+      lineRise = easeOutCubic(progress);
+      if (progress >= 1) riseStartedMs = null;
+    }
+    if (rescaleStartedMs !== null) {
+      const progress = clamp((nowMs - rescaleStartedMs) / RANGE_SLIDE_MS, 0, 1);
+      rescaleProgress = easeOutCubic(progress);
+      if (progress >= 1) {
+        rescaleStartedMs = null;
+        rescaleFrom = null;
+        rescaleProgress = 1;
+      }
+    }
+    renderMain();
+    if (riseStartedMs !== null || rescaleStartedMs !== null) startMotion();
+  }
+
+  function startMotion(): void {
+    if (motionHandle === null) motionHandle = requestAnimationFrame(tickMotion);
+  }
+
+  /** Jumps both tweens to their end, for reduced motion and for teardown. */
+  function finishMotion(): void {
+    riseStartedMs = null;
+    rescaleStartedMs = null;
+    rescaleFrom = null;
+    rescaleProgress = 1;
+    lineRise = 1;
+    if (motionHandle !== null) cancelAnimationFrame(motionHandle);
+    motionHandle = null;
+  }
+
+  /** Starts the line rising from the plot's bottom edge. */
+  function startLineRise(): void {
+    if (prefersReducedMotion()) return;
+    lineRise = 0;
+    riseStartedMs = performance.now();
+    rescaleFrom = null;
+    rescaleStartedMs = null;
+    rescaleProgress = 1;
+    startMotion();
+  }
+
+  /** The zones that fade out are kept here, drawn at the sliding range, until their fade ends. */
+  let fadingBands: WaterSurfaceConditionBands | null = null;
+  let fadeOutTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const setBandOpacity = (opacity: number, durationMs: number): void => {
+    bandGroup.style.transition = durationMs > 0 ? `opacity ${durationMs}ms ease-out` : 'none';
+    bandGroup.style.opacity = String(opacity);
+  };
+
+  const clearFadeOut = (): void => {
+    if (fadeOutTimer !== null) clearTimeout(fadeOutTimer);
+    fadeOutTimer = null;
+    fadingBands = null;
+  };
+
+  /**
+   * Turning the zones on fades them in; turning them off fades them out. Either way the line, axis labels,
+   * and zones slide to the new depth range, unless a new record is still rising (the rise already moves the line).
+   */
+  const changeConditionBands = (next: WaterSurfaceConditionBands | null): void => {
+    const previous = conditionBands;
+    if (previous === null && next === null) return;
+    const animate = series !== null && !prefersReducedMotion();
+    if (animate && riseStartedMs === null) {
+      rescaleFrom = { ...visibleRange };
+      rescaleProgress = 0;
+      rescaleStartedMs = performance.now();
+    }
+    clearFadeOut();
+    conditionBands = next;
+    if (!animate) {
+      setBandOpacity(1, 0);
+      render();
+      return;
+    }
+    if (next === null) {
+      fadingBands = previous;
+      setBandOpacity(1, 0);
+      render();
+      bandGroup.getBoundingClientRect(); // Commits the opacity so the fade starts from fully shown.
+      setBandOpacity(0, BAND_FADE_OUT_MS);
+      fadeOutTimer = setTimeout(() => {
+        fadeOutTimer = null;
+        fadingBands = null;
+        bandGroup.replaceChildren();
+        setBandOpacity(1, 0);
+      }, BAND_FADE_OUT_MS);
+    } else if (previous === null) {
+      setBandOpacity(0, 0);
+      render();
+      bandGroup.getBoundingClientRect();
+      setBandOpacity(1, BAND_FADE_IN_MS);
+    } else {
+      // Switching life stage keeps the zones on screen; they slide to their new edges.
+      setBandOpacity(1, 0);
+      render();
+    }
+    startMotion();
+  };
+
+  // --- Leaving ------------------------------------------------------------------
+  // With no series the chart redraws as empty at once, so the old picture would vanish in one frame. Instead
+  // the drawn SVG is copied just before that redraw; the copy falls to the plot's bottom edge and fades out on
+  // top of the empty chart, then is removed. The chart's own state (point count, selection) is already empty.
+  let leavingCopies: SVGSVGElement[] = [];
+  let leavingTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const removeLeavingCopies = (): void => {
+    if (leavingTimer !== null) clearTimeout(leavingTimer);
+    leavingTimer = null;
+    for (const copy of leavingCopies) copy.remove();
+    leavingCopies = [];
+  };
+
+  /** Copies `source` over its own box. `fallFromY` is the y (in the SVG's own units) the line collapses onto. */
+  const leaveAsCopy = (source: SVGSVGElement, host: HTMLElement, fallFromY: number, keepRects: boolean): SVGSVGElement => {
+    const copy = source.cloneNode(true) as SVGSVGElement;
+    // The copy must not repeat the live chart's ids (the time cursor's, for one) or its rectangles.
+    for (const element of copy.querySelectorAll('[id]')) element.removeAttribute('id');
+    if (!keepRects) for (const rect of copy.querySelectorAll('rect')) rect.remove();
+    copy.setAttribute('class', 'pointer-events-none absolute inset-0 block h-full w-full overflow-visible');
+    copy.style.opacity = '1';
+    copy.style.transition = `opacity ${LEAVE_MS}ms ease-in`;
+    const copiedLine = copy.querySelector('path');
+    if (copiedLine) {
+      copiedLine.style.transformOrigin = `0px ${fallFromY}px`;
+      copiedLine.style.transition = `transform ${LEAVE_MS}ms ease-in`;
+      copiedLine.style.transform = 'scaleY(1)';
+    }
+    host.append(copy);
+    copy.getBoundingClientRect(); // Commits the start state so the transitions run.
+    copy.style.opacity = '0';
+    if (copiedLine) copiedLine.style.transform = 'scaleY(0)';
+    return copy;
+  };
+
+  const startLeaving = (): void => {
+    removeLeavingCopies();
+    if (prefersReducedMotion() || frame.plotWidth <= 0) return;
+    leavingCopies = [
+      leaveAsCopy(svg, elements.plot, PLOT_INSET.top + frame.plotHeight, true),
+      leaveAsCopy(overviewSvg, elements.overview, OVERVIEW_INSET.top + overviewFrame.plotHeight, false),
+    ];
+    leavingTimer = setTimeout(removeLeavingCopies, LEAVE_MS + 50);
+  };
 
   // --- Main plot input ---------------------------------------------------------
   const readingAtPointer = (event: PointerEvent | MouseEvent): { timeUtcMs: number; valueM: number } | null => {
@@ -655,6 +913,9 @@ export function createWaterSurfaceElevationChart(
     resizeObserver.disconnect();
     if (renderHandle !== null) cancelAnimationFrame(renderHandle);
     renderHandle = null;
+    finishMotion();
+    clearFadeOut();
+    removeLeavingCopies();
     svg.remove();
     overviewSvg.remove();
     elements.segmentLabel.textContent = '';
@@ -665,15 +926,34 @@ export function createWaterSurfaceElevationChart(
     if (elements.currentTime) elements.currentTime.textContent = '';
     elements.currentValue.textContent = '';
     elements.overview.classList.remove('cursor-grabbing');
-    for (const element of [elements.plot, elements.overview, elements.zoomRow]) element.classList.add('hidden');
-    elements.emptyMessage.classList.remove('hidden');
+    // The plot keeps its height; with no chart bound, the overlay stays grayed and says nothing.
+    setEmptyState(false);
+    setSliderEnabled(false);
   });
+
+  /** Grays the range slider (see the `group-data-[empty=true]` classes) and takes its handles out of the tab order. */
+  function setSliderEnabled(enabled: boolean): void {
+    elements.overview.dataset.empty = String(!enabled);
+    for (const handle of [startHandle, endHandle]) {
+      handle.setAttribute('tabindex', enabled ? '0' : '-1');
+      handle.setAttribute('aria-disabled', String(!enabled));
+    }
+  }
+
+  /**
+   * The grayed overlay above the plot. `awaitingSelection` adds the bouncing arrow and the small creek that
+   * show people where to click; other empty cases (no readings, no bed) show their message without them.
+   */
+  function setEmptyState(awaitingSelection: boolean): void {
+    elements.emptyState.dataset.awaitingSelection = String(awaitingSelection);
+  }
 
   // --- Public API --------------------------------------------------------------
   const setSeries = (next: WaterSurfaceElevationSeries | null, emptyText = NO_SELECTION_TEXT): void => {
     const previous = series;
     series = next ? prepareSeries(next) : null;
     if (next && !series) emptyText = `No water depth readings for Creek Segment ${next.segmentId}.`;
+    const awaitingSelection = next === null && emptyText === NO_SELECTION_TEXT;
     // A new segment or a different record resets the zoom; a reload of the same record keeps it.
     const sameRecord =
       previous !== null &&
@@ -681,14 +961,27 @@ export function createWaterSurfaceElevationChart(
       previous.segmentId === series.segmentId &&
       previous.firstUtcMs === series.firstUtcMs &&
       previous.lastUtcMs === series.lastUtcMs;
-    if (series && !sameRecord) view = { startUtcMs: series.firstUtcMs, endUtcMs: series.lastUtcMs };
+    if (series && !sameRecord) {
+      view = { startUtcMs: series.firstUtcMs, endUtcMs: series.lastUtcMs };
+      startLineRise();
+    } else if (!series) {
+      finishMotion();
+    }
+    // Copy the drawn chart before render() empties it, so it can fall away instead of vanishing.
+    if (series) removeLeavingCopies();
+    else if (previous) startLeaving();
     elements.segmentLabel.textContent = next ? `Creek Segment ${next.segmentId}` : '';
     elements.sourceLabel.textContent = series ? series.sourceLabel : '';
     elements.emptyMessage.textContent = series ? '' : emptyText;
-    elements.emptyMessage.classList.toggle('hidden', series !== null);
-    for (const element of [elements.plot, elements.overview, elements.zoomRow]) {
-      element.classList.toggle('hidden', series === null);
+    // The plot, slider, and zoom row stay on screen so the panel never changes height. With no values the
+    // overlay grays them; the crosshair cursor only shows when a click would do something.
+    // The overlay fades (see its transition-opacity class) rather than toggling display, so it crossfades with the line.
+    elements.emptyState.classList.toggle('opacity-0', series !== null);
+    setEmptyState(awaitingSelection);
+    for (const element of [elements.plot, elements.overview]) {
+      element.classList.toggle('cursor-crosshair', series !== null);
     }
+    setSliderEnabled(series !== null);
     render();
   };
 
@@ -705,6 +998,7 @@ export function createWaterSurfaceElevationChart(
       unit = next;
       render();
     },
+    setConditionBands: changeConditionBands,
     state: {
       get segmentId() {
         return series?.segmentId ?? null;
@@ -733,6 +1027,9 @@ export function createWaterSurfaceElevationChart(
       get unit() {
         return unit;
       },
+      get conditionBandsStageLabel() {
+        return conditionBands?.stageLabel ?? null;
+      },
       clientPointForTime(timeUtcMs) {
         const reading = nearestReading(timeUtcMs);
         if (!series || !reading) return null;
@@ -753,7 +1050,7 @@ export function createWaterSurfaceElevationChart(
 function createHandle(label: string): SVGRectElement {
   const handle = createSvgElement('rect', {
     class:
-      'cursor-ew-resize fill-cyan-200 stroke-slate-900 outline-none focus-visible:fill-amber-300 hover:fill-cyan-100',
+      'cursor-ew-resize fill-cyan-200 stroke-slate-900 outline-none focus-visible:fill-amber-300 hover:fill-cyan-100 transition-[fill] duration-300 motion-reduce:transition-none group-data-[empty=true]:pointer-events-none group-data-[empty=true]:fill-slate-400/70',
     'stroke-width': '1',
     rx: '1.5',
     tabindex: '0',
@@ -898,6 +1195,39 @@ function linePath(
   return commands.join('');
 }
 
+/**
+ * The chart's frame with no values: the high and low rules, each labeled with only the unit ("ft" or "m"),
+ * so the empty plot reads as a depth chart before any number exists.
+ */
+function emptyAxisElements(frame: PlotFrame, unit: WaterLevelUnit): SVGElement[] {
+  const left = PLOT_INSET.left;
+  const right = left + frame.plotWidth;
+  const top = PLOT_INSET.top;
+  const bottom = top + frame.plotHeight;
+  return [top, bottom].flatMap((y) => [
+    createSvgElement('line', { class: 'stroke-slate-700', x1: String(left), x2: String(right), y1: String(y), y2: String(y) }),
+    svgText(unit, { x: String(left - 4), y: String(y), 'text-anchor': 'end', 'dominant-baseline': 'middle' }),
+  ]);
+}
+
+/**
+ * Empty state only: shortens each rule so the space after its right end equals the space before the unit
+ * label on the left. The rules reach the plot's right edge once values exist. Needs a laid-out SVG to
+ * measure the labels; when the chart is hidden (all measurements 0) the rules keep their full length.
+ */
+function mirrorEmptyAxisMargin(axisGroup: SVGGElement, plotSvgWidth: number): void {
+  let leftMargin: number;
+  try {
+    leftMargin = Math.min(...Array.from(axisGroup.querySelectorAll('text'), (label) => label.getBBox().x));
+  } catch {
+    return; // Firefox throws when the SVG is not rendered.
+  }
+  if (!Number.isFinite(leftMargin) || leftMargin <= 0) return;
+  for (const rule of axisGroup.querySelectorAll('line')) {
+    rule.setAttribute('x2', String(plotSvgWidth - leftMargin));
+  }
+}
+
 function axisElements(
   window: TimeWindow,
   range: ValueRange,
@@ -939,6 +1269,103 @@ function axisElements(
     }),
   );
   return elements;
+}
+
+/** Widens the range to the bed and to just past the green edge. */
+function rangeIncludingBands(range: ValueRange, bands: WaterSurfaceConditionBands): ValueRange {
+  return {
+    minM: Math.min(range.minM, bands.zeroDepthChartValueM),
+    maxM: Math.max(range.maxM, bands.zeroDepthChartValueM + bands.suitableFromDepthM + BAND_HEADROOM_M),
+  };
+}
+
+/** Three zone rectangles across the plot, labels where they fit, and a hatch over out-of-season time. */
+function bandElements(
+  bands: WaterSurfaceConditionBands,
+  window: TimeWindow,
+  frame: PlotFrame,
+  yForValue: (valueM: number) => number,
+): SVGElement[] {
+  const left = PLOT_INSET.left;
+  const top = PLOT_INSET.top;
+  const bottom = top + frame.plotHeight;
+  const marginalEdgeY = clamp(yForValue(bands.zeroDepthChartValueM + bands.marginalFromDepthM), top, bottom);
+  const suitableEdgeY = clamp(yForValue(bands.zeroDepthChartValueM + bands.suitableFromDepthM), top, bottom);
+  const zones = [
+    { label: 'Suitable', from: top, to: suitableEdgeY, class: 'fill-green-500/20' },
+    { label: 'Marginal', from: suitableEdgeY, to: marginalEdgeY, class: 'fill-yellow-400/20' },
+    { label: 'Unsuitable', from: marginalEdgeY, to: bottom, class: 'fill-red-500/20' },
+  ];
+  const elements: SVGElement[] = [];
+  const pattern = createSvgElement('pattern', {
+    id: 'wse-chart-out-of-season-hatch',
+    width: '6',
+    height: '6',
+    patternUnits: 'userSpaceOnUse',
+    patternTransform: 'rotate(45)',
+  });
+  pattern.append(createSvgElement('rect', { width: '6', height: '6', class: 'fill-slate-950/60' }));
+  pattern.append(createSvgElement('line', { x1: '0', y1: '0', x2: '0', y2: '6', class: 'stroke-slate-400/60', 'stroke-width': '2' }));
+  const defs = createSvgElement('defs', {});
+  defs.append(pattern);
+  elements.push(defs);
+  for (const zone of zones) {
+    const height = zone.to - zone.from;
+    if (height <= 0) continue;
+    const rect = createSvgElement('rect', {
+      class: zone.class,
+      x: String(left),
+      y: String(zone.from),
+      width: String(frame.plotWidth),
+      height: String(height),
+    });
+    elements.push(rect);
+    // A label needs room; the stage legend in the sidebar carries the class when the zone is thin.
+    if (height >= BAND_LABEL_MIN_HEIGHT) {
+      elements.push(
+        svgText(zone.label, {
+          x: String(left + frame.plotWidth - 4),
+          y: String(zone.from + height / 2),
+          'text-anchor': 'end',
+          'dominant-baseline': 'middle',
+          'fill-opacity': '0.8',
+        }),
+      );
+    }
+  }
+  for (const [startUtcMs, endUtcMs] of outOfSeasonSpans(bands, window)) {
+    const x1 = left + ((startUtcMs - window.startUtcMs) / (window.endUtcMs - window.startUtcMs || 1)) * frame.plotWidth;
+    const x2 = left + ((endUtcMs - window.startUtcMs) / (window.endUtcMs - window.startUtcMs || 1)) * frame.plotWidth;
+    elements.push(
+      createSvgElement('rect', {
+        fill: 'url(#wse-chart-out-of-season-hatch)',
+        x: String(x1),
+        y: String(top),
+        width: String(Math.max(0, x2 - x1)),
+        height: String(frame.plotHeight),
+      }),
+    );
+  }
+  return elements;
+}
+
+/** Out-of-season stretches inside the window, found by sampling about every 600th of it (at least hourly). */
+function outOfSeasonSpans(bands: WaterSurfaceConditionBands, window: TimeWindow): [number, number][] {
+  const spans: [number, number][] = [];
+  const stepMs = Math.max(60 * 60 * 1000, (window.endUtcMs - window.startUtcMs) / 600);
+  let spanStart: number | null = null;
+  for (let time = window.startUtcMs; time <= window.endUtcMs + stepMs; time += stepMs) {
+    const clamped = Math.min(time, window.endUtcMs);
+    const out = bands.isOutOfSeason(clamped);
+    if (out && spanStart === null) spanStart = clamped;
+    if (!out && spanStart !== null) {
+      spans.push([spanStart, clamped]);
+      spanStart = null;
+    }
+    if (clamped === window.endUtcMs) break;
+  }
+  if (spanStart !== null) spans.push([spanStart, window.endUtcMs]);
+  return spans;
 }
 
 function svgText(text: string, attributes: Record<string, string>): SVGTextElement {
