@@ -120,8 +120,18 @@ test("Clicking a time on a modeled creek segment's water-surface elevation chart
 
     // Aim at the 2023-01-10T01:00Z flood peak on the chart, then click the reading under the pointer.
     const target = await chartPointFor(page, peakUtcMs);
-    await page.mouse.move(target.x, target.y);
-    await expect.poll(async () => (await readSelection(page)).chartHoverTimeUtcMs).not.toBeNull();
+    // The chart redraws for a moment after it fills (the line rises), and each redraw clears the hover mark. A move that
+    // lands in that window is lost while the pointer sits still, so step onto the point again until the chart holds a hover.
+    await expect
+      .poll(
+        async () => {
+          await page.mouse.move(target.x - 3, target.y);
+          await page.mouse.move(target.x, target.y);
+          return (await readSelection(page)).chartHoverTimeUtcMs;
+        },
+        { message: 'chart hover time after moving onto the flood peak' },
+      )
+      .not.toBeNull();
     const pointed = await page.evaluate(() => {
       const chart = window.__TNC_TEST__?.waterSurfaceElevationChart;
       const time = chart?.hoverTimeUtcMs ?? null;
