@@ -1,0 +1,478 @@
+<!doctype html>
+<!--
+  UCS-293 design prototype: steelhead trout conditions on the Water-Surface
+  Elevation Chart and on the map's creek water. Standalone; open in a browser.
+  Synthetic data only. Styling follows apps/creek-visualization-browser
+  (slate-900 sidebar, cyan accents, Tailwind utilities). Spec: ./spec.md
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UCS-293 prototype · Steelhead trout conditions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="m-0 min-h-screen bg-slate-950 text-slate-100">
+    <p class="bg-violet-950 px-4 py-1.5 text-sm text-violet-100">
+      UCS-293 design prototype · synthetic water year 2024 · thresholds provisional (see spec.md)
+    </p>
+    <div class="flex min-h-[calc(100vh-2rem)] flex-col gap-4 p-4 lg:flex-row">
+      <!-- Sidebar mock: same shell classes as index.html's <aside>. -->
+      <aside class="w-full shrink-0 rounded-xl border border-slate-700/80 bg-slate-900/90 p-4 shadow-xl lg:w-[25rem]">
+        <header class="mb-3 border-b border-slate-700 pb-3">
+          <p class="text-sm font-medium uppercase tracking-wide text-cyan-300">Jalama Creek</p>
+          <h1 class="mt-1 text-xl font-semibold leading-tight">Modeled water</h1>
+        </header>
+
+        <section class="mb-4">
+          <div class="flex items-center justify-between gap-2">
+            <h2 class="text-base font-medium text-slate-200">Time</h2>
+            <span id="time-readout" class="text-base font-medium text-cyan-100"></span>
+          </div>
+          <input id="time-slider" type="range" min="0" max="365" value="112" aria-label="Selected time" class="mt-2 w-full accent-cyan-400" />
+        </section>
+
+        <!-- NEW: Steelhead trout conditions. One switch drives the chart bands and the map colors. -->
+        <section class="mb-4 border-t border-slate-700 pt-3" aria-labelledby="trout-title">
+          <div class="flex items-center justify-between gap-2">
+            <h2 id="trout-title" class="text-base font-medium text-slate-200">Steelhead trout conditions</h2>
+            <button
+              id="trout-switch"
+              type="button"
+              role="switch"
+              aria-checked="true"
+              aria-labelledby="trout-title"
+              class="group relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-slate-500 bg-slate-700 transition-colors aria-checked:border-cyan-200 aria-checked:bg-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            >
+              <span class="ml-0.5 size-5 rounded-full bg-slate-100 shadow transition-transform group-aria-checked:translate-x-5"></span>
+            </button>
+          </div>
+          <p class="mt-1 text-sm leading-snug text-slate-400">Is the water deep enough for this life stage? Water depth only; temperature and oxygen are not checked.</p>
+
+          <div id="life-stage-group" role="radiogroup" aria-label="Trout life stage" class="mt-2 grid grid-cols-3 gap-1"></div>
+          <p id="stage-season" class="mt-1.5 text-sm text-slate-300"></p>
+
+          <details class="mt-2 rounded-md border border-slate-700 bg-slate-950/40 px-2 py-1.5 text-sm text-slate-300">
+            <summary class="cursor-pointer text-slate-200">Depth thresholds <span class="ml-1 rounded bg-violet-900 px-1.5 py-0.5 text-xs text-violet-100">Provisional</span></summary>
+            <dl id="threshold-list" class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 tabular-nums"></dl>
+            <p id="threshold-source" class="mt-2 text-xs leading-relaxed text-slate-400"></p>
+          </details>
+        </section>
+
+        <!-- Water-Surface Elevation Chart, with the trout bands layered under the line. -->
+        <section class="mb-2 border-t border-slate-700 pt-3" aria-labelledby="chart-title">
+          <h2 id="chart-title" class="text-base font-medium leading-snug text-slate-200">Water level (water-surface elevation, WSE)</h2>
+          <span id="chart-segment" class="text-sm text-slate-100"></span>
+          <div id="chart" class="mt-2 h-52 w-full cursor-crosshair select-none rounded-md bg-slate-950/60" role="img"></div>
+          <!-- Suitability strip: one cell per day, the same classes the map uses. -->
+          <div id="strip" class="mt-1 h-2.5 w-full overflow-hidden rounded-sm"></div>
+          <p id="chart-hover" class="mt-1 min-h-5 text-sm text-slate-300"></p>
+          <p id="chart-summary" class="text-sm text-slate-400"></p>
+        </section>
+      </aside>
+
+      <!-- Map mock: a plan view standing in for the 3D scene. -->
+      <main class="relative min-h-[28rem] flex-1 overflow-hidden rounded-xl border border-slate-700/80 bg-[#2b3a2a]">
+        <svg id="map" class="absolute inset-0 h-full w-full" viewBox="0 0 1060 640" preserveAspectRatio="xMidYMid meet" aria-label="Creek map mock"></svg>
+        <p class="absolute left-3 top-3 rounded bg-slate-900/80 px-2 py-1 text-xs text-slate-300">Map mock · click creek water to select it</p>
+        <section aria-label="Map legend" class="absolute bottom-4 right-3 w-max max-w-[20rem] rounded-lg border border-slate-700/80 bg-slate-900/85 p-3 shadow-xl backdrop-blur">
+          <h2 id="legend-title" class="text-sm font-semibold text-slate-100">Legend</h2>
+          <div id="legend-body" class="mt-2 space-y-1.5 text-xs leading-relaxed text-slate-300"></div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      // ---- Thresholds (depth at the WSE Anchor Point, meters). Provisional; see spec.md. ----
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      const DAY_MS = 86400000;
+      const WATER_YEAR_START = Date.UTC(2023, 9, 1);
+      const CLASS_STYLE = {
+        suitable: { label: 'Suitable', glyph: '✓', color: '#10b981' },
+        marginal: { label: 'Marginal', glyph: '!', color: '#fde047' },
+        unsuitable: { label: 'Unsuitable', glyph: '✕', color: '#dc2626' },
+        offSeason: { label: 'Out of season', glyph: '–', color: '#64748b' },
+        noData: { label: 'No value', glyph: '?', color: '#334155' },
+      };
+      const LIFE_STAGES = {
+        eggs: {
+          label: 'Eggs',
+          seasonText: 'In season Jan–Jun (spawning through emergence from the gravel).',
+          seasonMonths: [0, 1, 2, 3, 4, 5],
+          marginalFromM: 0.09,
+          suitableFromM: 0.24,
+          rows: [
+            ['Suitable', '≥ 0.24 m (0.8 ft): depth steelhead build redds in'],
+            ['Marginal', '0.09–0.24 m: redds shallow, may warm or lose flow'],
+            ['Unsuitable', '< 0.09 m: redds likely dewatered'],
+          ],
+          source: 'Spawning depth ≥ 24 cm: Bjornn & Reiser (1991), via USBR expert-panel tables. The 0.09 m floor reuses the CDFW juvenile depth; no published level-only egg threshold exists. Bed-scour flows (an upper limit) are a known gap.',
+        },
+        juveniles: {
+          label: 'Juveniles',
+          seasonText: 'In season all year; summer and fall low flow is the critical time.',
+          seasonMonths: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+          marginalFromM: 0.01,
+          suitableFromM: 0.09,
+          rows: [
+            ['Suitable', '≥ 0.09 m (0.3 ft): juveniles can move between pools'],
+            ['Marginal', '0.01–0.09 m: wet, riffles too shallow to cross'],
+            ['Unsuitable', '< 0.01 m: dry at the deepest point'],
+          ],
+          source: 'Juvenile salmonid depth 0.3 ft: CDFW (California Department of Fish and Wildlife) Critical Riffle Analysis. "Dry" uses the app\'s existing 1 cm no-water depth.',
+        },
+        adults: {
+          label: 'Adults',
+          seasonText: 'In season Dec–May (upstream migration and spawning).',
+          seasonMonths: [11, 0, 1, 2, 3, 4],
+          marginalFromM: 0.21,
+          suitableFromM: 0.3,
+          rows: [
+            ['Suitable', '≥ 0.30 m: clears passage depth with margin'],
+            ['Marginal', '0.21–0.30 m: deepest point passes; full riffle may not'],
+            ['Unsuitable', '< 0.21 m (0.7 ft): too shallow to pass'],
+          ],
+          source: 'Adult steelhead passage depth 0.7 ft: CDFW Critical Riffle Analysis (≥ 25% of riffle width). The 0.30 m upper edge is a provisional margin because this app measures the deepest point only.',
+        },
+      };
+
+      // ---- Synthetic water year: 9 Creek Segments, daily depth. ----
+      const DAYS = 366;
+      const STORMS = [
+        [80, 0.18], [112, 0.55], [127, 0.42], [141, 0.7], [161, 0.35], [187, 0.22], [215, 0.12],
+      ];
+      function syntheticDepthM(day, scale) {
+        let depth = 0.03 * Math.exp(-day / 40);
+        for (const [startDay, peakM] of STORMS) {
+          if (day >= startDay) depth += peakM * Math.exp(-(day - startDay) / 16) + peakM * 0.25 * Math.exp(-(day - startDay) / 70);
+        }
+        return Math.max(0, depth * scale - 0.015);
+      }
+      const SEGMENTS = [
+        { id: 'S1', source: 'modeled', scale: 0.55, bedM: 131.2, path: 'M 90 70 C 140 110, 170 120, 210 150' },
+        { id: 'S2', source: 'modeled', scale: 0.7, bedM: 124.8, path: 'M 210 150 C 250 180, 270 190, 300 220' },
+        { id: 'S3', source: 'inferred', scale: 0.85, bedM: 117.6, path: 'M 300 220 C 330 250, 360 260, 400 270' },
+        { id: 'S4', source: 'inferred', scale: 0.95, bedM: 108.9, path: 'M 400 270 C 440 280, 470 290, 500 300' },
+        { id: 'S5', source: 'observed', scale: 1.0, bedM: 101.3, path: 'M 500 300 C 540 310, 570 325, 600 345' },
+        { id: 'S6', source: 'inferred', scale: 1.08, bedM: 95.1, path: 'M 600 345 C 630 365, 650 385, 680 405' },
+        { id: 'S7', source: 'inferred', scale: 1.15, bedM: 88.4, path: 'M 680 405 C 710 425, 735 440, 765 455' },
+        { id: 'S8', source: 'modeled', scale: 1.25, bedM: 80.7, path: 'M 765 455 C 790 470, 810 485, 830 505' },
+        { id: 'S9', source: 'modeled', scale: 0.4, bedM: 118.3, path: 'M 640 120 C 610 180, 600 230, 600 345' },
+      ];
+      for (const segment of SEGMENTS) {
+        segment.depthsM = Array.from({ length: DAYS }, (_, day) => syntheticDepthM(day, segment.scale));
+      }
+      const SOURCE_LABEL = { observed: 'Observed at USGS gauge 11120600', inferred: 'Inferred from the gauge', modeled: 'Modeled (National Water Model)' };
+
+      // ---- State ----
+      const state = { troutOn: true, stage: 'adults', day: 112, segmentId: 'S5', hoverDay: null };
+
+      function dayDate(day) {
+        return new Date(WATER_YEAR_START + day * DAY_MS);
+      }
+      const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      function isInSeason(stage, day) {
+        return LIFE_STAGES[stage].seasonMonths.includes(dayDate(day).getUTCMonth());
+      }
+      function depthClass(stage, depthM, day) {
+        if (depthM == null) return 'noData';
+        if (!isInSeason(stage, day)) return 'offSeason';
+        const thresholds = LIFE_STAGES[stage];
+        if (depthM >= thresholds.suitableFromM) return 'suitable';
+        if (depthM >= thresholds.marginalFromM) return 'marginal';
+        return 'unsuitable';
+      }
+      function selectedSegment() {
+        return SEGMENTS.find((segment) => segment.id === state.segmentId);
+      }
+
+      // ---- Controls ----
+      const stageGroup = document.getElementById('life-stage-group');
+      for (const [stage, info] of Object.entries(LIFE_STAGES)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('role', 'radio');
+        button.dataset.stage = stage;
+        button.textContent = info.label;
+        button.className =
+          'cursor-pointer rounded-md border border-cyan-500/60 bg-cyan-950/60 px-2 py-1.5 text-sm font-medium text-cyan-100 hover:bg-cyan-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-checked:border-cyan-200 aria-checked:bg-cyan-400 aria-checked:text-slate-950 disabled:cursor-not-allowed disabled:opacity-40';
+        button.addEventListener('click', () => {
+          state.stage = stage;
+          render();
+        });
+        stageGroup.append(button);
+      }
+      document.getElementById('trout-switch').addEventListener('click', () => {
+        state.troutOn = !state.troutOn;
+        render();
+      });
+      document.getElementById('time-slider').addEventListener('input', (event) => {
+        state.day = Number(event.target.value);
+        render();
+      });
+
+      // ---- Chart ----
+      const chartHost = document.getElementById('chart');
+      const INSET = { left: 52, right: 8, top: 10, bottom: 22 };
+      function svgElement(tag, attributes) {
+        const element = document.createElementNS(SVG_NS, tag);
+        for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
+        return element;
+      }
+      function appendText(parent, attributes, text) {
+        const element = svgElement('text', attributes);
+        element.textContent = text;
+        parent.append(element);
+      }
+      function renderChart() {
+        const segment = selectedSegment();
+        const width = chartHost.clientWidth;
+        const height = chartHost.clientHeight;
+        const plotWidth = width - INSET.left - INSET.right;
+        const plotHeight = height - INSET.top - INSET.bottom;
+        const stage = LIFE_STAGES[state.stage];
+        const wses = segment.depthsM.map((depth) => segment.bedM + depth);
+        // With bands on, the axis always shows the Suitable edge, so a dry record still shows where "enough" is.
+        let minM = Math.min(...wses, segment.bedM);
+        let maxM = Math.max(...wses, state.troutOn ? segment.bedM + stage.suitableFromM + 0.05 : -Infinity);
+        const pad = (maxM - minM) * 0.06;
+        minM -= pad;
+        maxM += pad;
+        const x = (day) => INSET.left + (day / (DAYS - 1)) * plotWidth;
+        const y = (wseM) => INSET.top + (1 - (wseM - minM) / (maxM - minM)) * plotHeight;
+
+        const svg = svgElement('svg', { width, height, class: 'block' });
+        const defs = svgElement('defs', {});
+        const hatch = svgElement('pattern', { id: 'off-season-hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' });
+        hatch.append(svgElement('rect', { width: 6, height: 6, fill: '#020617', 'fill-opacity': 0.55 }));
+        hatch.append(svgElement('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: '#94a3b8', 'stroke-opacity': 0.35, 'stroke-width': 2 }));
+        defs.append(hatch);
+        svg.append(defs);
+
+        if (state.troutOn) {
+          // Horizontal bands: band edges are this segment's bed plus each depth threshold.
+          const marginalY = y(segment.bedM + stage.marginalFromM);
+          const suitableY = y(segment.bedM + stage.suitableFromM);
+          const bands = [
+            ['suitable', INSET.top, suitableY],
+            ['marginal', suitableY, marginalY],
+            ['unsuitable', marginalY, INSET.top + plotHeight],
+          ];
+          for (const [className, top, bottom] of bands) {
+            const clampedTop = Math.max(INSET.top, top);
+            const clampedBottom = Math.min(INSET.top + plotHeight, bottom);
+            if (clampedBottom <= clampedTop) continue;
+            const bandHeight = clampedBottom - clampedTop;
+            svg.append(svgElement('rect', { x: INSET.left, y: clampedTop, width: plotWidth, height: clampedBottom - clampedTop, fill: CLASS_STYLE[className].color, 'fill-opacity': 0.16 }));
+            // A band too thin for its label relies on the strip and the legend instead.
+            if (bandHeight >= 14) appendText(svg, { x: width - INSET.right - 4, y: clampedTop + 12, 'text-anchor': 'end', class: 'fill-slate-300 text-[10px]' }, CLASS_STYLE[className].label);
+          }
+          for (const edgeY of [marginalY, suitableY]) {
+            svg.append(svgElement('line', { x1: INSET.left, x2: INSET.left + plotWidth, y1: edgeY, y2: edgeY, stroke: '#cbd5e1', 'stroke-opacity': 0.45, 'stroke-dasharray': '3 3' }));
+          }
+          // Out-of-season spans: hatched and dimmed, so the bands read as "does not apply" there.
+          let runStart = null;
+          for (let day = 0; day <= DAYS; day += 1) {
+            const off = day < DAYS && !isInSeason(state.stage, day);
+            if (off && runStart === null) runStart = day;
+            if (!off && runStart !== null) {
+              svg.append(svgElement('rect', { x: x(runStart), y: INSET.top, width: x(day) - x(runStart), height: plotHeight, fill: 'url(#off-season-hatch)' }));
+              runStart = null;
+            }
+          }
+        }
+
+        // Axes.
+        for (let tick = 0; tick <= 3; tick += 1) {
+          const wseM = minM + ((maxM - minM) * tick) / 3;
+          appendText(svg, { x: INSET.left - 6, y: y(wseM) + 3, 'text-anchor': 'end', class: 'fill-slate-400 text-[10px] tabular-nums' }, `${wseM.toFixed(1)} m`);
+        }
+        for (const [day, text] of [[0, 'Oct 2023'], [92, 'Jan'], [183, 'Apr'], [274, 'Jul'], [365, 'Sep 2024']]) {
+          appendText(svg, { x: x(day), y: height - 6, 'text-anchor': day === 0 ? 'start' : day === 365 ? 'end' : 'middle', class: 'fill-slate-400 text-[10px]' }, text);
+        }
+
+        // Line and time cursor. The cursor is white in this mode so it never reads as the yellow band.
+        const path = wses.map((wseM, day) => `${day === 0 ? 'M' : 'L'}${x(day).toFixed(1)},${y(wseM).toFixed(1)}`).join('');
+        svg.append(svgElement('path', { d: path, fill: 'none', stroke: '#67e8f9', 'stroke-width': 1.5 }));
+        svg.append(svgElement('line', { x1: x(state.day), x2: x(state.day), y1: INSET.top, y2: INSET.top + plotHeight, stroke: state.troutOn ? '#f8fafc' : '#fbbf24', 'stroke-width': 2 }));
+        if (state.hoverDay !== null) {
+          svg.append(svgElement('circle', { cx: x(state.hoverDay), cy: y(wses[state.hoverDay]), r: 3.5, fill: '#f8fafc' }));
+        }
+
+        chartHost.replaceChildren(svg);
+        chartHost.onpointermove = (event) => {
+          const rect = chartHost.getBoundingClientRect();
+          const day = Math.round(((event.clientX - rect.left - INSET.left) / plotWidth) * (DAYS - 1));
+          state.hoverDay = day >= 0 && day < DAYS ? day : null;
+          renderChart();
+          renderReadout();
+        };
+        chartHost.onpointerleave = () => {
+          state.hoverDay = null;
+          renderChart();
+          renderReadout();
+        };
+        chartHost.onclick = () => {
+          if (state.hoverDay === null) return;
+          state.day = state.hoverDay;
+          document.getElementById('time-slider').value = String(state.day);
+          render();
+        };
+        chartHost.setAttribute('aria-label', `Water-surface elevation over water year 2024 for Creek Segment ${segment.id}${state.troutOn ? `, with ${LIFE_STAGES[state.stage].label.toLowerCase()} depth bands` : ''}.`);
+      }
+
+      function renderStrip() {
+        const strip = document.getElementById('strip');
+        strip.hidden = !state.troutOn;
+        if (!state.troutOn) return;
+        const segment = selectedSegment();
+        const cells = segment.depthsM.map((depthM, day) => CLASS_STYLE[depthClass(state.stage, depthM, day)].color);
+        // The strip shares the plot's left inset so its days line up with the chart above.
+        strip.style.marginLeft = `${INSET.left}px`;
+        strip.style.width = `calc(100% - ${INSET.left + INSET.right}px)`;
+        strip.style.background = `linear-gradient(to right, ${cells.map((color, day) => `${color} ${(day / DAYS) * 100}% ${((day + 1) / DAYS) * 100}%`).join(', ')})`;
+        strip.title = 'Each day, colored by trout depth class';
+      }
+
+      function readoutText(day) {
+        const segment = selectedSegment();
+        const depthM = segment.depthsM[day];
+        const base = `${dateFormatter.format(dayDate(day))} · WSE ${(segment.bedM + depthM).toFixed(2)} m · depth ${depthM.toFixed(2)} m`;
+        if (!state.troutOn) return base;
+        const style = CLASS_STYLE[depthClass(state.stage, depthM, day)];
+        return `${base} · ${style.glyph} ${style.label}${style.label === 'Out of season' ? '' : ` for ${LIFE_STAGES[state.stage].label.toLowerCase()}`}`;
+      }
+      function renderReadout() {
+        document.getElementById('chart-hover').textContent = readoutText(state.hoverDay ?? state.day);
+      }
+
+      function renderSummary() {
+        const summary = document.getElementById('chart-summary');
+        if (!state.troutOn) {
+          summary.textContent = '';
+          return;
+        }
+        const segment = selectedSegment();
+        const counts = { suitable: 0, marginal: 0, unsuitable: 0 };
+        let inSeasonDays = 0;
+        segment.depthsM.forEach((depthM, day) => {
+          const className = depthClass(state.stage, depthM, day);
+          if (className in counts) {
+            counts[className] += 1;
+            inSeasonDays += 1;
+          }
+        });
+        const percent = (count) => `${Math.round((count / inSeasonDays) * 100)}%`;
+        summary.textContent = `In-season days, water year 2024: ✓ ${percent(counts.suitable)} suitable · ! ${percent(counts.marginal)} marginal · ✕ ${percent(counts.unsuitable)} unsuitable`;
+      }
+
+      // ---- Map ----
+      function renderMap() {
+        const map = document.getElementById('map');
+        map.replaceChildren();
+        const defs = svgElement('defs', {});
+        const filter = svgElement('filter', { id: 'soft' });
+        filter.append(svgElement('feGaussianBlur', { stdDeviation: 0.6 }));
+        defs.append(filter);
+        map.append(defs);
+        // Terrain hint.
+        map.append(svgElement('path', { d: 'M0 520 C 200 430, 420 560, 900 470 L 900 560 L 0 560 Z', fill: '#1e3a5f', 'fill-opacity': 0.6 }));
+        for (const segment of SEGMENTS) {
+          const depthM = segment.depthsM[state.day];
+          const className = state.troutOn ? depthClass(state.stage, depthM, state.day) : null;
+          const dry = depthM < 0.01;
+          const hasWater = !dry || state.troutOn;
+          const baseColor = !state.troutOn ? (segment.source === 'observed' ? '#1d9bf0' : segment.source === 'inferred' ? '#0d9488' : '#38bdf8') : CLASS_STYLE[className].color;
+          const isSelected = segment.id === state.segmentId;
+          const group = svgElement('g', { class: 'cursor-pointer' });
+          if (isSelected) {
+            // Selection: a white halo, since amber would read as the Marginal class.
+            group.append(svgElement('path', { d: segment.path, fill: 'none', stroke: state.troutOn ? '#f8fafc' : '#fbbf24', 'stroke-width': 24, 'stroke-linecap': 'round', 'stroke-opacity': 0.9 }));
+          }
+          // Dark casing keeps yellow and green readable over imagery.
+          group.append(svgElement('path', { d: segment.path, fill: 'none', stroke: '#0f172a', 'stroke-width': 18, 'stroke-linecap': 'round' }));
+          if (hasWater) {
+            // Every source keeps the full class color (faded yellow reads as olive, a different class).
+            // Inferred and modeled water add a dashed center line instead.
+            const isMeasured = segment.source === 'observed';
+            group.append(svgElement('path', { d: segment.path, fill: 'none', stroke: baseColor, 'stroke-width': 14, 'stroke-linecap': 'round' }));
+            if (!isMeasured) group.append(svgElement('path', { d: segment.path, fill: 'none', stroke: '#f8fafc', 'stroke-opacity': 0.7, 'stroke-width': 1.5, 'stroke-dasharray': '5 5' }));
+          }
+          group.append(svgElement('path', { d: segment.path, fill: 'none', stroke: 'transparent', 'stroke-width': 28 }));
+          group.addEventListener('click', () => {
+            state.segmentId = segment.id;
+            render();
+          });
+          const title = svgElement('title', {});
+          title.textContent = `Creek Segment ${segment.id} · ${SOURCE_LABEL[segment.source]}`;
+          group.append(title);
+          map.append(group);
+        }
+        // Gauge marker on S5.
+        map.append(svgElement('circle', { cx: 552, cy: 316, r: 7, fill: '#f8fafc', stroke: '#0f172a', 'stroke-width': 2 }));
+        appendText(map, { x: 562, y: 304, class: 'fill-slate-100 text-[12px]' }, 'USGS gauge');
+      }
+
+      function legendRow(swatchHtml, text) {
+        return `<div class="flex items-center gap-2">${swatchHtml}<span>${text}</span></div>`;
+      }
+      function swatch(color, { faded = false } = {}) {
+        return `<span class="relative inline-block h-3 w-6 shrink-0 rounded-sm border border-slate-950" style="background:${color}" aria-hidden="true">${faded ? '<span class="absolute inset-x-0.5 top-1/2 border-t border-dashed border-white/80"></span>' : ''}</span>`;
+      }
+      function renderLegend() {
+        const title = document.getElementById('legend-title');
+        const body = document.getElementById('legend-body');
+        if (!state.troutOn) {
+          title.textContent = 'Legend';
+          body.innerHTML =
+            legendRow(swatch('#1d9bf0'), "Observed water on the gauge's creek segment") +
+            legendRow(swatch('#0d9488'), 'Inferred water next to the gauge') +
+            legendRow(swatch('#38bdf8'), 'Modeled water');
+          return;
+        }
+        const stage = LIFE_STAGES[state.stage];
+        title.textContent = `Trout depth · ${stage.label}`;
+        const rows = stage.rows.map(([label, text]) => {
+          const key = label.toLowerCase();
+          return legendRow(swatch(CLASS_STYLE[key].color), `<b class="font-semibold text-slate-100">${CLASS_STYLE[key].glyph} ${label}</b> ${text.split(':')[0]}`);
+        });
+        body.innerHTML =
+          rows.join('') +
+          legendRow(swatch(CLASS_STYLE.offSeason.color), `<b class="font-semibold text-slate-100">Out of season</b> stage not in the creek now`) +
+          '<div class="my-1.5 border-t border-slate-700"></div>' +
+          legendRow(swatch('#94a3b8'), 'Plain: observed at the gauge') +
+          legendRow(swatch('#94a3b8', { faded: true }), 'Dashed center: inferred or modeled');
+      }
+
+      function renderControls() {
+        const stage = LIFE_STAGES[state.stage];
+        document.getElementById('trout-switch').setAttribute('aria-checked', String(state.troutOn));
+        for (const button of stageGroup.children) {
+          button.setAttribute('aria-checked', String(button.dataset.stage === state.stage));
+          button.disabled = !state.troutOn;
+        }
+        document.getElementById('stage-season').textContent = state.troutOn ? stage.seasonText : 'Turn on to color the chart and the map by trout depth needs.';
+        document.getElementById('threshold-list').innerHTML = stage.rows
+          .map(([label, text]) => `<dt class="font-medium" style="color:${CLASS_STYLE[label.toLowerCase()].color}">${CLASS_STYLE[label.toLowerCase()].glyph} ${label}</dt><dd>${text}</dd>`)
+          .join('');
+        document.getElementById('threshold-source').textContent = stage.source;
+        document.getElementById('time-readout').textContent = dateFormatter.format(dayDate(state.day));
+        const segment = selectedSegment();
+        const chartSegment = document.getElementById('chart-segment');
+        chartSegment.textContent = `Creek Segment ${segment.id} · ${SOURCE_LABEL[segment.source]}`;
+      }
+
+      function render() {
+        renderControls();
+        renderChart();
+        renderStrip();
+        renderReadout();
+        renderSummary();
+        renderMap();
+        renderLegend();
+      }
+      window.addEventListener('resize', render);
+      render();
+    </script>
+  </body>
+</html>
