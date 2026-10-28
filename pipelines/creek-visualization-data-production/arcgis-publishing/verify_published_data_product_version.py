@@ -9,7 +9,10 @@ Signs in (credentials from ARCGIS_DOTENV_PATH, never printed) and only reads:
     file geodatabase present;
   - modeled WSE: for a seeded random sample of Creek Segments, the hosted National Water Model hourly Held WSE
     Intervals give the Stage 3 `values` and junction depths at sampled hours (nulls as nulls);
-  - WSE polygons: for a seeded random sample of features, the hosted rings (with Z) equal the Stage 4 rings.
+  - WSE polygons: for a seeded random sample of features, the hosted rings (with Z) equal the Stage 4 rings. ArcGIS
+    stores a polygon only as simple rings, so on ingest it splits a ring that crosses itself (a folded ribbon rung)
+    or regroups touching rings; such a feature passes as "normalized by the server" when its footprint equals the
+    Stage 4 footprint (shapely make_valid) within SERVER_NORMALIZATION_FOOTPRINT_TOLERANCE, and is counted.
 
 Writes the findings as JSON to --output and exits nonzero on a mismatch.
 
@@ -28,6 +31,7 @@ from pathlib import Path
 
 import numpy as np
 import pyogrio
+import shapely
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -35,23 +39,19 @@ from data_product_version_identity import MODELED_WSE, PRODUCTS, DataProductVers
 from data_product_versions import REPOSITORY_ROOT, write_json  # noqa: E402
 from file_geodatabase_tables import unzip_gdb  # noqa: E402
 from freeze_wse_polygons_depth_version import iterate_polygon_sets  # noqa: E402
+from freeze_wse_polygons_version import assemble_prepared_water_surface_polygon  # noqa: E402
 from modeled_wse_depth_source_series import DepthTimeSeriesFolder  # noqa: E402
 from modeled_wse_version_layout import PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS  # noqa: E402
-from publish_data_product_version_service import EXPECTED_CAPABILITIES, registry_version  # noqa: E402
+from publish_data_product_version_service import EXPECTED_CAPABILITIES, frozen_row_counts, registry_version  # noqa: E402
 from publish_data_products_to_arcgis import all_layers_and_tables, load_portal_credentials  # noqa: E402
 from validate_wse_polygons_depth_version import closed, ring_match  # noqa: E402
 
 SAMPLE_SEED = 298
 HOURS_PER_SEGMENT = 6
+# Largest symmetric difference between the hosted and the Stage 4 footprint, as a fraction of the Stage 4 area,
+# for a feature whose rings ArcGIS restructured. Measured on 2026-10-27 over every feature: at most 2e-5.
+SERVER_NORMALIZATION_FOOTPRINT_TOLERANCE = 1e-4
 STAGE_3_ROOT = REPOSITORY_ROOT / "data" / "pipeline-working-output" / "dangermond-preserve" / "03-time-series"
-
-
-def expected_row_counts(product: str, version_json: dict, identity: DataProductVersionIdentity) -> dict[str, int]:
-    counts = version_json["counts"]
-    if "arcgis_rows" in counts:
-        return counts["arcgis_rows"]
-    # m2-v1 polygons were frozen before arcgis_rows existed: one versions row and one feature per non-empty bucket.
-    return {identity.versions_table_name: 1, identity.arcgis_prefix: counts["features"]}
 
 
 def frozen_field_names(version_folder: Path, identity: DataProductVersionIdentity) -> dict[str, list[str]]:
@@ -109,6 +109,18 @@ def check_modeled_sample(service_item, identity: DataProductVersionIdentity, ver
     return {"segments_sampled": sample, "hours_compared": len(comparisons), "mismatches": mismatches, "comparisons": comparisons}
 
 
+def hosted_polygon_footprint(hosted_rings: list[np.ndarray]) -> shapely.Geometry:
+    """Esri rings: clockwise outer, counter-clockwise holes, the rule the freeze assembles by. Where ArcGIS split a
+    folded ring so that a counter-clockwise piece only touches the outer ring, fall back to the even-odd area."""
+    try:
+        return shapely.force_2d(assemble_prepared_water_surface_polygon([ring.tolist() for ring in hosted_rings])[0])
+    except ValueError:
+        footprint = shapely.Polygon()
+        for ring in hosted_rings:
+            footprint = shapely.symmetric_difference(footprint, shapely.make_valid(shapely.Polygon(ring[:, :2])))
+        return footprint
+
+
 def check_polygon_sample(service_item, identity: DataProductVersionIdentity, version_json: dict, sample_size: int) -> dict:
     polygon_layer = next(layer for layer in service_item.layers if layer.properties.name == identity.arcgis_prefix)
     object_id_field = polygon_layer.properties.objectIdField
@@ -129,13 +141,28 @@ def check_polygon_sample(service_item, identity: DataProductVersionIdentity, ver
         outcomes = []
         for source_ring in source:
             outcomes.append(next((outcome for ring in hosted_rings if (outcome := ring_match(source_ring, ring))), "mismatch"))
-        equal = len(hosted_rings) == len(source) and "mismatch" not in outcomes
+        rings_equal = len(hosted_rings) == len(source) and "mismatch" not in outcomes
+        footprint_difference = None
+        if not rings_equal and source:
+            hosted_footprint = hosted_polygon_footprint(hosted_rings)
+            source_footprint = shapely.make_valid(shapely.force_2d(shapely.MultiPolygon([shapely.Polygon(ring) for ring in source])
+                                                                   if len(source) == 1 else assemble_prepared_water_surface_polygon([r.tolist() for r in source])[0]))
+            footprint_difference = shapely.symmetric_difference(hosted_footprint, source_footprint).area / source_footprint.area
+        normalized = footprint_difference is not None and footprint_difference <= SERVER_NORMALIZATION_FOOTPRINT_TOLERANCE
         comparison = {"object_id": feature.attributes[object_id_field], "segment_id": key[0], "bucket_index": key[1],
-                      "rings": len(hosted_rings), "ring_outcomes": outcomes, "equal": equal}  # fmt: skip
+                      "source_rings": len(source), "hosted_rings": len(hosted_rings), "ring_outcomes": outcomes,
+                      "outcome": "rings equal" if rings_equal else "normalized by the server" if normalized else "mismatch",
+                      "footprint_difference_over_area": footprint_difference}  # fmt: skip
         comparisons.append(comparison)
-        if not equal:
+        if comparison["outcome"] == "mismatch":
             mismatches.append(comparison)
-    return {"features_sampled": len(features), "mismatches": mismatches, "comparisons": comparisons}
+    return {
+        "features_sampled": len(features),
+        "rings_equal": sum(c["outcome"] == "rings equal" for c in comparisons),
+        "normalized_by_the_server": sum(c["outcome"] == "normalized by the server" for c in comparisons),
+        "mismatches": mismatches,
+        "comparisons": comparisons,
+    }
 
 
 def main() -> None:
@@ -178,7 +205,7 @@ def main() -> None:
     if capabilities != EXPECTED_CAPABILITIES:
         failures.append(f"capabilities {capabilities}, expected {EXPECTED_CAPABILITIES}")
 
-    expected_counts = expected_row_counts(arguments.product, version_json, identity)
+    expected_counts = frozen_row_counts(version_json, identity)
     frozen_fields = frozen_field_names(version_folder, identity)
     findings["layers"] = []
     for layer in all_layers_and_tables(service_item):

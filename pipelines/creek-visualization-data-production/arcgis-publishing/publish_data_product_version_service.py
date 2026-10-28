@@ -24,6 +24,15 @@ service name; never deletes or overwrites a portal item (a failed run prints the
 every item at the owner-only sharing the portal gives it; never touches the product-level registry fields
 of the live m1-v1 services. Credentials come from ARCGIS_DOTENV_PATH and are never printed.
 
+Raw hourly CSV zips are uploaded under a version-unique file name (modeled-wse-<label>-national-water-model-hourly-
+WY2021.csv.zip): the portal refuses a second item with a file name its owner already uploaded, and m1-v1's public CSV
+items use the plain names.
+
+--resume-from-items <file geodatabase item id>,<service item id> finishes a run that failed after publishing (for
+example at the CSV upload): it checks that both items are this version's, owner-only, Query-only, with the frozen
+layer names and row counts and an unfilled versions-table row, then continues from the item text without uploading
+or publishing again. Nothing is deleted.
+
     npm run data-products:publish-arcgis-version -- --product wse-polygons --version m2-v1
     npm run data-products:publish-arcgis-version -- --product modeled-wse --version m4-v1 --upload-raw-csv --publish
 """
@@ -33,7 +42,9 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -172,7 +183,7 @@ def add_attribute_indexes_and_time(service_item) -> list[str]:
     return notes
 
 
-def upload_raw_hourly_csv_item(folder, csv_zip: Path, title: str, tags: list[str], description: str):
+def upload_raw_hourly_csv_item(folder, csv_zip: Path, upload_file_name: str, title: str, tags: list[str], description: str):
     water_year = csv_zip.name.removesuffix(".csv.zip").split("-")[-1]
     properties = {
         "title": f"{title} — raw hourly values {water_year}",
@@ -183,13 +194,83 @@ def upload_raw_hourly_csv_item(folder, csv_zip: Path, title: str, tags: list[str
         "licenseInfo": LICENSE_INFORMATION,
     }
     last_error = None
-    for item_type in ("CSV Collection", "Code Attachment"):
-        try:
-            return water_year, folder.add({**properties, "type": item_type}, file=str(csv_zip)).result()
-        except Exception as error:  # noqa: BLE001 - try the next accepted item type
-            last_error = error
-            print(f"  item type '{item_type}' rejected ({type(error).__name__}); trying the next type")
-    raise RuntimeError(f"Could not upload {csv_zip.name}: {last_error}")
+    with tempfile.TemporaryDirectory(prefix="raw-hourly-csv-upload-") as temporary_folder:
+        upload_path = Path(temporary_folder) / upload_file_name
+        shutil.copyfile(csv_zip, upload_path)
+        for item_type in ("CSV Collection", "Code Attachment"):
+            try:
+                return water_year, folder.add({**properties, "type": item_type}, file=str(upload_path)).result()
+            except Exception as error:  # noqa: BLE001 - try the next accepted item type
+                last_error = error
+                print(f"  item type '{item_type}' rejected ({type(error).__name__}: {error}); trying the next type")
+    raise RuntimeError(f"Could not upload {upload_file_name}: {last_error}")
+
+
+def frozen_row_counts(version_json: dict, identity: DataProductVersionIdentity) -> dict[str, int]:
+    counts = version_json["counts"]
+    if "arcgis_rows" in counts:
+        return counts["arcgis_rows"]
+    # m2-v1 polygons were frozen before arcgis_rows existed: one versions row and one feature per non-empty bucket.
+    return {identity.versions_table_name: 1, identity.arcgis_prefix: counts["features"]}
+
+
+def resumed_items(gis, item_ids: str, identity: DataProductVersionIdentity, version_json: dict, expected_rows: dict[str, int]):
+    """The file geodatabase and service items of an earlier failed run, after checking they are this version's."""
+    geodatabase_item_id, service_item_id = item_ids.split(",")
+    geodatabase_item, service_item = gis.content.get(geodatabase_item_id), gis.content.get(service_item_id)
+    from arcgis.features import FeatureLayerCollection
+
+    layers = {layer.properties.name: layer for layer in all_layers_and_tables(service_item)}
+    versions_row = layers[identity.versions_table_name].query(where="1=1", out_fields="version_label,published_at_utc").features[0].attributes
+    problems = [
+        message
+        for message, failed in [
+            ("an item is not owned by the signed-in user", {geodatabase_item.owner, service_item.owner} != {gis.users.me.username}),
+            ("an item is not private", {geodatabase_item.access, service_item.access} != {"private"}),
+            ("the first id is not this version's file geodatabase", geodatabase_item.type != "File Geodatabase" or geodatabase_item.name != identity.upload_zip_name),
+            ("the second id is not this version's service", not service_item.url.endswith(f"/{identity.service_name}/FeatureServer")),
+            ("the service is not Query-only", FeatureLayerCollection.fromitem(service_item).properties.capabilities != EXPECTED_CAPABILITIES),
+            ("layer names differ from the frozen version", set(layers) != set(expected_rows)),
+            ("row counts differ from the frozen version", any(layers[name].query(where="1=1", return_count_only=True) != rows for name, rows in expected_rows.items() if name in layers)),
+            ("the versions-table row is already filled", versions_row["version_label"] != identity.version_label or versions_row["published_at_utc"] is not None),
+        ]
+        if failed
+    ]
+    if problems:
+        raise SystemExit(f"Cannot resume from {item_ids}: {'; '.join(problems)}. Nothing was changed.")
+    print(f"  resuming with file geodatabase item {geodatabase_item.id} and service item {service_item.id} (checked)")
+    return geodatabase_item, service_item
+
+
+def upload_and_publish(folder, upload_zip: Path, identity: DataProductVersionIdentity, title: str, tags: list[str], description: str, created_item_ids: list[str]):
+    print("Uploading file geodatabase…")
+    geodatabase_item = folder.add(
+        {
+            "title": f"{title} (file geodatabase)",
+            "type": "File Geodatabase",
+            "tags": tags + ["source-upload"],
+            "snippet": f"Source upload for {title}. Experimental, private.",
+            "description": description,
+            "accessInformation": ACCESS_INFORMATION,
+        },
+        file=str(upload_zip),
+    ).result()
+    created_item_ids.append(geodatabase_item.id)
+    print(f"  file geodatabase item: {geodatabase_item.id}")
+    print("Publishing hosted feature layer (can take several minutes)…")
+    service_item = geodatabase_item.publish(
+        publish_parameters={
+            "name": identity.service_name,
+            "targetSR": {"wkid": 4326},
+            "maxRecordCount": 10000,
+            "hasStaticData": True,
+            "capabilities": EXPECTED_CAPABILITIES,
+        }
+    )
+    created_item_ids.append(service_item.id)
+    print(f"  service item: {service_item.id}")
+    print(f"  service URL: {service_item.url}")
+    return geodatabase_item, service_item
 
 
 def main() -> None:
@@ -198,6 +279,10 @@ def main() -> None:
     parser.add_argument("--version", required=True, help="Version label, for example m4-v1.")
     parser.add_argument("--publish", action="store_true", help="Write to the portal. Without it, print the plan only.")
     parser.add_argument("--upload-raw-csv", action="store_true", help="modeled-wse only: also upload the raw hourly CSV zips as items.")
+    parser.add_argument(
+        "--resume-from-items",
+        help="<file geodatabase item id>,<service item id> of an earlier run that failed after publishing; continue it instead of publishing again.",
+    )
     arguments = parser.parse_args()
     if arguments.upload_raw_csv and arguments.product != MODELED_WSE:
         parser.error("--upload-raw-csv applies to modeled-wse only.")
@@ -229,7 +314,9 @@ def main() -> None:
     for content in describe_file_geodatabase(upload_zip):
         print(f"    {content['name']}: {content['geometry_type'] or 'table'}, {content['rows']:,} rows")
     for csv_zip in raw_csv_zips:
-        print(f"  raw CSV item: {csv_zip.name} ({csv_zip.stat().st_size / 1048576:.1f} MB)")
+        print(f"  raw CSV item: {csv_zip.name} uploaded as {arguments.product}-{arguments.version}-{csv_zip.name} ({csv_zip.stat().st_size / 1048576:.1f} MB)")
+    if arguments.resume_from_items:
+        print(f"  resume: continue the earlier run's items {arguments.resume_from_items} (no upload, no publish)")
     if not arguments.publish:
         print("Dry run only. Add --publish to write to the portal.")
         return
@@ -241,40 +328,16 @@ def main() -> None:
     portal_url, username, password = load_portal_credentials()
     gis = GIS(portal_url, username, password)
     print(f"Signed in as {gis.users.me.username}.")
-    if not gis.content.is_service_name_available(identity.service_name, "featureService"):
+    if arguments.resume_from_items:
+        geodatabase_item, service_item = resumed_items(gis, arguments.resume_from_items, identity, version_json, frozen_row_counts(version_json, identity))
+    elif not gis.content.is_service_name_available(identity.service_name, "featureService"):
         raise SystemExit(f"Service name {identity.service_name} is already taken on the portal. Nothing was changed.")
 
     folder = get_or_create_portal_folder(gis, PORTAL_FOLDER_NAME)
     created_item_ids: list[str] = []
     try:
-        print("Uploading file geodatabase…")
-        geodatabase_item = folder.add(
-            {
-                "title": f"{title} (file geodatabase)",
-                "type": "File Geodatabase",
-                "tags": tags + ["source-upload"],
-                "snippet": f"Source upload for {title}. Experimental, private.",
-                "description": description,
-                "accessInformation": ACCESS_INFORMATION,
-            },
-            file=str(upload_zip),
-        ).result()
-        created_item_ids.append(geodatabase_item.id)
-        print(f"  file geodatabase item: {geodatabase_item.id}")
-
-        print("Publishing hosted feature layer (can take several minutes)…")
-        service_item = geodatabase_item.publish(
-            publish_parameters={
-                "name": identity.service_name,
-                "targetSR": {"wkid": 4326},
-                "maxRecordCount": 10000,
-                "hasStaticData": True,
-                "capabilities": EXPECTED_CAPABILITIES,
-            }
-        )
-        created_item_ids.append(service_item.id)
-        print(f"  service item: {service_item.id}")
-        print(f"  service URL: {service_item.url}")
+        if not arguments.resume_from_items:
+            geodatabase_item, service_item = upload_and_publish(folder, upload_zip, identity, title, tags, description, created_item_ids)
         service_item.update(
             item_properties={
                 "title": title,
@@ -297,7 +360,8 @@ def main() -> None:
         for csv_zip in raw_csv_zips:
             print(f"Uploading raw hourly values {csv_zip.name}…")
             csv_description = description + f"<p>Hosted feature layer: {service_item.url}</p>"
-            water_year, csv_item = upload_raw_hourly_csv_item(folder, csv_zip, title, tags, csv_description)
+            upload_file_name = f"{arguments.product}-{arguments.version}-{csv_zip.name}"
+            water_year, csv_item = upload_raw_hourly_csv_item(folder, csv_zip, upload_file_name, title, tags, csv_description)
             created_item_ids.append(csv_item.id)
             raw_csv_item_ids[water_year] = csv_item.id
             print(f"  {water_year}: {csv_item.id} ({csv_item.type})")
