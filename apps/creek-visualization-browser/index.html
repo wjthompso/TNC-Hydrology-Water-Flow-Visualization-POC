@@ -47,6 +47,12 @@
     <div id="app-root" class="relative h-screen w-screen">
       <div id="arcgis-view" class="absolute inset-0"></div>
 
+      <!--
+        Named creek labels (named-creek-navigation.ts) float here, over the map and under the
+        panels. The container passes clicks through to the map; each label button takes its own.
+      -->
+      <div id="named-creek-pins" class="pointer-events-none absolute inset-0 z-[5] overflow-hidden"></div>
+
       <aside
         class="pointer-events-none absolute left-4 top-4 z-10 max-h-[calc(100vh-2rem)] w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-xl backdrop-blur"
       >
