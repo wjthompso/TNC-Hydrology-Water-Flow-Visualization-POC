@@ -46,8 +46,17 @@ const CURRENT_MODELED_WSE_VERSION_PATH = modeledWseVersionRelativePath(
   CURRENT_MODELED_WSE_DERIVATION_METHOD.version,
 );
 
-function hourlyTimeSeriesRelativePath(datasetId: string, comid: string, timeUtcMs: number): string {
-  return `03-time-series/${CURRENT_MODELED_WSE_VERSION_PATH}/time-series/${datasetId}/water-surface-elevation/${comid}/WY${waterYearOf(timeUtcMs)}.json`;
+/**
+ * `modeledWseVersionPath` (`<method-id>/v<version>`) names another saved Modeled WSE Derivation Method version,
+ * such as the default pairing's Time Series; it defaults to the version the working tree's pipeline writes.
+ */
+function hourlyTimeSeriesRelativePath(
+  datasetId: string,
+  comid: string,
+  timeUtcMs: number,
+  modeledWseVersionPath: string = CURRENT_MODELED_WSE_VERSION_PATH,
+): string {
+  return `03-time-series/${modeledWseVersionPath}/time-series/${datasetId}/water-surface-elevation/${comid}/WY${waterYearOf(timeUtcMs)}.json`;
 }
 
 /**
@@ -59,11 +68,18 @@ export function missingLocalPipelineOutput(input: {
   datasetId: string;
   comid: string;
   timesUtcMs: readonly number[];
+  /** Another saved Modeled WSE version than the current one, e.g. `m5-flowline-profile-jarrett-depth/v1`. */
+  modeledWseVersionPath?: string;
+  /** More files the caller reads, relative to the extent's output folder. */
+  extraRelativePaths?: readonly string[];
 }): string | null {
   const directory = localPipelineOutputDirectory(input.extentId);
   const needed = [
     CROSS_SECTIONS_RELATIVE_PATH,
-    ...input.timesUtcMs.map((time) => hourlyTimeSeriesRelativePath(input.datasetId, input.comid, time)),
+    ...input.timesUtcMs.map((time) =>
+      hourlyTimeSeriesRelativePath(input.datasetId, input.comid, time, input.modeledWseVersionPath),
+    ),
+    ...(input.extraRelativePaths ?? []),
   ];
   const missing = needed.filter((relative) => !existsSync(path.join(directory, relative)));
   if (missing.length === 0) return null;
@@ -159,12 +175,14 @@ export function readWaterSurfaceElevationsAt(input: {
   datasetId: string;
   comid: string;
   timeUtcMs: number;
+  /** Another saved Modeled WSE version than the current one. */
+  modeledWseVersionPath?: string;
 }): ReadonlyMap<string, number | null> | null {
   const file = JSON.parse(
     readFileSync(
       path.join(
         localPipelineOutputDirectory(input.extentId),
-        hourlyTimeSeriesRelativePath(input.datasetId, input.comid, input.timeUtcMs),
+        hourlyTimeSeriesRelativePath(input.datasetId, input.comid, input.timeUtcMs, input.modeledWseVersionPath),
       ),
       'utf8',
     ),
@@ -185,19 +203,25 @@ export function readAnchorBedElevationM(input: {
   comid: string;
   timeUtcMs: number;
   segmentId: string;
+  /** Another saved Modeled WSE version than the current one. */
+  modeledWseVersionPath?: string;
 }): number | null {
   const file = JSON.parse(
     readFileSync(
       path.join(
         localPipelineOutputDirectory(input.extentId),
-        hourlyTimeSeriesRelativePath(input.datasetId, input.comid, input.timeUtcMs),
+        hourlyTimeSeriesRelativePath(input.datasetId, input.comid, input.timeUtcMs, input.modeledWseVersionPath),
       ),
       'utf8',
     ),
   ) as { segments: { segmentId: string; anchorBedElevationM?: number | null }[] };
   const bedM = file.segments.find((segment) => segment.segmentId === input.segmentId)?.anchorBedElevationM;
   if (typeof bedM === 'number' && Number.isFinite(bedM)) return bedM;
-  if (CURRENT_MODELED_WSE_DERIVATION_METHOD.id !== M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD.id) return null;
+  const usesCurrentVersion =
+    input.modeledWseVersionPath === undefined || input.modeledWseVersionPath === CURRENT_MODELED_WSE_VERSION_PATH;
+  if (!usesCurrentVersion || CURRENT_MODELED_WSE_DERIVATION_METHOD.id !== M1_DRAINAGE_AREA_RATIO_MANNING_RATING_CURVE_METHOD.id) {
+    return null;
+  }
   return readCrossSections(input.extentId).bySegmentId.get(input.segmentId)?.bedElevationM ?? null;
 }
 

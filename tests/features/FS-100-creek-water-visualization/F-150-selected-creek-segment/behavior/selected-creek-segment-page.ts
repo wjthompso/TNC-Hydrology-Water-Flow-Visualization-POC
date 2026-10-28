@@ -29,7 +29,7 @@ const publishedPolygonSetsFile = path.join(
   repositoryRoot,
   'apps/creek-visualization-browser/public/published-creek-visualization-data/water-surface-polygon-sets.json',
 );
-/** The modeled page's default WSE Polygon Generation Method version for these tests. */
+/** The WSE Polygon Generation Method version a modeled source reads unless it names another; its buckets are water-surface elevations. */
 const MODELED_POLYGON_SETS_RELATIVE_PATH =
   '04-water-surface-polygons/junction-sloped-terrain-fill/v1/water-surface-polygon-sets';
 
@@ -44,18 +44,34 @@ function readPolygonSets(file: string): PolygonSetFile {
   return parsed;
 }
 
-/** Where a Creek Segment's prepared water-surface polygons come from. */
+/**
+ * Where a Creek Segment's prepared water-surface polygons come from.
+ *
+ * A modeled source reads the junction-sloped terrain fill, whose buckets are water-surface elevations,
+ * unless `polygonSetsRelativePath` names another saved version under the extent's pipeline output
+ * (`04-water-surface-polygons/<method-id>/v<version>/water-surface-polygon-sets`). The
+ * `flowline-channel-ribbon` buckets are water depths above the bed and their rings carry the bed as z,
+ * so pass a depth to `bucketFor` and do not use that bucket with `topDownPoseOverBucket`,
+ * `findSegmentWaterPixel`, or `clickSegmentWater`; use `clickSegmentWaterAtGroundPoint`.
+ */
 export type PolygonSource =
   | { readonly kind: 'observed' }
-  | { readonly kind: 'modeled'; readonly extentId: string };
+  | { readonly kind: 'modeled'; readonly extentId: string; readonly polygonSetsRelativePath?: string };
 
 function polygonSetFile(source: PolygonSource, segmentId: string): string {
   if (source.kind === 'observed') return publishedPolygonSetsFile;
   const comid = segmentId.split('-')[0];
-  return path.join(localPipelineOutputDirectory(source.extentId), MODELED_POLYGON_SETS_RELATIVE_PATH, `${comid}.json`);
+  return path.join(
+    localPipelineOutputDirectory(source.extentId),
+    source.polygonSetsRelativePath ?? MODELED_POLYGON_SETS_RELATIVE_PATH,
+    `${comid}.json`,
+  );
 }
 
-/** The prepared bucket holding a water-surface elevation (half-open, like the browser). */
+/**
+ * The prepared bucket holding a value (half-open, like the browser): a water-surface elevation, or for a
+ * depth-bucket source such as the channel ribbon, a water depth above the bed.
+ */
 export function bucketFor(source: PolygonSource, segmentId: string, elevationM: number): PolygonBucket {
   const set = readPolygonSets(polygonSetFile(source, segmentId)).waterSurfacePolygonSets.find(
     (entry) => entry.segmentId === segmentId,
@@ -112,15 +128,21 @@ function candidatePoints(bucket: PolygonBucket): { longitude: number; latitude: 
   return points;
 }
 
+interface GroundPoint {
+  longitude: number;
+  latitude: number;
+  z: number;
+}
+
 /**
- * A viewport pixel where a click lands on this Creek Segment's drawn water:
- * SceneView.hitTest there reports that segment's water as the nearest water
- * hit. Pixels under the sidebar are skipped, because a click there reaches
- * the panel and not the scene.
+ * The first ground point whose screen pixel hits this Creek Segment's drawn water and is clear of the
+ * sidebar: SceneView.hitTest there reports that segment's water as the nearest water hit. A click under
+ * the sidebar reaches the panel and not the scene, so those pixels are skipped.
  */
-export async function findSegmentWaterPixel(
+async function findWaterPixelAmong(
   page: Page,
-  input: { segmentId: string; bucket: PolygonBucket },
+  segmentId: string,
+  candidates: readonly GroundPoint[],
 ): Promise<{ x: number; y: number }> {
   const sidebar = await page.locator('aside:not(#dev-tools-hud)').boundingBox();
   const pixel = await page.evaluate(
@@ -152,12 +174,33 @@ export async function findSegmentWaterPixel(
       }
       return null;
     },
-    { segmentId: input.segmentId, candidates: candidatePoints(input.bucket), blocked: sidebar },
+    { segmentId, candidates, blocked: sidebar },
   );
   if (!pixel) {
-    throw new Error(`No visible pixel of Creek Segment ${input.segmentId}'s drawn water is clear of the sidebar.`);
+    throw new Error(`No visible pixel of Creek Segment ${segmentId}'s drawn water is clear of the sidebar.`);
   }
   return pixel;
+}
+
+/**
+ * A viewport pixel where a click lands on this Creek Segment's drawn water, searched among points inside
+ * the elevation bucket's rings. Not for depth buckets (the channel ribbon): their ring z is the bed.
+ */
+export async function findSegmentWaterPixel(
+  page: Page,
+  input: { segmentId: string; bucket: PolygonBucket },
+): Promise<{ x: number; y: number }> {
+  return findWaterPixelAmong(page, input.segmentId, candidatePoints(input.bucket));
+}
+
+/** Clicks a pixel with the real mouse and waits until the page selects the Creek Segment. */
+async function clickPixelSelecting(page: Page, segmentId: string, pixel: { x: number; y: number }): Promise<void> {
+  await page.mouse.click(pixel.x, pixel.y);
+  await expect
+    .poll(() => readSelection(page).then((state) => state.selectedCreekSegmentId), {
+      message: `clicking Creek Segment ${segmentId}'s water at (${pixel.x}, ${pixel.y}) selects it`,
+    })
+    .toBe(segmentId);
 }
 
 /** Clicks the segment's drawn water with the real mouse and waits until the page selects it. */
@@ -166,12 +209,22 @@ export async function clickSegmentWater(
   input: { segmentId: string; bucket: PolygonBucket },
 ): Promise<{ x: number; y: number }> {
   const pixel = await findSegmentWaterPixel(page, input);
-  await page.mouse.click(pixel.x, pixel.y);
-  await expect
-    .poll(() => readSelection(page).then((state) => state.selectedCreekSegmentId), {
-      message: `clicking Creek Segment ${input.segmentId}'s water at (${pixel.x}, ${pixel.y}) selects it`,
-    })
-    .toBe(input.segmentId);
+  await clickPixelSelecting(page, input.segmentId, pixel);
+  return pixel;
+}
+
+/**
+ * Clicks the segment's drawn water at a fixed ground point (a developer-captured click on the water
+ * surface) with the real mouse and waits until the page selects the segment. The point is projected to
+ * a pixel at run time, so the click follows the viewport. The caller moves to the camera pose the point
+ * was captured from first. Works for any polygon source, including depth buckets.
+ */
+export async function clickSegmentWaterAtGroundPoint(
+  page: Page,
+  input: { segmentId: string; groundWgs84: GroundPoint },
+): Promise<{ x: number; y: number }> {
+  const pixel = await findWaterPixelAmong(page, input.segmentId, [input.groundWgs84]);
+  await clickPixelSelecting(page, input.segmentId, pixel);
   return pixel;
 }
 
@@ -237,6 +290,18 @@ export function formatPacificTime(timeUtcMs: number): string {
     minute: '2-digit',
     timeZoneName: 'short',
   }).format(timeUtcMs);
+}
+
+/**
+ * The depth bucket (m above the bed) the segment's drawn water holds. The seam reports it only for
+ * depth-drawn modeled water such as the channel ribbon, and null when the segment is not drawn.
+ */
+export async function drawnBucketMinDepthM(page: Page, segmentId: string): Promise<number | null> {
+  return page.evaluate((id) => {
+    const item = window.__TNC_TEST__?.waterGraphicGeometryIdentity.find((entry) => entry.segmentId === id);
+    const depthM = (item as { bucketMinDepthM?: number | null } | undefined)?.bucketMinDepthM;
+    return depthM ?? null;
+  }, segmentId);
 }
 
 export function bucketMinOf(
