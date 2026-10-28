@@ -951,17 +951,21 @@ async function loadFlowlineIndex(extentId: string, method: WsePolygonMethodVersi
 }
 
 /**
- * Keeps the address bar reloadable after a live switch: the parameter names
- * the version, and is dropped when it is the default method's newest version.
- * `modeledWse` names a channel pairing's Time Series and is dropped otherwise.
+ * Keeps the address bar reloadable after a live switch: the default pairing
+ * (what the page opens without parameters) drops both parameters. Any other
+ * choice names its polygon version, plus `modeledWse` for a channel pairing's
+ * Time Series; without `modeledWse` a named version draws its own Time Series.
  */
 function writeWsePolygonMethodToUrl(list: WsePolygonMethodList, method: WsePolygonMethodVersion): void {
   const url = new URL(window.location.href);
-  const isDefault = resolveWsePolygonMethod(list, null).selected === method;
+  const isDefault = derivedDataSelectionKey(resolveWsePolygonMethod(list, null).selected) === derivedDataSelectionKey(method);
   if (isDefault) url.searchParams.delete(WSE_POLYGON_METHOD_QUERY_PARAM);
   else url.searchParams.set(WSE_POLYGON_METHOD_QUERY_PARAM, wsePolygonMethodKey(method));
-  if (method.drawnWithModeledWsePath) url.searchParams.set(MODELED_WSE_QUERY_PARAM, modeledWseKeyOfPath(method.drawnWithModeledWsePath));
-  else url.searchParams.delete(MODELED_WSE_QUERY_PARAM);
+  if (!isDefault && method.drawnWithModeledWsePath) {
+    url.searchParams.set(MODELED_WSE_QUERY_PARAM, modeledWseKeyOfPath(method.drawnWithModeledWsePath));
+  } else {
+    url.searchParams.delete(MODELED_WSE_QUERY_PARAM);
+  }
   window.history.replaceState(window.history.state, '', url);
 }
 

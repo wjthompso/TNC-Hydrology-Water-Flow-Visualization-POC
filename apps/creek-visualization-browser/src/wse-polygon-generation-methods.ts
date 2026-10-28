@@ -5,11 +5,14 @@
 // picks one from `?wsePolygonMethod=<method-id>@v<version>` or the default.
 // `&modeledWse=<method-id>@v<version>` draws those polygons with another
 // Time Series solved on the same channel (a channel pairing, e.g. m4 on
-// flowline-channel-ribbon v2, which was built from m3 v2).
+// flowline-channel-ribbon v2, which was built from m3 v2). Without either
+// parameter the page opens the default pairing: the default method's newest
+// version drawn with the default Modeled WSE Derivation Method (m5) when that
+// method was solved on the polygons' channel.
 
-import { PublishedCreekDataError } from './creek-data-contract';
+import { PublishedCreekDataError } from './creek-data-contract.ts';
 
-/** `?wsePolygonMethod=junction-sloped-terrain-fill@v1`; `<method-id>` alone means its newest version. */
+/** `?wsePolygonMethod=flowline-channel-ribbon@v2`; `<method-id>` alone means its newest version. */
 export const WSE_POLYGON_METHOD_QUERY_PARAM = 'wsePolygonMethod';
 /** Dev-middleware file listing the saved method versions of one extent. */
 export const WSE_POLYGON_METHODS_PATH = 'wse-polygon-methods.json';
@@ -67,7 +70,7 @@ export interface WsePolygonMethodVersion {
 
 /**
  * One saved modeled WSE version (Data-Product Version, e.g. `m2-v1`) of the
- * extent. Local dev middleware only; hosted data lists none.
+ * extent; hosted data lists the one version its service publishes.
  */
 export interface SavedModeledWseVersion {
   methodId: string;
@@ -93,9 +96,14 @@ export interface NotGeneratedDerivedData {
 
 export interface WsePolygonMethodList {
   defaultMethodId: string;
+  /**
+   * The Modeled WSE Derivation Method drawn on the default method's newest version when the URL names none, through a
+   * channel pairing; '' when the file names none (older middleware output).
+   */
+  defaultModeledWseMethodId: string;
   /** Sorted by method id, then version. */
   versions: readonly WsePolygonMethodVersion[];
-  /** Saved modeled WSE versions, sorted by method id, then version. Empty for hosted data. */
+  /** Saved modeled WSE versions, sorted by method id, then version. Hosted data lists the published one. */
   modeledWseVersions: readonly SavedModeledWseVersion[];
   /** Each polygon version paired with every Time Series solved on the channel it was built from. */
   channelPairings: readonly WsePolygonMethodVersion[];
@@ -158,6 +166,7 @@ export function readWsePolygonMethodList(value: unknown): WsePolygonMethodList {
   const modeledWseVersions = readSavedModeledWseVersions(record.modeledWseVersions);
   return {
     defaultMethodId: typeof record.defaultMethodId === 'string' ? record.defaultMethodId : '',
+    defaultModeledWseMethodId: typeof record.defaultModeledWseMethodId === 'string' ? record.defaultModeledWseMethodId : '',
     versions,
     modeledWseVersions,
     channelPairings: channelPairingsOf(versions, modeledWseVersions),
@@ -181,7 +190,7 @@ function channelPairingsOf(
   );
 }
 
-/** Optional in the file: older middleware output and hosted data carry none. */
+/** Optional in the file: older middleware output carries none. */
 function readSavedModeledWseVersions(value: unknown): SavedModeledWseVersion[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item): SavedModeledWseVersion[] => {
@@ -302,6 +311,9 @@ export function preferredPolygonVersionOf(
  * method's newest version (or the newest of any method when the default has
  * none). `modeledWseRequest` (`<id>@v<n>`) then picks that version's channel
  * pairing, or keeps its own Time Series when it names that one.
+ * With neither request, the default pairing: that version drawn with the
+ * newest saved version of the default Modeled WSE Derivation Method solved on
+ * its channel, or with its own Time Series when there is none.
  * `unmatchedRequest` reports a request that fell back.
  */
 export function resolveWsePolygonMethod(
@@ -310,6 +322,18 @@ export function resolveWsePolygonMethod(
   modeledWseRequest: string | null = null,
 ): { selected: WsePolygonMethodVersion; unmatchedRequest: string | null } {
   const polygon = resolvePolygonVersion(list, request);
+  if (!request && !modeledWseRequest) {
+    const defaultPairing = list.channelPairings
+      .filter(
+        (entry) =>
+          wsePolygonMethodKey(entry) === wsePolygonMethodKey(polygon.selected) &&
+          list.modeledWseVersions.some(
+            (wseVersion) => wseVersion.path === entry.drawnWithModeledWsePath && wseVersion.methodId === list.defaultModeledWseMethodId,
+          ),
+      )
+      .at(-1);
+    return defaultPairing ? { selected: defaultPairing, unmatchedRequest: null } : polygon;
+  }
   if (!modeledWseRequest || polygon.unmatchedRequest) return polygon;
   const own = polygon.selected.builtFromModeledWsePath;
   if (own && modeledWseKeyOfPath(own) === modeledWseRequest) return polygon;
