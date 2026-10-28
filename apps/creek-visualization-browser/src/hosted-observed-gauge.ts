@@ -163,9 +163,21 @@ export async function loadHostedObservedGauge(
         approvalStatuses: readings.approvalStatuses,
         segments: [{ segmentId: JALAMA_GAUGE.segmentId, waterSurfaceElevationM: readings.waterSurfaceElevationM }],
       },
-      ...(request.observedWsePropagation === undefined ? {} : { observedWsePropagation: request.observedWsePropagation }),
+      ...(request.observedWsePropagation === undefined
+        ? {}
+        : { observedWsePropagation: withHostedNetworkVersion(request.observedWsePropagation, segmentNetworkVersion) }),
     },
   };
+}
+
+/**
+ * The shipped `observed-wse-propagation.json` names the Jalama-only network it was built on (`jalama-27714637-v1`); the hosted
+ * Creek Segments belong to the whole preserve (`dangermond-preserve-v1`). The data contract requires one shared version, and
+ * every other hosted file already carries the hosted one, so this file does too. The segment ids are the same in both networks,
+ * and the contract still fails when a listed segment is missing from the hosted network.
+ */
+function withHostedNetworkVersion(observedWsePropagation: unknown, segmentNetworkVersion: string): unknown {
+  return { ...(observedWsePropagation as Record<string, unknown>), segmentNetworkVersion };
 }
 
 /** Every Creek Gauge Data row of the Jalama Near Lompoc gauge, ordered by timestamp then id. */
