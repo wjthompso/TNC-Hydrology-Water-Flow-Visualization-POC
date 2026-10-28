@@ -37,7 +37,13 @@ import {
   DRAINAGE_AREA_RATIO_TRANSFER_LEGEND_LABEL,
   DRAINAGE_AREA_RATIO_TRANSFER_TOGGLE_LABEL,
 } from './drainage-area-ratio-transfer-labels';
-import { CREEK_CENTERLINE_TOGGLE_LABEL, createCreekCenterlineOverlay } from './creek-centerline-overlay';
+import {
+  CREEK_CENTERLINE_TOGGLE_LABEL,
+  createCreekCenterlineOverlay,
+  flowlinePathsByTncComid,
+} from './creek-centerline-overlay';
+import { createNamedCreekNavigation } from './named-creek-navigation';
+import { groupNamedCreeks } from './named-creeks';
 import { renderModeledDatasetAbout } from './modeled-dataset-info-panel';
 import { bindDatasetAboutDialog } from './dataset-about-dialog';
 import {
@@ -187,6 +193,8 @@ export interface ModeledExperienceElements {
   /** Shows the TNC flowline centerlines and vertex dots; unchecked when the experience starts. */
   centerlineToggle: HTMLInputElement;
   centerlineToggleLabel: HTMLElement;
+  /** Map-sized container the floating creek labels are added to. */
+  namedCreekPins: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
   legendLabel: HTMLElement | null;
@@ -396,6 +404,12 @@ export async function startModeledCreekExperience(
   // Added after the water layer so the lines draw over it. Hidden until the checkbox is ticked.
   const centerlines = createCreekCenterlineOverlay(view, segmentPaths);
   lifetime.onEnd(() => centerlines.dispose());
+
+  // Named creeks: highlighted, labelled, and zoom-to-able whenever the camera is high. No control to switch them on.
+  const namedCreeks = groupNamedCreeks(flowlinePathsByTncComid(segmentPaths));
+  if (namedCreeks.length > 0) {
+    createNamedCreekNavigation(view, namedCreeks, { pinContainer: elements.namedCreekPins }, lifetime);
+  }
   elements.centerlineToggle.addEventListener(
     'change',
     () => centerlines.setVisible(elements.centerlineToggle.checked),

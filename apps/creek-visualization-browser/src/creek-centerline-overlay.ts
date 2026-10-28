@@ -130,7 +130,7 @@ export function createCreekCenterlineOverlay(
  * read `<TNC COMID>-<vertex number>`, so the vertex number orders a flowline.
  * Consecutive segments that share an end vertex are chained into one path.
  */
-function flowlinePathsByTncComid(
+export function flowlinePathsByTncComid(
   segmentPathsById: ReadonlyMap<string, CreekSegmentPathRecord>,
 ): Map<string, LonLat[][]> {
   const segmentsByComid = new Map<string, { vertexNumber: number; path: readonly LonLat[] }[]>();
