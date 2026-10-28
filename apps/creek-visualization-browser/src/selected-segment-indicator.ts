@@ -18,10 +18,12 @@ const FLY_TO_TILT_DEGREES = 55;
 const FLY_TO_DURATION_MS = 1200;
 
 /** Distance from the screen edge to the bubble's center. The bottom is larger to leave room for the distance label. */
-const EDGE_INSET_PX = { left: 40, right: 40, top: 40, bottom: 64 };
+const EDGE_INSET_PX = { left: 40, right: 40, top: 40, bottom: 92 };
 /** Gap between the control panel and the bubble when the bubble must sit beside the panel. */
 const PANEL_GAP_PX = 12;
 
+/** Only the sign of "ahead or behind" depends on this, so the ground's rough sea-level height is enough. */
+const GROUND_ELEVATION_M = 0;
 const METERS_PER_DEGREE_LATITUDE = 110540;
 const METERS_PER_DEGREE_LONGITUDE_AT_EQUATOR = 111320;
 
@@ -40,42 +42,36 @@ export interface SelectedSegmentIndicator {
   update(): void;
 }
 
-/** A target's direction as the camera sees it. */
-export interface CameraRelativeTarget {
-  /** False when the target lies behind the camera's image plane, where screen projection mirrors it. */
-  readonly inFront: boolean;
-  /** Clockwise degrees from screen-up to the target's direction on the screen plane. Valid for in-front and behind targets. */
-  readonly screenAngleDegrees: number;
-}
-
 /**
- * Finds a target's direction in camera space from the camera's heading and tilt (no roll). Heading 0 faces
- * north; tilt 0 looks straight down and 90 looks at the horizon. A flat local projection is accurate to a
- * fraction of a degree over the few kilometers this scene covers, and only the direction matters here.
+ * True when the target lies ahead of the camera's image plane. `view.toScreen` mirrors targets behind that
+ * plane, so only this sign needs the camera's heading and tilt (heading 0 faces north; tilt 0 looks straight
+ * down, 90 at the horizon). A flat local projection is plenty accurate over the few kilometers this scene covers.
  */
-export function cameraRelativeTarget(camera: Camera, target: LonLat, targetElevationM: number): CameraRelativeTarget {
+function isInFrontOfCamera(camera: Camera, target: LonLat): boolean {
   const eastM =
     (target[0] - (camera.position.longitude ?? 0)) *
     METERS_PER_DEGREE_LONGITUDE_AT_EQUATOR *
     Math.cos(toRadians(target[1]));
   const northM = (target[1] - (camera.position.latitude ?? 0)) * METERS_PER_DEGREE_LATITUDE;
-  const upM = targetElevationM - (camera.position.z ?? 0);
-
-  const sinHeading = Math.sin(toRadians(camera.heading));
-  const cosHeading = Math.cos(toRadians(camera.heading));
+  const upM = GROUND_ELEVATION_M - (camera.position.z ?? 0);
   const sinTilt = Math.sin(toRadians(camera.tilt));
-  const cosTilt = Math.cos(toRadians(camera.tilt));
+  const forwardM =
+    (eastM * Math.sin(toRadians(camera.heading)) + northM * Math.cos(toRadians(camera.heading))) * sinTilt -
+    upM * Math.cos(toRadians(camera.tilt));
+  return forwardM > 0;
+}
 
-  const forwardM = eastM * sinHeading * sinTilt + northM * cosHeading * sinTilt - upM * cosTilt;
-  const rightM = eastM * cosHeading - northM * sinHeading;
-  const screenUpM = eastM * sinHeading * cosTilt + northM * cosHeading * cosTilt + upM * sinTilt;
+/** Clockwise degrees from screen-up to the direction `from` → `to`. Straight down when the two coincide. */
+function screenAngleDegrees(from: ScreenXY, to: ScreenXY): number {
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY) || Math.hypot(deltaX, deltaY) < 1e-6) return 180;
+  return toDegrees(Math.atan2(deltaX, -deltaY));
+}
 
-  // A target straight ahead or straight behind has no sideways offset; point down, as "behind you".
-  const noSidewaysOffset = Math.hypot(rightM, screenUpM) < 1e-6;
-  return {
-    inFront: forwardM > 0,
-    screenAngleDegrees: noSidewaysOffset ? 180 : toDegrees(Math.atan2(rightM, screenUpM)),
-  };
+interface ScreenXY {
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface EdgeRectangle {
@@ -112,6 +108,8 @@ export function formatIndicatorDistance(distanceM: number): string {
 
 export function bindSelectedSegmentIndicator(input: SelectedSegmentIndicatorInput): SelectedSegmentIndicator {
   const { view } = input;
+  (window as unknown as Record<string, unknown>).__TMP_VIEW = view; // TEMP-DEBUG
+  (window as unknown as Record<string, unknown>).__TMP_LOC = () => { const id = input.selectedSegmentId(); return id ? input.segmentLocation(id) : null; }; // TEMP-DEBUG
   const lifetime = input.lifetime ?? createExperienceLifetime();
   const elements = readIndicatorElements();
   if (!elements) return { update() {} };
@@ -135,21 +133,29 @@ export function bindSelectedSegmentIndicator(input: SelectedSegmentIndicatorInpu
     const originY = container?.top ?? 0;
     const panel = controlPanelRectangle(originX, originY);
 
-    const groundElevationM = view.center?.z ?? 0;
-    const direction = cameraRelativeTarget(view.camera, location, groundElevationM);
-    if (direction.inFront && isVisibleOnScreen(view, location, panel)) {
+    // toScreen returns a point even off screen, so the segment's true screen direction is known at any distance.
+    const projected = view.toScreen(
+      new Point({ longitude: location[0], latitude: location[1], spatialReference: { wkid: 4326 } }),
+    );
+    const inFront = isInFrontOfCamera(view.camera, location);
+    if (projected && inFront && isVisibleOnScreen(view, projected, panel)) {
       hide();
       return;
     }
 
+    // The bubble leaves the safe area's center along the ray toward the segment, so the arrow, drawn from the
+    // bubble along that same ray, points straight at the segment. A segment behind the camera projects mirrored
+    // through the view center, so its direction is taken from there instead.
     const safeArea = safeAreaRectangle(view.width, view.height, panel);
-    const position = edgePointAtAngle(safeArea, direction.screenAngleDegrees);
+    const rayOrigin = inFront ? rectangleCenter(safeArea) : { x: view.width / 2, y: view.height / 2 };
+    const angleDegrees = projected ? screenAngleDegrees(rayOrigin, projected) : 180;
+    const position = edgePointAtAngle(safeArea, angleDegrees);
     const distanceText = formatIndicatorDistance(horizontalDistanceFromViewCenterM(view, location));
 
     elements.root.classList.remove('hidden');
     elements.root.style.left = `${position.x}px`;
     elements.root.style.top = `${position.y}px`;
-    elements.arrow.style.transform = `rotate(${direction.screenAngleDegrees}deg)`;
+    elements.arrow.style.transform = `rotate(${angleDegrees}deg)`;
     elements.distance.textContent = distanceText;
     const label = `Selected Creek Segment ${segmentId} is off screen, ${distanceText} away. Activate to fly to it.`;
     elements.root.setAttribute('aria-label', label);
@@ -199,12 +205,7 @@ export function bindSelectedSegmentIndicator(input: SelectedSegmentIndicatorInpu
   return { update };
 }
 
-function isVisibleOnScreen(view: SceneView, location: LonLat, panel: EdgeRectangle | null): boolean {
-  // No elevation: the point is draped on the ground, as the water is.
-  const screenPoint = view.toScreen(
-    new Point({ longitude: location[0], latitude: location[1], spatialReference: { wkid: 4326 } }),
-  );
-  if (!screenPoint) return false;
+function isVisibleOnScreen(view: SceneView, screenPoint: ScreenXY, panel: EdgeRectangle | null): boolean {
   const insideView =
     screenPoint.x >= 0 && screenPoint.y >= 0 && screenPoint.x <= view.width && screenPoint.y <= view.height;
   if (!insideView) return false;
@@ -215,6 +216,10 @@ function isVisibleOnScreen(view: SceneView, location: LonLat, panel: EdgeRectang
     screenPoint.y >= panel.top &&
     screenPoint.y <= panel.bottom;
   return !underPanel;
+}
+
+function rectangleCenter(rectangle: EdgeRectangle): ScreenXY {
+  return { x: (rectangle.left + rectangle.right) / 2, y: (rectangle.top + rectangle.bottom) / 2 };
 }
 
 /** The screen area where the bubble may sit: inside the screen edges and, when it fits, to the right of the control panel. */
