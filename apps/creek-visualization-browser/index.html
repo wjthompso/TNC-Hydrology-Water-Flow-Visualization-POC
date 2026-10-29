@@ -292,21 +292,25 @@
               class="group pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-md bg-slate-700/40 px-4 text-center transition-opacity duration-300 motion-reduce:transition-none"
             >
               <p id="wse-chart-empty" role="status" class="max-w-[15rem] text-balance text-sm font-medium leading-snug text-slate-100"></p>
-              <div aria-hidden="true" class="flex flex-col items-center group-data-[awaiting-selection=false]:hidden">
-                <!-- The arrow bounces up and down toward the creek; reduced motion keeps it still. -->
+              <div aria-hidden="true" class="flex w-16 flex-col items-center group-data-[awaiting-selection=false]:hidden">
+                <!--
+                  The arrow bounces up and down toward the water; reduced motion keeps it still.
+                  It is centered over the 64px waves below, on x=32: the top of the middle crest.
+                -->
                 <span class="text-cyan-300 motion-safe:animate-bounce">
                   <svg viewBox="0 0 24 28" class="h-6 w-6 fill-none stroke-current" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 3v20M4.5 15.5 12 24l7.5-8.5" />
                   </svg>
                 </span>
                 <!--
-                  Water waves: three identical rows of the same sine wave (two wavelengths), all spanning x=5 to x=53,
-                  centered in the 64-unit box with room for the round caps. The middle row is the lighter cyan.
+                  Water waves: three stacked rows of the same sine wave with three crests each (half-wavelength 10 wide),
+                  spanning x=7 to x=57 so they are centered in the 64-unit box. Crests peak at x=12, 32, and 52.
+                  The middle row is the lighter cyan.
                 -->
                 <svg viewBox="0 0 64 40" class="mt-1 h-10 w-16 overflow-visible fill-none stroke-cyan-400" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M5 8q6-7 12 0t12 0t12 0t12 0" />
-                  <path d="M5 20q6-7 12 0t12 0t12 0t12 0" class="stroke-cyan-300" />
-                  <path d="M5 32q6-7 12 0t12 0t12 0t12 0" />
+                  <path d="M7 8q5-7 10 0t10 0t10 0t10 0t10 0" />
+                  <path d="M7 20q5-7 10 0t10 0t10 0t10 0t10 0" class="stroke-cyan-200" />
+                  <path d="M7 32q5-7 10 0t10 0t10 0t10 0t10 0" />
                 </svg>
               </div>
             </div>
