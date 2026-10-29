@@ -159,12 +159,32 @@ export function resolveCreekDataSourceConfiguration(
   });
 }
 
+/** Query parameter that lets one test page pick its data source; honored only while the test server sets `VITE_TEST_MODE`. */
+export const TEST_MODE_DATA_SOURCE_QUERY_PARAM = 'creekDataSource';
+
+/**
+ * Test-mode-only seam: `?creekDataSource=hosted` (or `local`) overrides `VITE_CREEK_DATA_SOURCE` for that page load, so a
+ * browser test can open the production data path while the shared test server keeps defaulting to `local`.
+ * Production builds do not set `VITE_TEST_MODE`, so the parameter does nothing there.
+ */
+export function testModeDataSourceOverride(
+  environment: CreekDataSourceEnvironment,
+  locationSearch: string,
+): Pick<CreekDataSourceEnvironment, 'VITE_CREEK_DATA_SOURCE'> {
+  if (!isTruthyFlag(environment.VITE_TEST_MODE)) return {};
+  const requested = new URLSearchParams(locationSearch).get(TEST_MODE_DATA_SOURCE_QUERY_PARAM);
+  return requested === 'hosted' || requested === 'local' ? { VITE_CREEK_DATA_SOURCE: requested } : {};
+}
+
 /**
  * Configuration for the running browser app, resolved from `import.meta.env`.
  * Node scripts have no `import.meta.env`; they get the defaults (hosted).
  */
-export const creekDataSourceConfiguration: CreekDataSourceConfiguration =
-  resolveCreekDataSourceConfiguration(import.meta.env ?? {});
+const runtimeEnvironment: CreekDataSourceEnvironment = import.meta.env ?? {};
+export const creekDataSourceConfiguration: CreekDataSourceConfiguration = resolveCreekDataSourceConfiguration({
+  ...runtimeEnvironment,
+  ...testModeDataSourceOverride(runtimeEnvironment, typeof location === 'undefined' ? '' : location.search),
+});
 
 /** Published table names (from `arcgis_table_names`) for each modeled WSE layer role. */
 export const MODELED_WSE_M1_V1_TABLE_NAME_BY_ROLE = {

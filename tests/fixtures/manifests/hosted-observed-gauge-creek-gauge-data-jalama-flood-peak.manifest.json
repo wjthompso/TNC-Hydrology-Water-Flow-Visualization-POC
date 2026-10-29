@@ -1,0 +1,15 @@
+{
+  "fixture": "tests/fixtures/recorded/hosted-observed-gauge/creek-gauge-data-jalama-flood-peak.json",
+  "source": {
+    "description": "9 consecutive of the 40,197 Creek Gauge Data rows of station 1 (USGS 11120600 Jalama Creek near Lompoc), ids 11577 to 11585, around the 2026-01-03 15:15 UTC flood peak, as served by the public Dangermond_Creek_Gauges service.",
+    "redactedEndpoint": "https://dangermondpreserve-spatial.com/server/rest/services/Dangermond_Creek_Gauges/FeatureServer/2"
+  },
+  "captureDate": "2026-10-28",
+  "sourceVersion": "Public hosted services as of 2026-10-28; modeled WSE m1-v1 and WSE polygons m1-v1, segment_network_version dangermond-preserve-v1 (read-only /query responses, no token)",
+  "sha256": "5061378622b05bc887c1e0c4b9b9f13df4cb2a2a876de5d0158247d433915812",
+  "reviewStatus": "approved",
+  "reviewer": "Will Overbye-Thompson",
+  "associations": [
+    "F-110"
+  ]
+}

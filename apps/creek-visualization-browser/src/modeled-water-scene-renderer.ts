@@ -20,6 +20,7 @@ import type SceneView from '@arcgis/core/views/SceneView';
 import {
   drainageAreaRatioTransferWaterSymbol,
   polygonForBucket,
+  troutConditionWaterSymbol,
   waterSymbol,
   type SegmentPolygonPlacement,
   type WaterGraphicGeometryIdentity,
@@ -93,7 +94,7 @@ export function createModeledWaterSceneRenderer(
     existing: Graphic | undefined,
   ): Graphic | null => {
     const { segmentId, drainageAreaRatioTransfer } = placement;
-    const symbol = drainageAreaRatioTransfer ? drainageAreaRatioTransferWaterSymbol : waterSymbol;
+    const symbol = symbolFor(placement);
     const geometry = segmentSurfaceGeometry(segmentPathsById, segmentId);
     const junctionDepth = depth.junctionDepth;
     // The depths are in the key so a depth change inside one bucket redraws.
@@ -193,7 +194,7 @@ export function createModeledWaterSceneRenderer(
         continue;
       }
       writtenBucketMinDepthM.delete(segmentId);
-      const symbol = drainageAreaRatioTransfer ? drainageAreaRatioTransferWaterSymbol : waterSymbol;
+      const symbol = symbolFor(placement);
       const elevationM = bucket.minWaterSurfaceElevationM;
       const geometry = segmentSurfaceGeometry(segmentPathsById, segmentId);
       const surface = geometry && junctionWaterSurface ? junctionWaterSurface : null;
@@ -293,6 +294,14 @@ export function createModeledWaterSceneRenderer(
       layer.destroy();
     },
   };
+}
+
+/** The trout condition color when the placement carries one, else the transfer or regular modeled water look. */
+function symbolFor(placement: SegmentPolygonPlacement) {
+  return (
+    troutConditionWaterSymbol(placement.troutCondition) ??
+    (placement.drainageAreaRatioTransfer ? drainageAreaRatioTransferWaterSymbol : waterSymbol)
+  );
 }
 
 /** The bucket's rings lifted to a surface sloping from the upstream to the downstream junction height. */

@@ -56,21 +56,30 @@ const MAXIMUM_HEIGHT_DIFFERENCE_M = 0.15;
 const MAXIMUM_INVERSION_M = 0.1;
 
 /**
- * The developer saw a dark seam line and a dry gap across high water on side
- * creek 27714669 (near Creek Segment 007) and clicked it with no water hit.
+ * Side creek 27714669 on the Dangermond Preserve extent, on the default modeled pairing: WSE Polygon Generation
+ * Method `flowline-channel-ribbon` v2 drawn with the `m5-flowline-profile-jarrett-depth` v1 Time Series.
+ *
+ * The developer first saw a dark seam line and a dry gap across high water here (near Creek Segment 007, at
+ * 2023-01-01T11:00Z) and clicked it with no water hit. Under the default pairing that click lands outside the drawn
+ * outline, so it was replaced by the developer's own click on Creek Segment 018's water at 2023-02-01T00:00Z
+ * (Jan 31 2023, 4:00 PM PST): 0.164 m of water at the anchor, 0.29 m under the click. The 007 seam is no longer
+ * replayed; the developer will add a click of their own if they see another seam.
  */
-const SEAM_HOUR_UTC = '2023-01-01T11:00:00Z';
+const SEAM_HOUR_UTC = '2023-02-01T00:00:00Z';
 const PRESERVE_EXTENT_ID = 'dangermond-preserve';
 const SEAM_TNC_COMID = '27714669';
+/** The default pairing's Time Series and ribbon polygons, whose files the page reads at that hour. */
+const DEFAULT_MODELED_WSE_VERSION_PATH = 'm5-flowline-profile-jarrett-depth/v1';
+const SEAM_RIBBON_POLYGON_SETS_FILE = `04-water-surface-polygons/flowline-channel-ribbon/v2/water-surface-polygon-sets/${SEAM_TNC_COMID}.json`;
 const SEAM_CLICKS: readonly DeveloperCreekBedClick[] = [
   {
-    nearestSegmentId: '27714669-007',
+    nearestSegmentId: '27714669-018',
     cameraPose: {
-      positionWgs84: [-120.48240485843216, 34.53452023581515, 175.45184628572315],
-      headingDegrees: 352.7733530312621,
-      tiltDegrees: 80.83684613648961,
+      positionWgs84: [-120.4822325102055, 34.529780744447905, 155.77706593461335],
+      headingDegrees: 5.120392188775799,
+      tiltDegrees: 79.15365937641032,
     },
-    groundWgs84: { longitude: -120.48244790598753, latitude: 34.53526223296189, z: 162.69897971401818 },
+    groundWgs84: { longitude: -120.48210132011081, latitude: 34.53081971100631, z: 132.76909181755036 },
   },
 ];
 
@@ -168,7 +177,7 @@ test("No creek segment stitching failures (cracks between water polygons): At th
       }
     }
 
-    // (2) Dangermond Preserve side creek 27714669 at 2023-01-01T11:00Z: replay the developer click near segment 007.
+    // (2) Dangermond Preserve side creek 27714669 at 2023-02-01T00:00Z: replay the developer click on segment 018's water.
     // The page opens on the default saved polygon method (no wsePolygonMethod in the URL).
     const seamTimeUtcMs = Date.parse(SEAM_HOUR_UTC);
     const seamMissing = missingLocalPipelineOutput({
@@ -176,6 +185,8 @@ test("No creek segment stitching failures (cracks between water polygons): At th
       datasetId: NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
       comid: SEAM_TNC_COMID,
       timesUtcMs: [seamTimeUtcMs],
+      modeledWseVersionPath: DEFAULT_MODELED_WSE_VERSION_PATH,
+      extraRelativePaths: [SEAM_RIBBON_POLYGON_SETS_FILE],
     });
     if (seamMissing) throw new Error(`INCONCLUSIVE: ${seamMissing}`);
     await openModeledWaterPage(

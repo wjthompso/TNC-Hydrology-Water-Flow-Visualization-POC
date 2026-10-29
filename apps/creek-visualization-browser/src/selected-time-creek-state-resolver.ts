@@ -133,7 +133,7 @@ function bucketHasSurface(bucket: ElevationBucket): boolean {
   return bucket.ringsWgs84.some((ring) => ring.length >= 3);
 }
 
-function exactTimestampIndex(timestampsUtcMs: readonly number[], timeUtcMs: number): number {
+export function exactTimestampIndex(timestampsUtcMs: readonly number[], timeUtcMs: number): number {
   let low = 0;
   let high = timestampsUtcMs.length - 1;
   while (low <= high) {

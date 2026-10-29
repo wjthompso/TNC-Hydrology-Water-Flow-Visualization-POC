@@ -7,6 +7,7 @@
 import type Graphic from '@arcgis/core/Graphic';
 import type GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import type GraphicsLayerView from '@arcgis/core/views/layers/GraphicsLayerView';
+import Color from '@arcgis/core/Color';
 import HighlightOptions from '@arcgis/core/views/support/HighlightOptions';
 import type SceneView from '@arcgis/core/views/SceneView';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
@@ -14,6 +15,8 @@ import { createExperienceLifetime, type ExperienceLifetime } from './experience-
 const SELECTED_CREEK_SEGMENT_HIGHLIGHT_NAME = 'selected-creek-segment';
 /** Amber stands apart from the blue water and matches the chart's time cursor. */
 const SELECTED_CREEK_SEGMENT_HIGHLIGHT_COLOR = '#fbbf24';
+/** White while steelhead trout conditions color the water, because amber reads as the Marginal yellow. */
+const TROUT_CONDITIONS_HIGHLIGHT_COLOR = '#ffffff';
 
 export interface WaterGraphicSource {
   readonly layer: GraphicsLayer;
@@ -32,6 +35,8 @@ export interface CreekSegmentSelection extends CreekSegmentSelectionState {
   refresh(): void;
   /** Selects a Creek Segment by id, as a click on its water would; null clears the selection. */
   select(segmentId: string | null): void;
+  /** Switches the highlight to white (steelhead trout conditions on) or back to amber. */
+  setTroutConditionsHighlight(on: boolean): void;
 }
 
 export function bindCreekSegmentSelection(
@@ -116,6 +121,11 @@ export function bindCreekSegmentSelection(
     },
     refresh,
     select,
+    setTroutConditionsHighlight(on) {
+      const color = on ? TROUT_CONDITIONS_HIGHLIGHT_COLOR : SELECTED_CREEK_SEGMENT_HIGHLIGHT_COLOR;
+      highlightOptions.color = new Color(color);
+      highlightOptions.haloColor = new Color(color);
+    },
   };
 }
 

@@ -1,0 +1,20 @@
+{
+  "servicePath": "Dangermond_Creek_Gauges/FeatureServer/2",
+  "queryResponse": {
+    "objectIdFieldName": "id",
+    "globalIdFieldName": "",
+    "fields": [{"name":"id","alias":"id","type":"esriFieldTypeOID"},{"name":"station_id","alias":"station_id","type":"esriFieldTypeInteger"},{"name":"timestamp_utc","alias":"timestamp_utc","type":"esriFieldTypeDate","length":8},{"name":"gauge_height","alias":"gauge_height","type":"esriFieldTypeDouble"},{"name":"gauge_height_units","alias":"gauge_height_units","type":"esriFieldTypeString","length":1073741822},{"name":"approval_status","alias":"approval_status","type":"esriFieldTypeString","length":1073741822}],
+    "features": [
+      {"attributes":{"id":11577,"station_id":1,"timestamp_utc":1767449700000,"gauge_height":10.01,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11578,"station_id":1,"timestamp_utc":1767450600000,"gauge_height":10.64,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11579,"station_id":1,"timestamp_utc":1767451500000,"gauge_height":10.97,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11580,"station_id":1,"timestamp_utc":1767452400000,"gauge_height":11.48,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11581,"station_id":1,"timestamp_utc":1767453300000,"gauge_height":11.63,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11582,"station_id":1,"timestamp_utc":1767454200000,"gauge_height":11.18,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11583,"station_id":1,"timestamp_utc":1767455100000,"gauge_height":11.2,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11584,"station_id":1,"timestamp_utc":1767456000000,"gauge_height":10.92,"gauge_height_units":"ft","approval_status":"Provisional"}},
+      {"attributes":{"id":11585,"station_id":1,"timestamp_utc":1767456900000,"gauge_height":10.98,"gauge_height_units":"ft","approval_status":"Provisional"}}
+    ],
+    "exceededTransferLimit": false
+  }
+}

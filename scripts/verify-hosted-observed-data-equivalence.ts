@@ -66,6 +66,8 @@ interface ShippedFiles {
     timestampsUtcMs: number[];
     segments: { segmentId: string; waterSurfaceElevationM: (number | null)[] }[];
   };
+  /** What production passes to the hosted adapter: the file that ships with the app. */
+  observedWsePropagation: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +145,7 @@ const shipped: ShippedFiles = {
   monitoringStations: await readShippedJson('monitoring-stations.json'),
   dataSourceMetadata: await readShippedJson('data-source-metadata.json'),
   observedTimeSeries: await readShippedJson('creek-segment-time-series/usgs-11120600-observed-wse.json'),
+  observedWsePropagation: await readShippedJson('observed-wse-propagation.json'),
 };
 
 const startedAt = performance.now();
@@ -151,6 +154,7 @@ const { files: hostedFiles, droppedDuplicateCount } = await loadHostedObservedGa
     modeledWseServiceUrl: configuration.observedGaugeModeledWseServiceUrl,
     wsePolygonsServiceUrl: configuration.observedGaugeWsePolygonsServiceUrl,
     creekGaugeServiceUrl: configuration.creekGaugeServiceUrl,
+    observedWsePropagation: shipped.observedWsePropagation,
   },
   { fetchImplementation: countingFetch },
 );
@@ -212,9 +216,13 @@ runComparison(`Prepared polygons of ${JALAMA_GAUGE.segmentId}: buckets and rings
   const localSet = shipped.waterSurfacePolygonSets.waterSurfacePolygonSets.find((set) => set.segmentId === JALAMA_GAUGE.segmentId);
   const hostedSets = hosted.waterSurfacePolygonSets.waterSurfacePolygonSets;
   const hostedSet = hostedSets.find((set) => set.segmentId === JALAMA_GAUGE.segmentId);
-  if (!localSet || !hostedSet || hostedSets.length !== 1) {
-    recordMismatch(result, 'polygon set missing, or hosted returned a segment other than the gauge segment');
+  if (!localSet || !hostedSet) {
+    recordMismatch(result, 'the gauge segment has no polygon set locally or on the hosted service');
     return;
+  }
+  // The neighbours' sets load too (the propagation file names them); the data-contract check below compares the whole list.
+  if (hostedSets.map((set) => set.segmentId).join() !== shipped.waterSurfacePolygonSets.waterSurfacePolygonSets.map((set) => set.segmentId).join()) {
+    recordMismatch(result, 'hosted polygon sets list other segments, or in another order, than the shipped file');
   }
   const localBuckets = localSet.elevationBuckets.filter((bucket) => bucket.ringsWgs84.length > 0);
   if (localBuckets.length !== hostedSet.elevationBuckets.length) {
