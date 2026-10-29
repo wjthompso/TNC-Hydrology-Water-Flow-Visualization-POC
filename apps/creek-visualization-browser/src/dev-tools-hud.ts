@@ -51,6 +51,9 @@ import type {
   ModeledSegmentReading,
 } from './modeled-creek-experience';
 import { formatObservationTime } from './observation-timeline-controls';
+import type { BarrierMarkerGallery } from './barrier-marker-gallery';
+import type { FishBarrierMap, FishBarrierSite } from './fish-barrier-map';
+import { currentFishBarrierMap, onFishBarrierMapChange } from './fish-barrier-state';
 import type { StationMarkerGallery } from './station-marker-gallery';
 import type { DevToolsClickMarker } from './dev-tools-click-marker';
 import { createDevToolsClickMarker } from './dev-tools-click-marker';
@@ -574,6 +577,12 @@ export function installDevToolsHud(options: DevToolsHudOptions): DevToolsHudHand
 
   // --- Station marker gallery (UCS-261): every candidate model on Jalama Road ---
   scrollHost.appendChild(buildStationMarkerGalleryTools(options.view, lifetime));
+
+  // --- Fish barrier models: candidate 3D barriers on Jalama Creek beside the gauge ---
+  scrollHost.appendChild(buildBarrierMarkerGalleryTools(options.view, lifetime));
+
+  // --- Fish barriers: a picker and size readout for the barriers the sidebar checkbox draws ---
+  scrollHost.appendChild(buildFishBarrierMapTools(lifetime));
 
   // --- Footer: shared copy feedback ----------------------------------------
   const footer = createElement('footer', [
@@ -1745,6 +1754,189 @@ function buildStationMarkerGalleryTools(view: SceneView, lifetime: ExperienceLif
     gallery = null;
   });
   return section.root;
+}
+
+/**
+ * Opens and closes the Fish barrier models gallery: every candidate 3D barrier (culvert, weir,
+ * waterfall, steep ledge) set along Jalama Creek just upstream of the gauge. The gallery module
+ * loads on first open. Sizes are guesses because the barrier layer has no dimensions.
+ */
+function buildBarrierMarkerGalleryTools(view: SceneView, lifetime: ExperienceLifetime): HTMLElement {
+  const section = buildSection('Fish barrier models', '07', 0, 'Candidate 3D barriers, on Jalama Creek');
+  section.root.id = 'dev-tools-barrier-marker-gallery';
+
+  const toggleButton = buildCopyButton('Show barrier models');
+  toggleButton.classList.add('px-3', 'py-1.5', 'text-[11px]');
+  toggleButton.setAttribute('aria-pressed', 'false');
+
+  const legend = createElement('ol', [READOUT_BLOCK_CLASS, 'list-decimal', 'pl-6']);
+  legend.hidden = true;
+  const status = createElement('p', ['min-h-4', 'text-[11px]', 'font-bold', 'text-hud-label']);
+  status.setAttribute('aria-live', 'polite');
+  section.body.append(toggleButton, legend, status);
+
+  let gallery: BarrierMarkerGallery | null = null;
+
+  const setBusy = (value: boolean): void => {
+    toggleButton.disabled = value;
+  };
+
+  const open = async (): Promise<void> => {
+    setBusy(true);
+    status.textContent = 'Placing barrier models…';
+    try {
+      const module = await import('./barrier-marker-gallery');
+      gallery = await module.openBarrierMarkerGallery(view);
+      legend.replaceChildren(
+        ...gallery.models.map((model) =>
+          createElement('li', [], `${model.label} (${model.standsFor}) — ${model.credit}`),
+        ),
+      );
+      legend.hidden = false;
+      toggleButton.textContent = 'Hide barrier models';
+      toggleButton.setAttribute('aria-pressed', 'true');
+      status.textContent = `${gallery.models.length} barrier models upstream of the gauge. Sizes are guesses.`;
+    } catch (error) {
+      console.warn('[dev-tools-hud] barrier marker gallery failed', error);
+      status.textContent = 'Could not place the barrier models.';
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const close = async (): Promise<void> => {
+    if (!gallery) return;
+    setBusy(true);
+    try {
+      await gallery.close();
+    } finally {
+      gallery = null;
+      legend.hidden = true;
+      toggleButton.textContent = 'Show barrier models';
+      toggleButton.setAttribute('aria-pressed', 'false');
+      status.textContent = '';
+      setBusy(false);
+    }
+  };
+
+  toggleButton.addEventListener('click', () => void (gallery ? close() : open()));
+  // Take an open gallery off the map without flying the camera back: the next Dataset keeps the view where it is.
+  lifetime.onEnd(() => {
+    void gallery?.close({ restoreCamera: false });
+    gallery = null;
+  });
+  return section.root;
+}
+
+/**
+ * Lists the fish barriers drawn by the sidebar checkbox "Show fish barriers (TNC Digital Catalog)",
+ * nearest the observed gauge first, flies to the one chosen, and shows what its record says, how
+ * big it is drawn, and which sizes are assumed. It has no button of its own: it follows the
+ * checkbox and shows a hint while the barriers are hidden.
+ */
+function buildFishBarrierMapTools(lifetime: ExperienceLifetime): HTMLElement {
+  const section = buildSection('Fish barriers (catalog)', '08', 1, 'Pick a barrier to fly to it and read its sizes');
+  section.root.id = 'dev-tools-fish-barrier-map';
+
+  const hint = createElement('p', ['text-[11px]', 'font-bold', 'text-hud-label'], 'Tick "Show fish barriers" in the left sidebar to list them here.');
+
+  const picker = buildHudSelect('dev-tools-fish-barrier-picker');
+  picker.setAttribute('aria-label', 'Fish barrier');
+  picker.hidden = true;
+
+  const readout = createElement('div', [READOUT_BLOCK_CLASS]);
+  readout.hidden = true;
+  readout.setAttribute('aria-live', 'polite');
+  section.body.append(hint, picker, readout);
+
+  let map: FishBarrierMap | null = null;
+
+  const showSite = (site: FishBarrierSite): void => {
+    readout.textContent = describeFishBarrierSiteForHud(site);
+  };
+
+  const render = (next: FishBarrierMap | null): void => {
+    map = next;
+    hint.hidden = next !== null;
+    picker.hidden = next === null;
+    readout.hidden = next === null;
+    if (!next) {
+      picker.replaceChildren();
+      readout.textContent = '';
+      return;
+    }
+    picker.replaceChildren(
+      ...next.sites.map((site, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        const removed = site.description.removal ? ` (${site.description.removal.fate})` : '';
+        option.textContent = `${index + 1}. ${site.record.streamName || 'Unnamed creek'} · ${site.record.siteName}${removed}`;
+        return option;
+      }),
+    );
+    if (next.sites.length > 0) showSite(next.sites[0]);
+  };
+
+  picker.addEventListener('change', () => {
+    const site = map?.sites[Number(picker.value)];
+    if (!map || !site) return;
+    showSite(site);
+    void map.flyTo(site);
+  });
+
+  // The barriers may already be drawn when the panel first opens.
+  render(currentFishBarrierMap());
+  lifetime.onEnd(onFishBarrierMapChange(render));
+  return section.root;
+}
+
+/** What the catalog record says about one barrier, how it is drawn, and which sizes are guesses. */
+function describeFishBarrierSiteForHud(site: FishBarrierSite): string {
+  const { record, description } = site;
+  const shape = description.shape;
+  const lines = [
+    `${record.siteName} · ${record.streamName || 'unnamed creek'}`,
+    description.removal
+      ? `NO LONGER A BARRIER (${description.removal.fate}): ${description.removal.summary}`
+      : `Passage: ${record.status} barrier (surveyed ${record.surveyYear || 'year unknown'})`,
+    `${Math.round(site.distanceToObservedGaugeM)} m from the observed gauge`,
+  ];
+  switch (shape.kind) {
+    case 'culvert':
+      lines.push(
+        `Drawn: pipe ${shape.diameterM.toFixed(1)} m across, ${shape.lengthM.toFixed(1)} m long` +
+          (shape.perchM > 0 ? `, hanging ${shape.perchM.toFixed(1)} m above the creek bed` : ', at bed level'),
+      );
+      break;
+    case 'crossing-structure':
+      lines.push(
+        `Drawn: ${shape.spanM.toFixed(1)} m wide across the creek, ${shape.heightM.toFixed(2)} m high, ${shape.lengthM.toFixed(1)} m along it`,
+      );
+      break;
+    case 'waterfall':
+      lines.push(`Drawn: ${shape.spanM.toFixed(1)} m wide drop, ${shape.heightM.toFixed(1)} m high`);
+      break;
+    case 'steep-stretch':
+      lines.push(`Drawn: a see-through ramp ${shape.lengthM.toFixed(0)} m long and ${shape.widthM.toFixed(0)} m wide along the creek (a steep stretch has no structure to size)`);
+      break;
+  }
+  lines.push(
+    description.assumedDimensions.length > 0
+      ? `Assumed (not documented): ${description.assumedDimensions.join(', ')}`
+      : 'Every drawn size is documented',
+    `Size basis: ${description.sizeBasis}`,
+  );
+  if (record.notes) lines.push(`Survey notes: ${record.notes}`);
+  lines.push(
+    site.downstreamBearingDegrees === null
+      ? `Not turned to the creek: ${site.creekDirection.detail}`
+      : `Turned to the creek: downstream is ${Math.round(site.downstreamBearingDegrees)}°, ${site.creekDirection.detail}`,
+    site.channelSnap.kind === 'channel'
+      ? `Placed in the channel: moved ${Math.abs(site.channelSnap.lateralOffsetM).toFixed(0)} m ${site.channelSnap.lateralOffsetM < 0 ? 'left' : 'right'} of the catalog point, ` +
+        `from ${site.channelSnap.sectionsUsed} lines across the creek that agree within ${site.channelSnap.spreadM.toFixed(0)} m`
+      : `Left on the catalog point: ${site.channelSnap.reason}`,
+  );
+  return lines.join('\n');
 }
 
 function groundPoint([longitude, latitude]: readonly [number, number]): Point {

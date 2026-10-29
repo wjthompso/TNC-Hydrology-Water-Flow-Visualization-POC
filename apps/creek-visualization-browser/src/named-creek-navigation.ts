@@ -1,9 +1,10 @@
 // Named creek navigation: when the camera is high, each named creek gets a colored
 // highlight along all of its flowlines and a floating label button hanging over its
 // middle, showing the creek's name and length. Clicking the label flies the camera to a
-// medium view that fits the whole creek. It appears on its own as the camera rises; there
-// is no control for it. Zoomed in, the highlights and labels fade out so they never sit on
-// top of the water being inspected.
+// medium view that fits the whole creek. It appears on its own as the camera rises, and a
+// sidebar checkbox can switch the labels off. Zoomed in, the highlights and labels fade out so
+// they never sit on top of the water being inspected. The fish barrier labels
+// (fish-barrier-pins.ts) are separate and do not fade.
 //
 // The labels are real <button>s positioned over the map every camera frame (the same
 // way the monitoring station card follows its station), so they take keyboard focus and
@@ -21,7 +22,9 @@ import LineSymbol3DLayer from '@arcgis/core/symbols/LineSymbol3DLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
 import { fitNorthUpCamera, type ScreenRegion } from './camera-fit-to-region';
 import type { ExperienceLifetime } from './experience-lifetime';
+import { createMapPinButton } from './map-pin-button';
 import type { NamedCreek } from './named-creeks';
+import { LABEL_GAP_PX, boxFitsOnMap, boxesOverlap, coveringPanelBoxes, type ScreenBox } from './screen-box-layout';
 
 /** Camera height above which labels and highlights are fully shown, m. */
 export const NAMED_CREEK_FULL_VISIBILITY_ABOVE_M = 5000;
@@ -50,23 +53,23 @@ const CORE_WIDTH_PT = 3.5;
 const EMPHASIS_WIDTH_FACTOR = 1.6;
 const DIMMED_OPACITY_FACTOR = 0.35;
 
-const PIN_CLASS =
-  'group pointer-events-auto absolute flex w-max -translate-x-1/2 -translate-y-full cursor-pointer flex-col items-center whitespace-nowrap rounded-full outline-none';
-const PIN_LABEL_CLASS =
-  'flex items-center gap-2 rounded-full border border-[color:var(--creek-color)] bg-slate-900/90 py-1 pl-2.5 pr-3.5 text-left shadow-lg shadow-black/50 backdrop-blur transition-colors group-hover:bg-slate-800 group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-cyan-300';
-const PIN_STEM_CLASS = 'h-3 w-0.5 bg-[color:var(--creek-color)]';
-const PIN_FOOT_CLASS = 'h-2.5 w-2.5 rounded-full bg-[color:var(--creek-color)] ring-2 ring-slate-900';
-const PIN_NAME_CLASS = 'text-sm font-semibold leading-tight text-slate-50';
-const PIN_LENGTH_CLASS = 'text-xs font-normal leading-tight tabular-nums text-slate-300';
 /** Water-drop mark in the creek's color. */
 const DROP_ICON_SVG =
-  '<svg class="h-4 w-4 shrink-0 text-[color:var(--creek-color)]" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5c-.3 0-.6.2-.8.5C5.4 4.4 3.5 6.8 3.5 9.25a4.5 4.5 0 0 0 9 0c0-2.45-1.9-4.85-3.7-7.25A1 1 0 0 0 8 1.5Z"/></svg>';
+  '<svg class="h-4 w-4 shrink-0 text-[color:var(--pin-color)]" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5c-.3 0-.6.2-.8.5C5.4 4.4 3.5 6.8 3.5 9.25a4.5 4.5 0 0 0 9 0c0-2.45-1.9-4.85-3.7-7.25A1 1 0 0 0 8 1.5Z"/></svg>';
+
+/** Sidebar checkbox label for the creek name labels. */
+export const CREEK_NAME_TOGGLE_LABEL = 'Show creek names';
 
 export interface NamedCreekNavigation {
   /** Flies the camera to a medium view of the creek. Resolves when the flight ends or is interrupted. */
   flyToCreek(name: string): Promise<void>;
   /** The labels and highlights are fully drawn at this camera height. */
   readonly highlightOpacity: number;
+  /**
+   * Shows or hides the name labels. The colored highlights along the creeks stay, so the creeks are
+   * still told apart. Labels start shown.
+   */
+  setLabelsVisible(visible: boolean): void;
   /** Takes the layer, labels, and buttons off the page. The view stays. */
   dispose(): void;
 }
@@ -173,11 +176,13 @@ export function createNamedCreekNavigation(
   };
 
   let opacity = 0;
+  let labelsVisible = true;
   const update = (): void => {
     opacity = namedCreekOpacityAtAltitude(view.camera?.position?.z ?? 0);
     layer.opacity = opacity;
     layer.visible = opacity > 0;
-    placePins(view, pinsLongestFirst, opacity);
+    // A zero label opacity hides every pin outright, so a switched-off label cannot be clicked or tabbed to.
+    placePins(view, pinsLongestFirst, labelsVisible ? opacity : 0);
   };
 
   const container = elements.pinContainer;
@@ -213,6 +218,10 @@ export function createNamedCreekNavigation(
     get highlightOpacity() {
       return opacity;
     },
+    setLabelsVisible(visible) {
+      labelsVisible = visible;
+      update();
+    },
     dispose,
   };
 }
@@ -245,36 +254,14 @@ function hexToRgb(hex: string): [number, number, number] {
 }
 
 function createPin(creek: NamedCreek, color: string): HTMLButtonElement {
-  const pin = document.createElement('button');
-  pin.type = 'button';
-  pin.className = PIN_CLASS;
-  pin.style.setProperty('--creek-color', color);
-  pin.setAttribute('aria-label', `Zoom to ${creek.name}`);
-  pin.title = `Zoom to ${creek.name}`;
-
-  const name = document.createElement('span');
-  name.className = PIN_NAME_CLASS;
-  name.textContent = creek.name;
-  const length = document.createElement('span');
-  length.className = PIN_LENGTH_CLASS;
-  length.textContent = creekLengthText(creek.lengthM);
-  const text = document.createElement('span');
-  text.className = 'flex flex-col';
-  text.append(name, length);
-
-  const label = document.createElement('span');
-  label.className = PIN_LABEL_CLASS;
-  label.insertAdjacentHTML('afterbegin', DROP_ICON_SVG);
-  label.append(text);
-
-  const stem = document.createElement('span');
-  stem.className = PIN_STEM_CLASS;
-  const foot = document.createElement('span');
-  foot.className = PIN_FOOT_CLASS;
-
-  pin.append(label, stem, foot);
-  pin.classList.add('invisible');
-  return pin;
+  return createMapPinButton({
+    variant: 'creek',
+    color,
+    iconSvg: DROP_ICON_SVG,
+    primary: creek.name,
+    secondary: creekLengthText(creek.lengthM),
+    ariaLabel: `Zoom to ${creek.name}`,
+  });
 }
 
 const METERS_PER_MILE = 1609.344;
@@ -282,20 +269,6 @@ const METERS_PER_MILE = 1609.344;
 /** "16.1 km · 10.0 mi". */
 export function creekLengthText(lengthM: number): string {
   return `${(lengthM / 1000).toFixed(1)} km · ${(lengthM / METERS_PER_MILE).toFixed(1)} mi`;
-}
-
-/** Space kept between a label and anything it must not cover, px. */
-const LABEL_GAP_PX = 6;
-/** Distance a label's spot must keep from the map's edge, px, so the pill is never cut off. */
-const MAP_EDGE_MARGIN_PX = 8;
-/** Panels floating over the map that a label must not hide behind; found on the page each frame. */
-const COVERING_PANEL_SELECTORS = ['aside', '[aria-label="Map legend"]', '#imagery-widget', '#dev-tools-toggle'];
-
-interface ScreenBox {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
 }
 
 /** A label spot on the screen, with the box its label would fill there. */
@@ -354,37 +327,9 @@ function visibleSpots(view: SceneView, item: CreekPin, panels: readonly ScreenBo
     const screen = view.toScreen(new Point({ longitude, latitude, z: item.groundMBySpot[index], spatialReference: { wkid: 4326 } }));
     if (!screen) continue;
     const box: ScreenBox = { left: screen.x - halfWidth, right: screen.x + halfWidth, top: screen.y - height, bottom: screen.y + LABEL_GAP_PX };
-    const fitsOnMap =
-      box.left >= MAP_EDGE_MARGIN_PX &&
-      box.top >= MAP_EDGE_MARGIN_PX &&
-      box.right <= view.width - MAP_EDGE_MARGIN_PX &&
-      box.bottom <= view.height - MAP_EDGE_MARGIN_PX;
-    if (fitsOnMap && !panels.some((panel) => boxesOverlap(box, panel))) spots.push({ x: screen.x, y: screen.y, box });
+    if (boxFitsOnMap(box, view) && !panels.some((panel) => boxesOverlap(box, panel))) spots.push({ x: screen.x, y: screen.y, box });
   }
   return spots;
-}
-
-function boxesOverlap(a: ScreenBox, b: ScreenBox): boolean {
-  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-}
-
-/** Screen boxes, relative to the map, of the sidebar, legend, and corner buttons, with a gap around each. */
-function coveringPanelBoxes(view: SceneView): ScreenBox[] {
-  const mapBox = view.container?.getBoundingClientRect();
-  if (!mapBox) return [];
-  const boxes: ScreenBox[] = [];
-  for (const selector of COVERING_PANEL_SELECTORS) {
-    const panel = document.querySelector(selector);
-    if (!panel || panel.getClientRects().length === 0) continue;
-    const rect = panel.getBoundingClientRect();
-    boxes.push({
-      left: rect.left - mapBox.left - LABEL_GAP_PX,
-      top: rect.top - mapBox.top - LABEL_GAP_PX,
-      right: rect.right - mapBox.left + LABEL_GAP_PX,
-      bottom: rect.bottom - mapBox.top + LABEL_GAP_PX,
-    });
-  }
-  return boxes;
 }
 
 /**

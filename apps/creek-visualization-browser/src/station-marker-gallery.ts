@@ -8,6 +8,7 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import PointSymbol3D from '@arcgis/core/symbols/PointSymbol3D';
 import TextSymbol3DLayer from '@arcgis/core/symbols/TextSymbol3DLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
+import { bearingAlongPath, pointAlongPath } from './geographic-path-geometry';
 import {
   STATION_MARKER_GALLERY_MODELS,
   stationMarkerSymbol,
@@ -128,38 +129,4 @@ export async function openStationMarkerGallery(view: SceneView): Promise<Station
       view.goTo(returnCamera, { duration: 900 }).catch(() => undefined);
     },
   };
-}
-
-// --- Path geometry (local flat projection; fine over a few hundred meters) ---
-
-function pointAlongPath(path: readonly (readonly [number, number])[], distanceM: number): [number, number] {
-  const { from, to, t } = locateAlongPath(path, distanceM);
-  return [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
-}
-
-function bearingAlongPath(path: readonly (readonly [number, number])[], distanceM: number): number {
-  const { from, to } = locateAlongPath(path, distanceM);
-  const [east, north] = localOffsetM(from, to);
-  return ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360;
-}
-
-/** Path segment containing `distanceM`; past the end, extends the last segment. */
-function locateAlongPath(
-  path: readonly (readonly [number, number])[],
-  distanceM: number,
-): { from: readonly [number, number]; to: readonly [number, number]; t: number } {
-  let remainingM = distanceM;
-  for (let index = 0; index < path.length - 1; index += 1) {
-    const lengthM = Math.hypot(...localOffsetM(path[index], path[index + 1]));
-    if (remainingM <= lengthM || index === path.length - 2) {
-      return { from: path[index], to: path[index + 1], t: lengthM === 0 ? 0 : remainingM / lengthM };
-    }
-    remainingM -= lengthM;
-  }
-  return { from: path[0], to: path[0], t: 0 };
-}
-
-function localOffsetM(from: readonly [number, number], to: readonly [number, number]): [number, number] {
-  const metersPerDegreeLon = 111320 * Math.cos((from[1] * Math.PI) / 180);
-  return [(to[0] - from[0]) * metersPerDegreeLon, (to[1] - from[1]) * 110540];
 }

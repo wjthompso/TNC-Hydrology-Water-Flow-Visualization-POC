@@ -42,7 +42,8 @@ import {
   createCreekCenterlineOverlay,
   flowlinePathsByTncComid,
 } from './creek-centerline-overlay';
-import { createNamedCreekNavigation } from './named-creek-navigation';
+import { FISH_BARRIER_TOGGLE_LABEL, bindFishBarrierToggle } from './fish-barrier-toggle';
+import { CREEK_NAME_TOGGLE_LABEL, createNamedCreekNavigation } from './named-creek-navigation';
 import { groupNamedCreeks } from './named-creeks';
 import { renderModeledDatasetAbout } from './modeled-dataset-info-panel';
 import { bindDatasetAboutDialog } from './dataset-about-dialog';
@@ -193,6 +194,14 @@ export interface ModeledExperienceElements {
   /** Shows the TNC flowline centerlines and vertex dots; unchecked when the experience starts. */
   centerlineToggle: HTMLInputElement;
   centerlineToggleLabel: HTMLElement;
+  /** Shows the creek name labels; checked when the experience starts. */
+  creekNameToggle: HTMLInputElement;
+  creekNameToggleLabel: HTMLElement;
+  /** Draws the TNC Digital Catalog fish barriers; unchecked when the experience starts. */
+  fishBarrierToggle: HTMLInputElement;
+  fishBarrierToggleLabel: HTMLElement;
+  /** One line under the checkbox: how many barriers, and how many no longer block fish. */
+  fishBarrierStatus: HTMLElement;
   /** Map-sized container the floating creek labels are added to. */
   namedCreekPins: HTMLElement;
   title: HTMLElement | null;
@@ -365,6 +374,11 @@ export async function startModeledCreekExperience(
   elements.transferToggle.checked = true;
   elements.centerlineToggleLabel.textContent = CREEK_CENTERLINE_TOGGLE_LABEL;
   elements.centerlineToggle.checked = false;
+  elements.creekNameToggleLabel.textContent = CREEK_NAME_TOGGLE_LABEL;
+  elements.creekNameToggle.checked = true;
+  elements.fishBarrierToggleLabel.textContent = FISH_BARRIER_TOGGLE_LABEL;
+  elements.fishBarrierToggle.checked = false;
+  elements.fishBarrierStatus.textContent = '';
   elements.modeledPanel.classList.remove('hidden');
   if (elements.legendTransferRow) {
     elements.legendTransferRow.classList.remove('hidden');
@@ -408,12 +422,24 @@ export async function startModeledCreekExperience(
   // Named creeks: highlighted, labelled, and zoom-to-able whenever the camera is high. No control to switch them on.
   const namedCreeks = groupNamedCreeks(flowlinePathsByTncComid(segmentPaths));
   if (namedCreeks.length > 0) {
-    createNamedCreekNavigation(view, namedCreeks, { pinContainer: elements.namedCreekPins }, lifetime);
+    const creekNavigation = createNamedCreekNavigation(view, namedCreeks, { pinContainer: elements.namedCreekPins }, lifetime);
+    elements.creekNameToggle.addEventListener(
+      'change',
+      () => creekNavigation.setLabelsVisible(elements.creekNameToggle.checked),
+      { signal: lifetime.signal },
+    );
   }
   elements.centerlineToggle.addEventListener(
     'change',
     () => centerlines.setVisible(elements.centerlineToggle.checked),
     { signal: lifetime.signal },
+  );
+  bindFishBarrierToggle(
+    elements.fishBarrierToggle,
+    elements.fishBarrierStatus,
+    view,
+    elements.namedCreekPins,
+    lifetime,
   );
 
   const anchorClearanceStats = { terrainRecomputeCount: 0, lastTerrainRecompute: null as AnchorClearanceStatus['lastTerrainRecompute'] };

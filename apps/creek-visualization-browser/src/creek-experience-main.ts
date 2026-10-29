@@ -458,6 +458,11 @@ function readModeledPanelElements(): {
   transferToggleLabel: HTMLElement;
   centerlineToggle: HTMLInputElement;
   centerlineToggleLabel: HTMLElement;
+  creekNameToggle: HTMLInputElement;
+  creekNameToggleLabel: HTMLElement;
+  fishBarrierToggle: HTMLInputElement;
+  fishBarrierToggleLabel: HTMLElement;
+  fishBarrierStatus: HTMLElement;
   namedCreekPins: HTMLElement;
   title: HTMLElement | null;
   subtitle: HTMLElement | null;
@@ -470,6 +475,11 @@ function readModeledPanelElements(): {
   const transferToggleLabel = document.getElementById('transfer-water-toggle-label');
   const centerlineToggle = document.getElementById('centerline-toggle');
   const centerlineToggleLabel = document.getElementById('centerline-toggle-label');
+  const creekNameToggle = document.getElementById('creek-name-toggle');
+  const creekNameToggleLabel = document.getElementById('creek-name-toggle-label');
+  const fishBarrierToggle = document.getElementById('fish-barrier-toggle');
+  const fishBarrierToggleLabel = document.getElementById('fish-barrier-toggle-label');
+  const fishBarrierStatus = document.getElementById('fish-barrier-status');
   const namedCreekPins = document.getElementById('named-creek-pins');
   if (
     !(modeledPanel instanceof HTMLElement) ||
@@ -477,6 +487,11 @@ function readModeledPanelElements(): {
     !(transferToggleLabel instanceof HTMLElement) ||
     !(centerlineToggle instanceof HTMLInputElement) ||
     !(centerlineToggleLabel instanceof HTMLElement) ||
+    !(creekNameToggle instanceof HTMLInputElement) ||
+    !(creekNameToggleLabel instanceof HTMLElement) ||
+    !(fishBarrierToggle instanceof HTMLInputElement) ||
+    !(fishBarrierToggleLabel instanceof HTMLElement) ||
+    !(fishBarrierStatus instanceof HTMLElement) ||
     !(namedCreekPins instanceof HTMLElement)
   ) {
     throw new Error('The modeled water panel is missing.');
@@ -487,6 +502,11 @@ function readModeledPanelElements(): {
     transferToggleLabel,
     centerlineToggle,
     centerlineToggleLabel,
+    creekNameToggle,
+    creekNameToggleLabel,
+    fishBarrierToggle,
+    fishBarrierToggleLabel,
+    fishBarrierStatus,
     namedCreekPins,
     title: document.getElementById('experience-title'),
     subtitle: document.getElementById('experience-subtitle'),

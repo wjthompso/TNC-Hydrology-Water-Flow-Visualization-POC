@@ -48,8 +48,9 @@
       <div id="arcgis-view" class="absolute inset-0"></div>
 
       <!--
-        Named creek labels (named-creek-navigation.ts) float here, over the map and under the
-        panels. The container passes clicks through to the map; each label button takes its own.
+        Named creek labels (named-creek-navigation.ts) and fish barrier labels (fish-barrier-pins.ts)
+        float here, over the map and under the panels. The container passes clicks through to the
+        map; each label button takes its own.
       -->
       <div id="named-creek-pins" class="pointer-events-none absolute inset-0 z-[5] overflow-hidden"></div>
 
@@ -308,12 +309,30 @@
           </label>
           <label class="mt-2 flex cursor-pointer items-start gap-2 text-base text-slate-200">
             <input
+              id="creek-name-toggle"
+              type="checkbox"
+              checked
+              class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
+            />
+            <span id="creek-name-toggle-label"></span>
+          </label>
+          <label class="mt-2 flex cursor-pointer items-start gap-2 text-base text-slate-200">
+            <input
               id="centerline-toggle"
               type="checkbox"
               class="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300"
             />
             <span id="centerline-toggle-label"></span>
           </label>
+          <label class="mt-2 flex cursor-pointer items-start gap-2 text-base text-slate-200 has-[:disabled]:cursor-wait has-[:disabled]:opacity-60">
+            <input
+              id="fish-barrier-toggle"
+              type="checkbox"
+              class="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-500 bg-slate-800 accent-cyan-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 disabled:cursor-wait"
+            />
+            <span id="fish-barrier-toggle-label"></span>
+          </label>
+          <p id="fish-barrier-status" class="mt-1 min-h-4 pl-6 text-sm leading-relaxed text-slate-400" aria-live="polite"></p>
         </section>
 
         <p
