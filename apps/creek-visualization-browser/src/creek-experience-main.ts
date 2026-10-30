@@ -14,7 +14,8 @@ import { resolveShowDevTools } from './dev-tools-visibility';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import { loadPublishedCreekVisualizationData } from './http-data-contract-loader';
 import {
-  availableDatasetPickerOptions,
+  datasetModeOf,
+  datasetOptionIdForMode,
   OBSERVED_DATASET_OPTION_ID,
   CAMERA_QUERY_PARAM,
   SEGMENT_QUERY_PARAM,
@@ -22,6 +23,7 @@ import {
   readCameraQuery,
   readDatasetSelection,
   readOpeningTimeQuery,
+  type DatasetMode,
   type DatasetSelection,
 } from './modeled-water-catalog';
 import { creekDataSourceConfiguration } from './creek-data-source-configuration';
@@ -162,7 +164,7 @@ async function startExperience(): Promise<boolean> {
     experienceElements = readExperienceElements();
     observedChrome = readObservedChrome();
     const selection = readDatasetSelection(location.search);
-    bindDatasetPicker(selection.kind === 'modeled' ? selection.datasetId : OBSERVED_DATASET_OPTION_ID);
+    bindDatasetModeButtons(selection.kind === 'modeled' ? selection.datasetId : OBSERVED_DATASET_OPTION_ID);
     await openExperience(selection, experienceElements, { carriedSegmentId: null, initial: true });
     return true;
   } catch (error: unknown) {
@@ -331,17 +333,22 @@ function showInferredWaterLegend(hopsPerDirection: number): void {
   row.classList.add('flex');
 }
 
+const datasetIdsWithAccuracyNoticeShown = new Set<string>();
+
 /**
  * Opens the modeled Dataset's accuracy notice (UCS-285), returning focus to the
- * Dataset picker. Not awaited, so the experience is ready while the notice is
+ * Modeled button. Not awaited, so the experience is ready while the notice is
  * open. Test mode skips it: an open modal would block the map clicks of live
  * browser tests.
  */
 function openAccuracyNoticeUnlessTestMode(datasetId: string): void {
   if (import.meta.env.VITE_TEST_MODE === 'true') return;
-  const picker = document.getElementById('dataset-picker');
-  if (!(picker instanceof HTMLElement)) return;
-  void showModeledDatasetAccuracyNotice(datasetId, picker);
+  // Once per page load: a reload clears this in-memory set, switching Datasets does not.
+  if (datasetIdsWithAccuracyNoticeShown.has(datasetId)) return;
+  const modeledButton = document.getElementById('dataset-modeled-btn');
+  if (!(modeledButton instanceof HTMLElement)) return;
+  datasetIdsWithAccuracyNoticeShown.add(datasetId);
+  void showModeledDatasetAccuracyNotice(datasetId, modeledButton);
 }
 
 /**
@@ -391,45 +398,67 @@ async function restoreCarriedCamera(view: SceneView): Promise<void> {
   history.replaceState(history.state, '', url);
 }
 
+interface DatasetModeButtons {
+  readonly observed: HTMLButtonElement;
+  readonly modeled: HTMLButtonElement;
+}
+
+function readDatasetModeButtons(): DatasetModeButtons | null {
+  const observed = document.getElementById('dataset-observed-btn');
+  const modeled = document.getElementById('dataset-modeled-btn');
+  if (!(observed instanceof HTMLButtonElement) || !(modeled instanceof HTMLButtonElement)) return null;
+  return { observed, modeled };
+}
+
+/** Presses the button for `mode`; `aria-pressed` carries the state and the styling. */
+function showDatasetMode(buttons: DatasetModeButtons, mode: DatasetMode): void {
+  buttons.observed.setAttribute('aria-pressed', String(mode === 'observed'));
+  buttons.modeled.setAttribute('aria-pressed', String(mode === 'modeled'));
+}
+
 /**
- * Fills the Dataset picker. A change swaps the creek water on the open scene
- * at the same selected time, camera, and selected Creek Segment, so the switch
- * keeps your place and the imagery and terrain are not drawn again.
+ * Wires the Observed | Modeled buttons. A press swaps the creek water on the
+ * open scene at the same selected time, camera, and selected Creek Segment, so
+ * the switch keeps your place and the imagery and terrain are not drawn again.
+ * Observed opens the observed gauge; Modeled opens `DEFAULT_MODELED_DATASET_ID`.
+ * Any modeled Dataset opened through `?dataset=` also presses Modeled. Pressing
+ * the pressed button does nothing.
  */
-function bindDatasetPicker(selectedOptionId: string): void {
-  const picker = document.getElementById('dataset-picker');
-  if (!(picker instanceof HTMLSelectElement)) return;
-  picker.replaceChildren(
-    ...availableDatasetPickerOptions().map((option) => {
-      const node = document.createElement('option');
-      node.value = option.id;
-      node.textContent = option.label;
-      node.selected = option.id === selectedOptionId;
-      return node;
-    }),
-  );
-  let shownOptionId = selectedOptionId;
-  picker.addEventListener('change', () => {
-    if (switchingDataset || picker.value === shownOptionId) return;
-    void switchDataset(picker, shownOptionId).then((openedOptionId) => {
+function bindDatasetModeButtons(openOptionId: string): void {
+  const buttons = readDatasetModeButtons();
+  if (!buttons) return;
+  let shownOptionId = openOptionId;
+  showDatasetMode(buttons, datasetModeOf(shownOptionId));
+  const press = (mode: DatasetMode): void => {
+    if (switchingDataset || datasetModeOf(shownOptionId) === mode) return;
+    showDatasetMode(buttons, mode);
+    void switchDataset(buttons, datasetOptionIdForMode(mode), shownOptionId).then((openedOptionId) => {
       shownOptionId = openedOptionId;
-      picker.value = openedOptionId;
+      showDatasetMode(buttons, datasetModeOf(openedOptionId));
     });
-  });
+  };
+  buttons.observed.addEventListener('click', () => press('observed'));
+  buttons.modeled.addEventListener('click', () => press('modeled'));
 }
 
 /**
  * Takes the open Dataset's water, controls, and chart off the scene and puts
- * the picked Dataset's on, keeping the SceneView. Returns the picker option now
- * open: the new one, or the old one when the switch failed.
+ * the chosen Dataset's on, keeping the SceneView. Both buttons stay disabled
+ * until it finishes. Returns the Dataset option now open: the new one, or the
+ * old one when the switch failed.
  */
-async function switchDataset(picker: HTMLSelectElement, previousOptionId: string): Promise<string> {
+async function switchDataset(
+  buttons: DatasetModeButtons,
+  nextOptionId: string,
+  previousOptionId: string,
+): Promise<string> {
   const elements = experienceElements;
   if (!elements) return previousOptionId;
   switchingDataset = true;
-  picker.disabled = true;
+  buttons.observed.disabled = true;
+  buttons.modeled.disabled = true;
   const carriedSegmentId = attachment?.selectedCreekSegmentChart?.selection.selectedSegmentId ?? null;
-  const nextUrl = datasetPageUrl(picker.value, location, {
+  const nextUrl = datasetPageUrl(nextOptionId, location, {
     selectedTimeUtcMs: attachment?.selectedTimeUtcMs ?? null,
     cameraPose: null,
     selectedCreekSegmentId: null,
@@ -441,13 +470,14 @@ async function switchDataset(picker: HTMLSelectElement, previousOptionId: string
     showLoadingMessage(elements.status, 'Switching Dataset…');
     history.replaceState(history.state, '', nextUrl);
     await openExperience(readDatasetSelection(location.search), elements, { carriedSegmentId, initial: false });
-    return picker.value;
+    return nextOptionId;
   } catch (error: unknown) {
     console.error(error);
     showExperienceError(error instanceof Error ? error.message : 'The Dataset could not be opened.');
     return previousOptionId;
   } finally {
-    picker.disabled = false;
+    buttons.observed.disabled = false;
+    buttons.modeled.disabled = false;
     switchingDataset = false;
   }
 }
