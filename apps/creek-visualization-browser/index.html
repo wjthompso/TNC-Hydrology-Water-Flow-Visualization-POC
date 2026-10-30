@@ -48,6 +48,18 @@
       <div id="arcgis-view" class="absolute inset-0"></div>
 
       <!--
+        Toast shown while Steelhead trout conditions are on: the green/yellow/red ranges rate water depth only.
+        Slides down centered between the sidebar's right edge and the map buttons' left edge; steelhead-trout-conditions-controls.ts sets data-open.
+        Invisible when closed so screen readers skip it; role=status announces it when it opens.
+      -->
+      <div
+        id="trout-conditions-toast"
+        role="status"
+        data-open="false"
+        class="pointer-events-none invisible absolute left-[calc((1rem+min(25rem,100vw-2rem)+100vw-3.75rem)/2)] top-4 z-30 w-[min(32rem,calc(100vw-min(25rem,100vw-2rem)-6rem))] -translate-x-1/2 -translate-y-6 rounded-lg border border-amber-400/40 bg-slate-900/95 px-4 py-2.5 text-center text-sm leading-relaxed text-white opacity-0 shadow-xl shadow-black/40 backdrop-blur transition-[opacity,transform,visibility] duration-300 ease-out data-[open=true]:visible data-[open=true]:translate-y-0 data-[open=true]:opacity-100 motion-reduce:transition-none"
+></div>
+
+      <!--
         Named creek labels (named-creek-navigation.ts) and fish barrier labels (fish-barrier-pins.ts)
         float here, over the map and under the panels. The container passes clicks through to the
         map; each label button takes its own.
@@ -57,7 +69,7 @@
       <aside
         class="pointer-events-none absolute left-4 top-4 z-10 max-h-[calc(100vh-2rem)] w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-700/80 bg-slate-900/90 shadow-xl backdrop-blur"
       >
-        <div id="control-panel-scroll" class="scrollbar-autohide pointer-events-auto max-h-[calc(100vh-2rem)] overflow-y-auto p-4">
+        <div id="control-panel-scroll" class="scrollbar-autohide pointer-events-auto max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl p-4">
         <header class="mb-3 border-b border-slate-700 pb-3">
           <p class="text-sm font-medium uppercase tracking-wide text-cyan-300">Jalama Creek</p>
           <!--
@@ -579,12 +591,23 @@
       <!--
         Imagery widget: an Esri-style square map button, showing a preview of the
         current imagery, that opens the imagery list. Bound by
-        scene-imagery-widget.ts. The LiDAR button beside it draws the same 2018
+        scene-imagery-widget.ts. The LiDAR button under it draws the same 2018
         point cloud as the Digital Twin's 3D toggle (lidar-point-cloud.ts).
         Sits at the top-right corner; in development it drops below the Dev tools button.
       -->
       <div id="imagery-widget" class="pointer-events-auto absolute right-4 top-4 z-30 flex flex-col items-end">
-        <div class="flex items-start gap-2">
+        <div class="flex flex-col items-end gap-2">
+          <button
+            id="imagery-widget-btn"
+            type="button"
+            aria-expanded="false"
+            aria-controls="imagery-widget-panel"
+            aria-label="Imagery"
+            title="Imagery"
+            class="h-11 w-11 cursor-pointer overflow-hidden rounded-md border border-slate-600/80 bg-slate-900/85 p-0.5 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-expanded:border-cyan-400/70 aria-expanded:bg-cyan-950/80 aria-expanded:text-cyan-100"
+          >
+            <img alt="" width="40" height="40" draggable="false" class="h-full w-full rounded-[5px] object-cover" />
+          </button>
           <button
             id="lidar-visibility-toggle"
             type="button"
@@ -615,17 +638,6 @@
               <circle cx="11" cy="13" r="2" fill="currentColor" />
               <circle cx="11" cy="25" r="2" fill="currentColor" />
             </svg>
-          </button>
-          <button
-            id="imagery-widget-btn"
-            type="button"
-            aria-expanded="false"
-            aria-controls="imagery-widget-panel"
-            aria-label="Imagery"
-            title="Imagery"
-            class="h-11 w-11 cursor-pointer overflow-hidden rounded-md border border-slate-600/80 bg-slate-900/85 p-0.5 text-slate-200 shadow-lg shadow-black/40 backdrop-blur transition-colors hover:bg-slate-800 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 aria-expanded:border-cyan-400/70 aria-expanded:bg-cyan-950/80 aria-expanded:text-cyan-100"
-          >
-            <img alt="" width="40" height="40" draggable="false" class="h-full w-full rounded-[5px] object-cover" />
           </button>
         </div>
         <fieldset
