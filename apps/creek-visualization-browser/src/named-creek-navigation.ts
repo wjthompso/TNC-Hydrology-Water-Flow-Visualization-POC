@@ -53,9 +53,15 @@ const CORE_WIDTH_PT = 3.5;
 const EMPHASIS_WIDTH_FACTOR = 1.6;
 const DIMMED_OPACITY_FACTOR = 0.35;
 
-/** Water-drop mark in the creek's color. */
-const DROP_ICON_SVG =
-  '<svg class="h-4 w-4 shrink-0 text-[color:var(--pin-color)]" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.5c-.3 0-.6.2-.8.5C5.4 4.4 3.5 6.8 3.5 9.25a4.5 4.5 0 0 0 9 0c0-2.45-1.9-4.85-3.7-7.25A1 1 0 0 0 8 1.5Z"/></svg>';
+/**
+ * The empty chart state's three stacked water waves (index.html), small, in the creek's color. The viewBox
+ * (5 2 54 36) is the artwork plus its stroke, 3:2 like the 27 x 18 px box, so nothing is letterboxed. At
+ * 0.5 px per unit, a 3-unit stroke is 1.5 px and the rows keep a 1 px gap (a 4-unit stroke would shrink
+ * it to half a pixel). 18 px high, not 16: at 16 px the gap falls below a pixel. The middle row is
+ * lighter, as in the original.
+ */
+const WATER_WAVES_ICON_SVG =
+  '<svg class="h-[18px] w-[27px] shrink-0 text-[color:var(--pin-color)]" viewBox="5 2 54 36" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 8q5-7 10 0t10 0t10 0t10 0t10 0"/><path class="opacity-60" d="M7 20q5-7 10 0t10 0t10 0t10 0t10 0"/><path d="M7 32q5-7 10 0t10 0t10 0t10 0t10 0"/></svg>';
 
 /** Sidebar checkbox label for the creek name labels. */
 export const CREEK_NAME_TOGGLE_LABEL = 'Show creek names';
@@ -257,7 +263,7 @@ function createPin(creek: NamedCreek, color: string): HTMLButtonElement {
   return createMapPinButton({
     variant: 'creek',
     color,
-    iconSvg: DROP_ICON_SVG,
+    iconSvg: WATER_WAVES_ICON_SVG,
     primary: creek.name,
     secondary: creekLengthText(creek.lengthM),
     ariaLabel: `Zoom to ${creek.name}`,

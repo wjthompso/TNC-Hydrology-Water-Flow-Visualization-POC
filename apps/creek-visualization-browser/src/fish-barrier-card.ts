@@ -1,12 +1,20 @@
 // The "more info" card for one fish barrier: what it is, what blocks fish and why, the catalog's own
-// fields in a small table, the survey notes, how big the barrier is drawn and why, and the sources.
+// fields in a small table, the survey notes, how the barrier is shown (a pipe's drawn size, or that
+// everything else is a pointer only), and the sources.
 // Opens when a barrier's dot or label is clicked (fish-barrier-map.ts); one card at a time, and opening
 // another barrier replaces it.
 //
 // The card is a column at the right edge, between the corner buttons and the legend, so it covers neither
 // and leaves the middle of the map, where the camera puts the barrier, clear. Pins keep out of it
-// (screen-box-layout.ts). It is not modal: the map stays live around it, and focus is never trapped. Escape or the close button
-// closes it and returns focus to the dot or label that opened it.
+// (screen-box-layout.ts). It is not modal: the map stays live around it, and focus is never trapped.
+//
+// The card closes in four ways:
+//   - The close button or Escape: focus goes back to the dot or label that opened it.
+//   - A press anywhere outside it (mouse, pen, or touch; including the start of a map drag): focus stays
+//     where the press put it. A press on a barrier pin does not close it; that pin's click opens its own
+//     card in its place. A press on a creek name pin closes it.
+//   - The barrier checkbox is unticked (close()).
+//   - The Dataset changes, which ends the lifetime and so also calls close().
 //
 // The card opens at once from the TNC catalog fields. The statewide database (fish-barrier-statewide.ts)
 // adds the full survey notes and a few fields the catalog drops; when it answers, the open card fills
@@ -24,9 +32,11 @@ import {
 } from './fish-barrier-statewide';
 import {
   BARRIER_STATUS_CHIP_TEXT,
+  CULVERT_AXIS_TURN_FROM_CREEK_DEGREES,
   FISH_BARRIER_LAYER_URL,
   barrierColorHex,
   barrierCreekName,
+  drawsSolidShape,
   type BarrierSiteDescription,
   type BarrierStatus,
 } from './fish-barrier-sites';
@@ -62,7 +72,7 @@ const DIMENSION_NAMES: Readonly<Record<string, string>> = {
 export interface FishBarrierCard {
   /** Shows the card for `site`, replacing any open card. `trigger` gets focus back when the card is closed by the reader. */
   open(site: FishBarrierSite, trigger: HTMLElement): void;
-  /** Takes the card off the page for good, without moving focus. Called when the barriers are hidden. */
+  /** Takes the card off the page for good, without moving focus. Called when the barriers are hidden or the Dataset changes. */
   close(): void;
 }
 
@@ -92,11 +102,63 @@ export function createFishBarrierCard(
     card.setAttribute('aria-labelledby', 'fish-barrier-card-title');
   };
 
+  // Listens for presses outside the card; exists only while the card is open, so a closed card costs nothing.
+  let outsidePress: AbortController | null = null;
+  // Waits for the click that ends a press on a map pin; see closeOnPressOutside.
+  let pinClick: AbortController | null = null;
+
   const hide = (): void => {
     current = null;
+    pinClick?.abort();
+    outsidePress?.abort();
+    pinClick = outsidePress = null;
     card.classList.add('hidden');
     card.replaceChildren();
   };
+
+  /**
+   * Closes the card on a press outside it, without moving focus: the reader pressed something else, so focus
+   * belongs there. It listens on `document` for `pointerdown`, in the capture phase:
+   * - Capture runs before the target's own handlers, so it still fires when something stops propagation and
+   *   when the ArcGIS map canvas, which handles pointer events itself, would otherwise swallow the press.
+   * - `pointerdown` covers mouse, pen, and touch, and fires when a map drag begins; `click` would not.
+   *
+   * A press on a map pin is decided at its click instead. A barrier pin's click opens that barrier's card
+   * in its place (the same pin keeps this card, rebuilt), so closing on the press would flash the card
+   * closed and then open. A creek pin's click opens nothing, so the card is still the one that was open
+   * at the press and closes then.
+   */
+  const closeOnPressOutside = (): void => {
+    // Replacing the open card keeps the listener it already has.
+    if (outsidePress) return;
+    outsidePress = new AbortController();
+    document.addEventListener(
+      'pointerdown',
+      (event) => {
+        pinClick?.abort();
+        pinClick = null;
+        const target = event.target;
+        if (!(target instanceof Element) || card.contains(target)) return;
+        const pin = target.closest('button');
+        if (!pin || !container.contains(pin)) {
+          hide();
+          return;
+        }
+        const pressed = current;
+        pinClick = new AbortController();
+        // Bubble phase, so it runs after the pin's own click handler has had its chance to call open().
+        document.addEventListener(
+          'click',
+          (click) => {
+            if (current === pressed && click.target instanceof Node && pin.contains(click.target)) hide();
+          },
+          { once: true, signal: pinClick.signal },
+        );
+      },
+      { capture: true, signal: outsidePress.signal },
+    );
+  };
+
   // Each time the barriers are drawn they get a new card; this ends the old one's Escape listener with it.
   const removal = new AbortController();
   const remove = (): void => {
@@ -130,6 +192,9 @@ export function createFishBarrierCard(
       card.scrollTop = 0;
       // Moves a keyboard reader into the card; the card itself takes focus, not a control inside it.
       card.focus({ preventScroll: true });
+      // open() runs inside the opening click, after that gesture's pointerdown was dispatched, so a listener
+      // added here cannot see the press that opened the card and close it at once.
+      closeOnPressOutside();
     },
     close: remove,
   };
@@ -276,8 +341,10 @@ function buildNotes(site: FishBarrierSite, lookup: StatewideLookup | 'pending', 
   ];
 }
 
+/** A culvert is the one solid shape, so only it has a drawn size to explain; every other barrier says it is a pointer. */
 function buildDrawnSize(site: FishBarrierSite): HTMLElement[] {
   const { description, record } = site;
+  if (!drawsSolidShape(description.shape)) return buildPointerOnly(site);
   const assumed = description.assumedDimensions.map((name) => DIMENSION_NAMES[name] ?? name);
   const nodes: HTMLElement[] = [
     element('h3', SECTION_HEADING_CLASS, 'How big it is drawn'),
@@ -296,18 +363,50 @@ function buildDrawnSize(site: FishBarrierSite): HTMLElement[] {
   return nodes;
 }
 
+/** What a pointer-only barrier's card says about how it is shown: no solid shape, and why. */
+function buildPointerOnly(site: FishBarrierSite): HTMLElement[] {
+  const { description, record } = site;
+  const nodes: HTMLElement[] = [
+    element('h3', SECTION_HEADING_CLASS, 'How it is shown'),
+    element(
+      'p',
+      'mt-1',
+      'Shown as a pointer only. The catalog records the kind of barrier but, for most, no measurements, so a solid shape would claim a size and a wall across the creek that the survey does not show.',
+    ),
+  ];
+  const kind = description.shape.kind;
+  if (kind === 'waterfall' || kind === 'steep-stretch') {
+    nodes.push(element('p', 'mt-1', 'This is natural terrain; fish meet a drop or a steep slope, not a wall.'));
+  } else if (kind === 'crossing-structure') {
+    nodes.push(element('p', 'mt-1', 'Sizes written in the survey notes, if any, are quoted in the notes above.'));
+  }
+  nodes.push(element('p', `mt-1 ${MUTED_CLASS}`, 'What the records say about size:'), element('p', MUTED_CLASS, description.sizeBasis));
+  if (record.status === 'Unknown' && !description.removal) {
+    nodes.push(element('p', 'mt-1', 'The survey did not decide whether fish can pass, so the pointer is gray with a ?.'));
+  }
+  return nodes;
+}
+
 function buildPosition(site: FishBarrierSite): HTMLElement[] {
-  const snap = site.channelSnap;
-  const text =
-    snap.kind === 'channel'
-      ? `Drawn ${Math.abs(snap.lateralOffsetM).toFixed(0)} m ${snap.lateralOffsetM < 0 ? 'left' : 'right'} of the catalog point, in the creek channel the 3D scene draws (the catalog puts every barrier on a map line that can sit beside the channel).`
-      : `Drawn on the catalog point itself: ${snap.reason}.`;
-  const direction = site.creekDirection;
-  const directionText =
-    direction.bearingDegrees === null
-      ? `Not turned to the creek: ${direction.detail}.`
-      : `Turned so it lies ${site.description.shape.kind === 'culvert' ? 'along' : 'across'} the creek: the creek runs toward ${Math.round(direction.bearingDegrees)}° here, ${direction.detail}.`;
-  return [element('h3', SECTION_HEADING_CLASS, 'Position'), element('p', 'mt-1', text), element('p', 'mt-1', directionText)];
+  const solid = drawsSolidShape(site.description.shape);
+  // The catalog puts every barrier on a map line that can sit beside the channel, so the sentence says how the spot was found.
+  const { detail } = site.placement;
+  const text = `${detail.charAt(0).toUpperCase()}${detail.slice(1)}.`;
+  const nodes = [element('h3', SECTION_HEADING_CLASS, 'Position'), element('p', 'mt-1', text)];
+  // Only a solid shape is turned; a pointer has nothing to turn.
+  if (solid) {
+    const direction = site.creekDirection;
+    nodes.push(
+      element(
+        'p',
+        'mt-1',
+        direction.bearingDegrees === null
+          ? `Not turned to the creek: ${direction.detail}.`
+          : `Turned so it lies ${CULVERT_AXIS_TURN_FROM_CREEK_DEGREES % 180 === 90 ? 'across' : 'along'} the creek: the creek runs toward ${Math.round(direction.bearingDegrees)}° here, ${direction.detail}.`,
+      ),
+    );
+  }
+  return nodes;
 }
 
 function buildSources(): HTMLElement {

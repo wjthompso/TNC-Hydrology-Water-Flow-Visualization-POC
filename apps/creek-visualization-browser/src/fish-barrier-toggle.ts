@@ -32,9 +32,10 @@ export function bindFishBarrierToggle(
     map = opened;
     setCurrentFishBarrierMap(map);
     const noLongerBlocking = map.sites.filter((site) => site.description.removal !== null).length;
-    const movedOntoChannel = map.sites.filter((site) => site.channelSnap.kind === 'channel').length;
+    // No count of barriers placed in the channel: each barrier moves onto the drawn water as the camera comes
+    // near it, so a number written once at open would go stale.
     status.textContent =
-      `${map.sites.length} barriers surveyed by TNC, ${movedOntoChannel} placed in the channel the scene draws. ` +
+      `${map.sites.length} barriers surveyed by TNC, each placed on the creek channel. ` +
       `${noLongerBlocking} no longer block fish (removed or bypassed). Sizes are partly assumed.`;
   };
 

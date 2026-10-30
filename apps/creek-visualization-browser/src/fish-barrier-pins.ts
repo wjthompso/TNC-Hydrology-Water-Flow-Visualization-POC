@@ -7,7 +7,7 @@
 // floating panels, so no barrier ever disappears. The label is the part that gives way: a label that would
 // cover a label nearer the middle of the screen, or run off the map, waits until the camera moves.
 // Both are real <button>s positioned over the map every camera frame, so they take keyboard focus.
-// The label looks unlike the creek name pins on purpose (map-pin-button.ts): a fish-and-barrier icon and a
+// The label looks unlike the creek name pins on purpose (map-pin-button.ts): a gate icon, a corner "i" and a
 // warm brown background, with the border colored like the dot.
 
 import { watch } from '@arcgis/core/core/reactiveUtils';
@@ -23,9 +23,13 @@ import { LABEL_GAP_PX, boxFitsOnMap, boxesOverlap, coveringPanelBoxes, type Scre
 const UNKNOWN_ICON_SVG =
   '<svg class="h-4 w-4 shrink-0 text-[color:var(--pin-color)]" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5.5 6a2.5 2.5 0 1 1 3.6 2.2C8.4 8.5 8 9 8 9.8"/><path d="M8 12.6v.1"/></svg>';
 
-/** A fish stopped by a bar, in the pin's color. */
-const BARRIER_ICON_SVG =
-  '<svg class="h-4 w-4 shrink-0 text-[color:var(--pin-color)]" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 8c1.6-2.5 4.2-3.6 6.6-2.7L9.6 4v8L7.6 10.7C5.2 11.6 2.6 10.5 1 8Z"/><path d="M12 2.5h2.2v11H12z"/></svg>';
+/**
+ * A gate in the pin's color: two tall posts with two shorter rails between them, like a fence gate. The posts
+ * span y 2 to 14 and the rails y 6 to 11.5, with a 1.5-unit gap between the rails, so at 16 px it reads as a
+ * gate and not a solid block. Every shape is at least 2 units (2 px) thick.
+ */
+const FISH_BARRIER_GATE_ICON_SVG =
+  '<svg class="h-4 w-4 shrink-0 text-[color:var(--pin-color)]" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1.5" y="2" width="3" height="12" rx="0.5"/><rect x="11.5" y="2" width="3" height="12" rx="0.5"/><rect x="4.5" y="6" width="7" height="2"/><rect x="4.5" y="9.5" width="7" height="2"/></svg>';
 
 /** The dot at a barrier's spot. Its ring matches the sidebar so it reads over imagery and over a label. */
 const DOT_CLASS =
@@ -42,7 +46,7 @@ interface BarrierPin {
   dot: HTMLButtonElement;
   /** Shown above the dot when there is room. */
   pin: HTMLButtonElement;
-  /** Height the pin's foot sits at, m above sea level: the ground under the barrier, plus the barrier's height. */
+  /** Height the pin's foot sits at, m above sea level: the ground under the barrier, plus its pipe's height (zero for a pointer-only barrier, so the stem ends on the dot). */
   footHeightM: number;
 }
 
@@ -55,16 +59,18 @@ export function createFishBarrierPins(
   const items: BarrierPin[] = sites.map((site) => {
     const text = barrierPinText(site.record, site.description);
     const color = barrierColorHex(site.record, site.description);
-    const ariaLabel = `Zoom to ${text.primary.toLowerCase()} on ${text.secondary}`;
+    const ariaLabel = `Zoom to ${text.primary.toLowerCase()} on ${text.secondary} and show details`;
     const pin = createMapPinButton({
       variant: 'barrier',
       color,
-      iconSvg: site.record.status === 'Unknown' && !site.description.removal ? UNKNOWN_ICON_SVG : BARRIER_ICON_SVG,
+      iconSvg: site.record.status === 'Unknown' && !site.description.removal ? UNKNOWN_ICON_SVG : FISH_BARRIER_GATE_ICON_SVG,
       primary: text.primary,
       secondary: text.secondary,
       ariaLabel,
       // The dot below is the label's foot.
       showFoot: false,
+      // Clicking opens the barrier's info card, which the corner "i" hints at.
+      infoBadge: true,
     });
     const dot = document.createElement('button');
     dot.type = 'button';

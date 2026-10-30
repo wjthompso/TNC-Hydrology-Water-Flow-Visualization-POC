@@ -3,9 +3,11 @@
 // whether it still stands. Pure data and rules, no map code; the drawing lives in
 // fish-barrier-map.ts.
 //
-// The layer holds no dimensions. Sizes come from three places, and each drawn size says which:
+// The layer holds no dimensions. Sizes come from two places, and each size says which:
 //   documented: a number in the record's own Notes, or in a TNC / CalSalmon source (cited below);
 //   assumed:    a default in this file, because nothing documents it.
+// Only a pipe is drawn as a solid shape (drawsSolidShape); every other kind is a pointer, so for those
+// the sizes feed the info card and the Dev tools readout, not the picture.
 
 import type { HostedFeatureRow } from './hosted-feature-service-query';
 
@@ -29,20 +31,10 @@ export const ASSUMED_CREEK_SPAN_M = 5;
 /** Thickness of a crossing-spanning slab or wall along the flow, where undocumented. */
 export const ASSUMED_STRUCTURE_LENGTH_M = 1;
 export const ASSUMED_WATERFALL_HEIGHT_M = 2;
-/** The catalog gives one point for a steep stretch, not its extent; the drawn ramp is this long. */
+/** The catalog gives one point for a steep stretch, not its extent; this placeholder length is not measured. */
 export const ASSUMED_STEEP_STRETCH_LENGTH_M = 20;
-/** Width of the drawn steep-stretch ramp, across the creek. */
+/** Placeholder width of a steep stretch, across the creek; not measured. */
 export const ASSUMED_STEEP_STRETCH_WIDTH_M = 4;
-/**
- * Pitch of the drawn ramp. A 10% slope is only 5.7 degrees, too shallow to read as a ramp from the air
- * against sloping ground, so the drawing exaggerates it. The ramp says "steep stretch here", not how steep.
- */
-export const STEEP_STRETCH_DRAWN_PITCH_DEGREES = 20;
-/**
- * Height of the drawn ramp's middle above the ground, m. The ramp is pitched more steeply than the ground,
- * so its low end would dip into the slope unless the middle floats at least half its rise (3.4 m) above it.
- */
-export const STEEP_STRETCH_FLOAT_HEIGHT_M = 3.8;
 
 export type BarrierStatus = 'Total' | 'Partial' | 'Unknown';
 
@@ -75,16 +67,37 @@ export type BarrierShape =
   | { kind: 'crossing-structure'; spanM: number; heightM: number; lengthM: number }
   /** A natural bedrock drop. */
   | { kind: 'waterfall'; spanM: number; heightM: number }
-  /**
-   * A sustained steep stretch of creek or an estimated natural limit: terrain, not an object. Drawn as a
-   * see-through ramp pitched up the creek, `lengthM` long, so it reads as a slope and not as a structure.
-   */
+  /** A sustained steep stretch of creek or an estimated natural limit: terrain, not an object. */
   | { kind: 'steep-stretch'; lengthM: number; widthM: number };
+
+export type CulvertShape = Extract<BarrierShape, { kind: 'culvert' }>;
+
+/**
+ * How far a culvert's long axis is turned from the creek's downstream bearing, degrees. The developer asked
+ * for the pipe drawn across the creek, so it is 90. A real culvert barrel runs along the flow (the creek
+ * goes through it; the road above is what crosses the creek), so 0 restores the along-the-creek drawing.
+ */
+export const CULVERT_AXIS_TURN_FROM_CREEK_DEGREES = 90;
+
+/**
+ * The kinds drawn as a solid 3D shape; every other kind is shown by its dot and label pin alone. A solid
+ * shape implies a size and a physical blocker, and the catalog records neither for most barriers: a box on
+ * a bedrock waterfall reads as a wall in the creek, which is the wrong picture of a natural drop. A pipe is
+ * the exception, because its shape (a cylinder lying along the creek) is what the survey describes.
+ * To draw another kind, for example 'crossing-structure' for dams and weirs whose sizes the survey notes
+ * document, add its name here, add its case to `shapeSymbol` (fish-barrier-map.ts), and widen the
+ * type guard below to match.
+ */
+const SOLID_SHAPE_KINDS: ReadonlySet<BarrierShape['kind']> = new Set(['culvert']);
+
+export function drawsSolidShape(shape: BarrierShape): shape is CulvertShape {
+  return SOLID_SHAPE_KINDS.has(shape.kind);
+}
 
 export interface BarrierRemoval {
   /**
    * `removed`: the structure is gone. `bypassed`: it still stands, but a built channel lets fish go
-   * around it. Both stop blocking fish, so both draw as a see-through footprint.
+   * around it. Both stop blocking fish, so both show in the green of "no longer blocking".
    */
   readonly fate: 'removed' | 'bypassed';
   /** Past tense, ready to print: "Concrete dam demolished by TNC, 2023". */
@@ -254,12 +267,12 @@ const SHAPE_OVERRIDES_BY_PASSAGE_ID: ReadonlyMap<number, ShapeOverride> = new Ma
 const CORRECTED_KIND_BY_PASSAGE_ID: ReadonlyMap<number, { kind: 'steep-stretch'; correction: string }> = new Map([
   [
     7860, // "Steep Stream Reach", filed as a road crossing, status Unknown, no notes
-    { kind: 'steep-stretch', correction: 'Filed as a road crossing, but its site name is "Steep Stream Reach", so it is drawn as a steep stretch.' },
+    { kind: 'steep-stretch', correction: 'Filed as a road crossing, but its site name is "Steep Stream Reach", so it is treated as a steep stretch.' },
   ],
 ]);
 
 const STEEP_STRETCH_SIZE_BASIS =
-  `A stretch of creek, not a structure: the catalog gives one point and no length. The ramp is drawn ${ASSUMED_STEEP_STRETCH_LENGTH_M} m long and ${ASSUMED_STEEP_STRETCH_WIDTH_M} m wide, tilted ${STEEP_STRETCH_DRAWN_PITCH_DEGREES} degrees to read as a slope; none of that is measured.`;
+  'A stretch of creek, not a structure: the catalog gives one point and no length or width.';
 
 const STEEP_STRETCH_SHAPE: BarrierShape = {
   kind: 'steep-stretch',
@@ -406,17 +419,12 @@ export function barrierColorHex(record: FishBarrierRecord, description: BarrierS
   return BARRIER_COLOR_HEX[description.removal ? 'no-longer-blocking' : record.status];
 }
 
-/** How tall the drawn barrier stands above the ground, m. A pin's stem ends here. */
+/** Height of a pointer-only barrier's spot above the ground, m: its label stem ends on the dot. */
+const POINTER_HEIGHT_M = 0;
+
+/** How tall the barrier stands above the ground, m: the top of a solid shape, else the ground. A pin's stem ends here. */
 export function barrierTopHeightM(shape: BarrierShape): number {
-  switch (shape.kind) {
-    case 'culvert':
-      return shape.perchM + shape.diameterM;
-    case 'crossing-structure':
-    case 'waterfall':
-      return shape.heightM;
-    case 'steep-stretch':
-      return STEEP_STRETCH_FLOAT_HEIGHT_M + (shape.lengthM / 2) * Math.sin((STEEP_STRETCH_DRAWN_PITCH_DEGREES * Math.PI) / 180);
-  }
+  return drawsSolidShape(shape) ? shape.perchM + shape.diameterM : POINTER_HEIGHT_M;
 }
 
 /** Creek name for a label: the catalog's "Gasper Creek (Gaspar Creek)" becomes "Gasper Creek"; a blank name is called unnamed. */

@@ -54,6 +54,7 @@ import { formatObservationTime } from './observation-timeline-controls';
 import type { BarrierMarkerGallery } from './barrier-marker-gallery';
 import type { FishBarrierMap, FishBarrierSite } from './fish-barrier-map';
 import { currentFishBarrierMap, onFishBarrierMapChange } from './fish-barrier-state';
+import { drawsSolidShape } from './fish-barrier-sites';
 import type { StationMarkerGallery } from './station-marker-gallery';
 import type { DevToolsClickMarker } from './dev-tools-click-marker';
 import { createDevToolsClickMarker } from './dev-tools-click-marker';
@@ -1901,40 +1902,28 @@ function describeFishBarrierSiteForHud(site: FishBarrierSite): string {
       : `Passage: ${record.status} barrier (surveyed ${record.surveyYear || 'year unknown'})`,
     `${Math.round(site.distanceToObservedGaugeM)} m from the observed gauge`,
   ];
-  switch (shape.kind) {
-    case 'culvert':
-      lines.push(
-        `Drawn: pipe ${shape.diameterM.toFixed(1)} m across, ${shape.lengthM.toFixed(1)} m long` +
-          (shape.perchM > 0 ? `, hanging ${shape.perchM.toFixed(1)} m above the creek bed` : ', at bed level'),
-      );
-      break;
-    case 'crossing-structure':
-      lines.push(
-        `Drawn: ${shape.spanM.toFixed(1)} m wide across the creek, ${shape.heightM.toFixed(2)} m high, ${shape.lengthM.toFixed(1)} m along it`,
-      );
-      break;
-    case 'waterfall':
-      lines.push(`Drawn: ${shape.spanM.toFixed(1)} m wide drop, ${shape.heightM.toFixed(1)} m high`);
-      break;
-    case 'steep-stretch':
-      lines.push(`Drawn: a see-through ramp ${shape.lengthM.toFixed(0)} m long and ${shape.widthM.toFixed(0)} m wide along the creek (a steep stretch has no structure to size)`);
-      break;
+  if (drawsSolidShape(shape)) {
+    lines.push(
+      `Drawn: pipe ${shape.diameterM.toFixed(1)} m across, ${shape.lengthM.toFixed(1)} m long` +
+        (shape.perchM > 0 ? `, hanging ${shape.perchM.toFixed(1)} m above the creek bed` : ', at bed level'),
+      description.assumedDimensions.length > 0
+        ? `Assumed (not documented): ${description.assumedDimensions.join(', ')}`
+        : 'Every drawn size is documented',
+      `Size basis: ${description.sizeBasis}`,
+    );
+  } else {
+    lines.push('Shown as a pointer only (no solid shape for this kind)');
   }
-  lines.push(
-    description.assumedDimensions.length > 0
-      ? `Assumed (not documented): ${description.assumedDimensions.join(', ')}`
-      : 'Every drawn size is documented',
-    `Size basis: ${description.sizeBasis}`,
-  );
   if (record.notes) lines.push(`Survey notes: ${record.notes}`);
   lines.push(
     site.downstreamBearingDegrees === null
       ? `Not turned to the creek: ${site.creekDirection.detail}`
       : `Turned to the creek: downstream is ${Math.round(site.downstreamBearingDegrees)}°, ${site.creekDirection.detail}`,
+    `Position (${site.placement.source}): ${site.placement.detail}`,
     site.channelSnap.kind === 'channel'
-      ? `Placed in the channel: moved ${Math.abs(site.channelSnap.lateralOffsetM).toFixed(0)} m ${site.channelSnap.lateralOffsetM < 0 ? 'left' : 'right'} of the catalog point, ` +
+      ? `Terrain guess: ${Math.abs(site.channelSnap.lateralOffsetM).toFixed(0)} m ${site.channelSnap.lateralOffsetM < 0 ? 'left' : 'right'} of the catalog point, ` +
         `from ${site.channelSnap.sectionsUsed} lines across the creek that agree within ${site.channelSnap.spreadM.toFixed(0)} m`
-      : `Left on the catalog point: ${site.channelSnap.reason}`,
+      : `Terrain guess: none, ${site.channelSnap.reason}`,
   );
   return lines.join('\n');
 }
