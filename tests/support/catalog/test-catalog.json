@@ -669,6 +669,27 @@
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-130-observation-playback-speed-buttons/behavior/FBT-134.deterministic.spec.ts"
     },
     {
+      "id": "FBT-135",
+      "name": "Turning on steelhead trout conditions shows a toast at the top middle of the page saying the suitability ranges use modeled water depth only, and turning them off removes it.",
+      "methodology": "Why it matters: the green, yellow, and red suitability colors rate water depth alone; a person who reads them as a full habitat verdict could be misled about temperature, connectivity, or spawning gravel. How it checks: opens the locally served page on the “Inferred Creek WSE — hourly (from NOAA National Water Model v3.0 flows)” Dataset for the jalama-gauge-reach extent at 2023-02-01T00:00Z, waits for the modeled loads and a finished frame, and confirms the toast text is not on screen. It then checks the sidebar's Steelhead trout conditions box and fails unless the text “Showing steelhead trout habitat suitability based on modeled water depth only. Temperature, connectivity, spawning gravel etc. not currently factored in.” becomes visible, its horizontal center sits within 8 px of the midpoint between the sidebar's right edge and the left edge of the map buttons (imagery and LiDAR), and its top sits in the upper 20% of the window. It unchecks the box and fails unless the text disappears. What is real: the browser page, ArcGIS SceneView, the developer's local m1 modeled pipeline output served by the development middleware, the real checkbox, and Esri World Imagery, Esri World Elevation, and USGS 3DEP responses reused from the local disk cache; a response missing from the cache is fetched live and saved, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. When the local pipeline output is missing the result is inconclusive with a message naming the pipeline command. What is test-only: nothing. What it does not check: the toast's colors, animation, or wording beyond the exact sentence, life-stage buttons, other Datasets, hours, or extents, or the map colors.",
+      "category": "feature-behavior",
+      "owner": "F-160",
+      "additionalFeatureAssociations": [
+        "F-140"
+      ],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-160-water-surface-elevation-chart/behavior/FBT-135.live.spec.ts"
+    },
+    {
       "id": "FST-001",
       "name": "Modeled water-surface elevation validation rejects a value below its Creek Segment's bed.",
       "methodology": "Why it matters: modeled water below a Creek Segment's bed is physically impossible, and if it reached the browser it would draw water under the ground or no water where some is expected. The final validation step of the modeled water-surface elevation pipeline (Stage 5) is the last guard before that data is used, so this test makes sure the guard actually trips. How it checks: the test builds a tiny synthetic fixture in a temporary directory: two made-up Creek Segments with bed elevations of 100 m and 50 m, matching cross-section and polygon-ladder records, and one Time Series file of three monthly values per segment listed in a one-Dataset catalog. It calls the real Stage 5 validation function, validateModeledWaterSurfaceElevationOutputs, twice. First with values that are all at or above the bed, including one exactly at the bed and one missing value; every check must pass. Then with one value 0.1 m below the 100 m bed; only the bed check may fail, with exactly one violation whose message names that Time Series file, that Creek Segment (and not the other one), the timestamp, the value, and the bed. What is real: the validation code and its check names. What is synthetic: every input file; nothing is read from real pipeline output, and there is no network. What it does not check: whether real modeled values are correct, the hydraulics that produced them, the other validation checks, or how Stage 5 writes its catalog and report files.",

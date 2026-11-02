@@ -44,6 +44,9 @@ const SWATCH_CLASS: Record<SteelheadDepthClass | 'out-of-season', string> = {
   'out-of-season': 'bg-slate-500',
 };
 
+const DEPTH_ONLY_TOAST_TEXT =
+  'Showing steelhead trout habitat suitability based on modeled water depth only. Temperature, connectivity, spawning gravel etc. not currently factored in.';
+
 const NOT_RATED_LEGEND_TEXT = 'Standard blue: not rated (no bed elevation for this segment)';
 
 let shared: { enabled: boolean; lifeStage: SteelheadLifeStage } = { enabled: false, lifeStage: 'adults' };
@@ -61,6 +64,7 @@ export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetim
   const rangesList = document.getElementById('trout-conditions-ranges');
   const noBandLine = document.getElementById('trout-conditions-no-band');
   const segmentNote = document.getElementById('trout-conditions-segment-note');
+  const toast = document.getElementById('trout-conditions-toast');
   const caveat = document.getElementById('trout-conditions-caveat');
   if (caveat) caveat.textContent = REVIEW_CAVEAT;
   const basisList = document.getElementById('trout-conditions-basis');
@@ -77,6 +81,11 @@ export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetim
     // The body's CSS transition animates its height; its text stays put while it closes so it can shrink smoothly.
     if (body) body.dataset.open = String(shared.enabled);
     legendBlock?.classList.toggle('hidden', !shared.enabled);
+    if (toast) {
+      // Text is set only while open, so a closed toast holds no text for the page or tests to find.
+      toast.textContent = shared.enabled ? DEPTH_ONLY_TOAST_TEXT : '';
+      toast.dataset.open = String(shared.enabled);
+    }
     sourceRows?.classList.toggle('hidden', shared.enabled);
     for (const button of stageButtons) {
       button.setAttribute('aria-pressed', String(button.dataset.steelheadLifeStage === shared.lifeStage));
