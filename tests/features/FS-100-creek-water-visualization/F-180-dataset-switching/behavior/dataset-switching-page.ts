@@ -1,7 +1,7 @@
 /**
- * Playwright helpers for the Dataset picker: tag the live page and its
- * SceneView canvas, switch Dataset through the real picker, and read whether
- * the tags survived.
+ * Playwright helpers for the Observed | Modeled buttons: tag the live page and
+ * its SceneView canvas, switch Dataset through the real buttons, and read
+ * whether the tags survived.
  */
 
 import type { Page } from '../../../../support/browser/response-cache/index.ts';
@@ -47,9 +47,13 @@ export async function readSceneSurvival(page: Page): Promise<SceneSurvival | nul
   }
 }
 
-/** Chooses a Dataset in the real picker, the way a person does. */
+/**
+ * Chooses a Dataset through the real Observed | Modeled buttons, the way a person does.
+ * The observed gauge presses Observed; any modeled Dataset presses Modeled, which opens the default modeled Dataset.
+ */
 export async function chooseDataset(page: Page, datasetOptionId: string): Promise<void> {
-  await page.locator('#dataset-picker').selectOption(datasetOptionId);
+  const buttonId = datasetOptionId === 'observed-gauge' ? '#dataset-observed-btn' : '#dataset-modeled-btn';
+  await page.locator(buttonId).click();
 }
 
 /**

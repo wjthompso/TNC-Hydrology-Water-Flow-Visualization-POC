@@ -21,6 +21,7 @@ from modeled_wse_version_layout import (
     CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID,
     HOUR_MS,
     NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+    NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
     SEGMENT_NETWORK_VERSION,
     json_values_to_float_array,
     read_json,
@@ -59,13 +60,23 @@ class DepthTimeSeriesFolder:
     def __init__(self, time_series_folder: Path) -> None:
         self.folder = time_series_folder
 
-    def national_water_model_hourly_path(self, tnc_comid: str, water_year: int) -> Path:
-        return self.folder / NATIONAL_WATER_MODEL_HOURLY_DATASET_ID / "water-surface-elevation" / tnc_comid / f"WY{water_year}.json"
+    def national_water_model_hourly_path(
+        self, tnc_comid: str, water_year: int, dataset_id: str = NATIONAL_WATER_MODEL_HOURLY_DATASET_ID
+    ) -> Path:
+        return self.folder / dataset_id / "water-surface-elevation" / tnc_comid / f"WY{water_year}.json"
+
+    def has_dataset(self, dataset_id: str) -> bool:
+        return (self.folder / dataset_id).is_dir()
 
     def california_natural_flows_monthly_path(self, tnc_comid: str) -> Path:
         return self.folder / CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID / "water-surface-elevation" / f"{tnc_comid}.json"
 
-    def load_national_water_model_hourly(self, tnc_comid: str, water_years: list[int]) -> DepthFlowlineSeries:
+    def load_national_water_model_operational_hourly(self, tnc_comid: str, water_years: list[int]) -> DepthFlowlineSeries:
+        return self.load_national_water_model_hourly(tnc_comid, water_years, NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID)
+
+    def load_national_water_model_hourly(
+        self, tnc_comid: str, water_years: list[int], dataset_id: str = NATIONAL_WATER_MODEL_HOURLY_DATASET_ID
+    ) -> DepthFlowlineSeries:
         """Merge WY files into one hourly series; checks hourly continuity, segment order, and static scalars."""
         timestamp_parts: list[np.ndarray] = []
         segment_parts: dict[str, list[DepthSegmentSeries]] = {}
@@ -73,9 +84,9 @@ class DepthTimeSeriesFolder:
         water_year_slices: dict[int, tuple[int, int]] = {}
         step_offset = 0
         for water_year in water_years:
-            path = self.national_water_model_hourly_path(tnc_comid, water_year)
+            path = self.national_water_model_hourly_path(tnc_comid, water_year, dataset_id)
             file_json = read_json(path)
-            _check_file_header(file_json, NATIONAL_WATER_MODEL_HOURLY_DATASET_ID, path)
+            _check_file_header(file_json, dataset_id, path)
             timestamps_ms = np.array(file_json["timestampsUtcMs"], dtype=np.int64)
             if np.any(np.diff(timestamps_ms) != HOUR_MS):
                 raise ValueError(f"{path}: timestamps are not continuous hourly steps")

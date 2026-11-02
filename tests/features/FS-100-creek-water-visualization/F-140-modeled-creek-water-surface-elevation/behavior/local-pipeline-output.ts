@@ -20,6 +20,8 @@ import { utm10nToWgs84 } from '../../../../../pipelines/creek-visualization-data
 export const JALAMA_EXTENT_ID = 'jalama-gauge-reach';
 export const JALAMA_TNC_COMID = '27714637';
 export const NATIONAL_WATER_MODEL_HOURLY_DATASET_ID = 'national-water-model-hourly';
+/** The Dataset the page's Modeled button opens (`DEFAULT_MODELED_DATASET_ID` in the browser app): NOAA operational hourly, water years 2025–2027. */
+export const NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID = 'national-water-model-operational-hourly';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const pipelineOutputRoot = path.join(repositoryRoot, 'data/pipeline-working-output');

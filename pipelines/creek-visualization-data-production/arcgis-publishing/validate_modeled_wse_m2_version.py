@@ -78,6 +78,7 @@ from modeled_wse_m2_version_layout import (  # noqa: E402
     read_json,
     upstream_and_downstream_vertex_index,
 )
+from modeled_wse_version_layout import NATIONAL_WATER_MODEL_HOURLY_DATASET_ID  # noqa: E402
 from validate_modeled_wse_version import ArrayComparison, ValidationReport, log, numpy_of  # noqa: E402
 
 DATE_FIELDS = {
@@ -188,9 +189,9 @@ class MonthlyValuesBySegment:
 class RawHourlyCsv:
     """One water year's CSV, grouped by segment in file order (written segment by segment)."""
 
-    def __init__(self, zip_path: Path, water_year: int) -> None:
+    def __init__(self, zip_path: Path, water_year: int, dataset_id: str = NATIONAL_WATER_MODEL_HOURLY_DATASET_ID) -> None:
         with zipfile.ZipFile(zip_path) as archive:
-            with archive.open(raw_hourly_csv_name(water_year)) as stream:
+            with archive.open(raw_hourly_csv_name(water_year, dataset_id)) as stream:
                 table = pyarrow_csv.read_csv(
                     stream,
                     convert_options=pyarrow_csv.ConvertOptions(

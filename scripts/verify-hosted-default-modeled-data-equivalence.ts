@@ -7,6 +7,8 @@
  *   npm run data-products:verify-hosted-default-modeled-data                 # signed in (token kept in memory)
  *   npm run data-products:verify-hosted-default-modeled-data -- --anonymous  # no token: the services must be public
  *   … -- --flowlines 27714697,27714637                                       # a subset (default: every flowline)
+ *   … -- --modeled-wse-service-url <FeatureServer url>                       # check another modeled WSE service (e.g. m5-v2)
+ *                                                                              instead of the configured default
  *
  * Compared, each as a deep JSON equality (numbers with ===, key sets equal):
  * - every hourly National Water Model Time Series file the hosted version publishes (every flowline, every water year
@@ -15,6 +17,8 @@
  *   `channelRibbon` summary);
  * - the method list's default pairing (the version the page opens and the Time Series it draws) and the catalog fields
  *   `readModeledCatalog` reads;
+ * - when the hosted catalog lists the `national-water-model-operational-hourly` Dataset (m5-v2 and later), every
+ *   operational hourly Time Series file it publishes (every flowline × WY2025–WY2027);
  * - the reach crosswalk and Creek Segment paths (from the m5 Creek Segments layer).
  *
  * Expected differences are reported by name and never counted as mismatches; see EXPECTED_DIFFERENCES.
@@ -237,8 +241,15 @@ async function obtainPortalToken(): Promise<string> {
 const argumentsList = process.argv.slice(2);
 const anonymous = argumentsList.includes('--anonymous');
 const flowlinesArgument = argumentsList[argumentsList.indexOf('--flowlines') + 1];
+const modeledWseServiceUrlArgument =
+  argumentsList.indexOf('--modeled-wse-service-url') >= 0 ? argumentsList[argumentsList.indexOf('--modeled-wse-service-url') + 1] : undefined;
+if (argumentsList.includes('--modeled-wse-service-url') && !modeledWseServiceUrlArgument?.startsWith('https://')) {
+  throw new Error('--modeled-wse-service-url needs an https FeatureServer URL.');
+}
 const totalStartedAt = performance.now();
-const configuration = creekDataSourceConfiguration;
+const configuration = modeledWseServiceUrlArgument
+  ? { ...creekDataSourceConfiguration, modeledWseServiceUrl: modeledWseServiceUrlArgument.replace(/\/+$/, '') }
+  : creekDataSourceConfiguration;
 process.stdout.write(
   `Hosted DEFAULT modeled data equivalence check (${anonymous ? 'anonymous' : 'signed in'})\n` +
     `  modeled WSE: ${configuration.modeledWseServiceUrl}\n  WSE polygons: ${configuration.wsePolygonsServiceUrl}\n` +
@@ -378,6 +389,43 @@ await runComparison(`NWM hourly Time Series: ${hourlyPaths.length} files (every 
   }
 });
 for (const finding of namedInstantFindings.sort()) process.stdout.write(`       ${finding}\n`);
+
+const operationalPaths = (
+  hostedCatalog.timeSeries.find((entry) => entry.datasetId === 'national-water-model-operational-hourly')?.paths ?? []
+).filter((entry) => tncComids.some((tncComid) => entry.includes(`/${tncComid}/`)));
+
+if (operationalPaths.length > 0) {
+  await runComparison(
+    `NWM operational hourly Time Series: ${operationalPaths.length} files (every flowline × WY2025–WY2027)`,
+    async (result) => {
+      let values = 0;
+      let nullValues = 0;
+      await mapWithConcurrency(operationalPaths, PARALLEL_FLOWLINES, async (catalogPath) => {
+        const match = /\/(\d+)\/WY(\d{4})\.json$/.exec(catalogPath) as RegExpExecArray;
+        const [tncComid, waterYear] = [match[1], Number(match[2])];
+        const local = await readJsonFile<{ timestampsUtcMs: number[]; segments: { segmentId: string; values: (number | null)[] }[] }>(
+          path.join(TIME_SERIES_ROOT, catalogPath),
+        );
+        const hosted = asJson(
+          await loadHostedTimeSeriesForFlowline(
+            { version, network, datasetId: 'national-water-model-operational-hourly', tncComid, waterYear },
+            adapterOptions,
+          ),
+        );
+        compareJson(result, `${tncComid} operational WY${waterYear}`, local, hosted);
+        for (const segment of local.segments) {
+          values += segment.values.length;
+          nullValues += segment.values.filter((value) => value === null).length;
+        }
+        result.checked += 1;
+      });
+      result.notes.push(
+        `${values.toLocaleString('en-US')} segment-hours compared, each with values and both junction depths ` +
+          `(${nullValues.toLocaleString('en-US')} null, e.g. NHDPlusV2 reach 17594937 has no operational flow)`,
+      );
+    },
+  );
+}
 
 await runComparison(`CNF monthly Time Series: ${MONTHLY_FLOWLINES.length} flowlines`, async (result) => {
   for (const tncComid of MONTHLY_FLOWLINES) {

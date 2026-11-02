@@ -3,7 +3,7 @@ import { steepCreekSubsectionRoughness } from '../m4-flowline-profile-variable-p
 import { CHANNEL_FROM_MODELED_WSE_VERSION, STEEP_CREEK_ROUGHNESS_BLEND } from '../m4-flowline-profile-variable-power-depth/method-config.ts';
 import { runSteepCreekTimeSeriesStage } from '../m4-flowline-profile-variable-power-depth/steep-creek-time-series.ts';
 import { jarrettRoughnessN } from './flow-resistance.ts';
-import { JARRETT_FLOW_RESISTANCE, M5_FLOWLINE_PROFILE_JARRETT_DEPTH_METHOD } from './method-config.ts';
+import { JARRETT_FLOW_RESISTANCE, M5_FLOWLINE_PROFILE_JARRETT_DEPTH_METHOD, OPERATIONAL_HOURLY_DATASET } from './method-config.ts';
 
 /**
  * m5 Stage 3: m4's Stage 3 (m3 v2's, on m3 v2's channel) with each subsection's Manning's n blended by slope toward Jarrett's (1984)
@@ -19,4 +19,6 @@ await runSteepCreekTimeSeriesStage({
     blend: STEEP_CREEK_ROUGHNESS_BLEND,
   }),
   blend: STEEP_CREEK_ROUGHNESS_BLEND,
+  // m5 v2: the operational National Water Model Dataset, from `npm run pipeline:modeled-wse:acquire-operational-national-water-model`.
+  extraHourlyDatasets: [{ datasetId: OPERATIONAL_HOURLY_DATASET.datasetId, file: OPERATIONAL_HOURLY_DATASET.dischargeFile }],
 });

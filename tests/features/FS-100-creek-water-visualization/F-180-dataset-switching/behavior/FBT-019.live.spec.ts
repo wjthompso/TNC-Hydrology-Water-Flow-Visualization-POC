@@ -19,7 +19,7 @@ import {
 import {
   JALAMA_EXTENT_ID,
   JALAMA_TNC_COMID,
-  NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+  NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
   missingLocalPipelineOutput,
 } from '../../F-140-modeled-creek-water-surface-elevation/behavior/local-pipeline-output.ts';
 import {
@@ -33,6 +33,13 @@ import {
 } from './dataset-switching-page.ts';
 
 const OBSERVED_DATASET_OPTION_ID = 'observed-gauge';
+/** The default Modeled WSE version the page opens (m5 v2), and the ribbon polygons it is drawn on. */
+const DEFAULT_MODELED_WSE_VERSION_PATH = 'm5-flowline-profile-jarrett-depth/v2';
+const RIBBON_POLYGON_SETS_FILE = `04-water-surface-polygons/flowline-channel-ribbon/v2/water-surface-polygon-sets/${JALAMA_TNC_COMID}.json`;
+/** One hour in each water year (WY) the operational Dataset covers, so its WY2025, WY2026, and WY2027 files are all required. */
+const OPERATIONAL_DATASET_HOURS_UTC_MS = ['2025-01-15T00:00:00Z', '2026-01-15T00:00:00Z', '2026-10-15T00:00:00Z'].map(
+  (hour) => Date.parse(hour),
+);
 /** How long a switch may take to show the new Dataset's water. */
 const SWITCH_BUDGET_MS = 9_000;
 /** A carried camera may drift this far: about 10 m of longitude or latitude, 5 m of height, 1 degree of heading or tilt. */
@@ -48,12 +55,14 @@ test('Switching the Dataset in the picker replaces the creek water on the same m
   const terrain = watchTerrainTraffic(page);
   const failures: string[] = [];
   try {
-    // The Jalama extent needs its National Water Model hourly output on disk before the Dataset switch can be checked.
+    // The Jalama extent needs the operational National Water Model hourly output the Modeled button opens on disk before the Dataset switch can be checked.
     const missing = missingLocalPipelineOutput({
       extentId: JALAMA_EXTENT_ID,
-      datasetId: NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+      datasetId: NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
       comid: JALAMA_TNC_COMID,
-      timesUtcMs: [],
+      timesUtcMs: OPERATIONAL_DATASET_HOURS_UTC_MS,
+      modeledWseVersionPath: DEFAULT_MODELED_WSE_VERSION_PATH,
+      extraRelativePaths: [RIBBON_POLYGON_SETS_FILE],
     });
     if (missing) throw new Error(`INCONCLUSIVE: ${missing}`);
 
@@ -76,7 +85,7 @@ test('Switching the Dataset in the picker replaces the creek water on the same m
     const pageLoads = countPageLoads(page);
 
     // Observed to modeled.
-    await chooseDataset(page, NATIONAL_WATER_MODEL_HOURLY_DATASET_ID);
+    await chooseDataset(page, NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID);
     const modeledArrived = await waitUntil(
       async () => (await readExperienceTitle(page)) === 'Modeled water' && (await modeledWaterIsDrawn(page)),
     );

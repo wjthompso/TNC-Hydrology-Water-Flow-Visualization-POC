@@ -63,6 +63,7 @@ from data_product_versions import (  # noqa: E402
     sha256_of_file,
     staged_version_folder,
     update_registry_version,
+    git_commit,
     utc_iso_from_epoch_ms,
     utc_now_iso,
     write_json,
@@ -78,6 +79,7 @@ from freeze_modeled_wse_m2_version import (  # noqa: E402
 from freeze_modeled_wse_version import (  # noqa: E402
     DERIVATION_JSON_WIDTH,
     LONG_TEXT_WIDTH,
+    MEDIUM_TEXT_WIDTH,
     check_flowline_segments_match_network,
     creek_segment_columns_and_geometry,
     export_creek_segment_network,
@@ -98,8 +100,11 @@ from modeled_wse_version_layout import (  # noqa: E402
     EXTENT_WORKING_OUTPUT_FOLDER,
     HOUR_MS,
     NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+    NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
     NHDPLUSV2_REACH_CROSSWALK_PATH,
+    OPERATIONAL_NWM_HOURLY_HELD_INTERVALS_TABLE_SUFFIX,
     PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS,
+    PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS,
     RAW_HOURLY_VALUES_FOLDER_NAME,
     SEGMENT_NETWORK_VERSION,
     SOURCE_MANIFESTS_FOLDER_NAME,
@@ -115,6 +120,13 @@ CROSS_SECTIONS_PATH = EXTENT_WORKING_OUTPUT_FOLDER / "01-cross-sections" / "cros
 STAGE_1_MANIFEST_PATH = EXTENT_WORKING_OUTPUT_FOLDER / "01-cross-sections" / "manifest.json"
 # Read for its method-independent dataset facts only; the catalog on disk describes the default method.
 CATALOG_PATH = EXTENT_WORKING_OUTPUT_FOLDER / "05-catalog" / "catalog.json"
+
+OPERATIONAL_NWM_MANIFEST_PATH = EXTENT_WORKING_OUTPUT_FOLDER / "00-acquire" / "operational-national-water-model" / "manifest.json"
+# ArcGIS numbers a file geodatabase's feature classes first, then its tables in alphabetical order. The browser reads the
+# versions table at layer id 4 before it knows any name (FALLBACK_MODELED_WSE_LAYER_IDS.versions) and expects the operational
+# Held WSE Intervals table at 5, so the operational table is written to the geodatabase under a name that sorts after
+# `modeled_wse_versions` and renamed to its real name right after publishing (publish_data_product_version_service.py).
+OPERATIONAL_TABLE_STAGING_NAME_PREFIX = "zz_"
 
 STAGE_1_SECTION = "stage-1-section"
 CHANNEL_RIBBON = "channel-ribbon"
@@ -350,7 +362,16 @@ def method_code_provenance(method: dict) -> dict:
     if changed_in_working_tree:
         commit, basis = git_oldest_commit_holding_method_code(method["codeSha256ByFile"])
     else:
-        commit, basis = git_first_commit_with_method_code(method["codeSha256ByFile"])
+        try:
+            commit, basis = git_first_commit_with_method_code(method["codeSha256ByFile"])
+        except RuntimeError:
+            # The method code is uncommitted work and equals what Stage 3 ran (checked just above): no commit holds it
+            # yet. Record HEAD, say so, and let working_tree_differs_from_head name the uncommitted files.
+            commit = git_commit(git_head_commit())
+            basis = (
+                "committer date of HEAD: no git commit holds the method code files the stage recorded yet (they are "
+                "uncommitted work equal to the Stage 3 codeSha256ByFile); see working_tree_differs_from_head"
+            )
     code_paths = [REPOSITORY_ROOT / relative_path for relative_path in method["codeSha256ByFile"]]
     fingerprint = code_fingerprint(code_paths, commit=commit["commit"] if changed_in_working_tree else None)
     if {file["path"]: file["sha256"] for file in fingerprint["files"]} != method["codeSha256ByFile"]:
@@ -361,19 +382,30 @@ def method_code_provenance(method: dict) -> dict:
         "fingerprint": fingerprint,
         "basis": (
             "the Stage 3 manifest's codeSha256ByFile, checked equal to "
-            + (f"git commit {commit['commit']} (the working tree has moved on)" if changed_in_working_tree else "the working tree at freeze")
+            + (f"git commit {commit['commit']} (the working tree has moved on)" if changed_in_working_tree else "the working tree at freeze (uncommitted where working_tree_differs_from_head lists files)")
         ),
         "files_changed_in_working_tree_since_stage_3": changed_in_working_tree,
         "working_tree_differs_from_head": git_uncommitted_paths(code_paths),
     }
 
 
-def derivation_summary(method: dict, stage_3_manifest: dict) -> str:
+OPERATIONAL_FLOWS_SENTENCE = (
+    "The operational Dataset is NOAA's National Water Model Analysis and Assimilation run, hourly from 2025-09-01 to "
+    "2026-10-29 (WY2025 to WY2027 files), not the v3.0 retrospective: NOAA switched the operational model from v3.0 to "
+    "v3.1 on 2026-08-18, so flows either side of that date are not strictly comparable, and NHDPlusV2 reach 17594937 has "
+    "no operational flow (its Creek Segments are null in that Dataset). "
+)
+
+
+def derivation_summary(method: dict, stage_3_manifest: dict, has_operational: bool = False) -> str:
     text = (
         "Modeled water-surface elevation (m NAVD88) and junction water depth per Creek Segment. Discharge per NHDPlusV2 "
-        "reach (NOAA National Water Model v3.0 retrospective, hourly; California Natural Flows, monthly) is scaled to "
+        "reach (NOAA National Water Model v3.0 retrospective, hourly; "
+        + ("NOAA National Water Model operational run, hourly; " if has_operational else "")
+        + "California Natural Flows, monthly) is scaled to "
         f"each Creek Segment by the USGS drainage-area ratio method ({stage_3_manifest['parameters']['dischargeScaling']}). "
-        f"{method['label']}, version {method['version']}: {method['description']} "
+        + (OPERATIONAL_FLOWS_SENTENCE if has_operational else "")
+        + f"{method['label']}, version {method['version']}: {method['description']} "
         "Time-varying values are stored as Held WSE Intervals: a new interval starts when the anchor WSE or either "
         "junction depth changes."
     )
@@ -382,7 +414,7 @@ def derivation_summary(method: dict, stage_3_manifest: dict) -> str:
     return text
 
 
-def derivation_json_text(catalog: dict, method: dict, stage_3_manifest: dict, anchor_source: dict) -> str:
+def derivation_json_text(catalog: dict, method: dict, stage_3_manifest: dict, anchor_source: dict, has_operational: bool = False) -> str:
     """Dataset facts from the catalog (they do not depend on the method) plus this method's record."""
     datasets = {dataset["datasetId"]: dataset for dataset in catalog["datasets"]}
     parameters = method["parameters"]
@@ -411,8 +443,9 @@ def derivation_json_text(catalog: dict, method: dict, stage_3_manifest: dict, an
                 "timeStep": datasets[dataset_id]["timeStep"],
                 "accuracyNote": datasets[dataset_id]["accuracyNote"],
             }
-            for dataset_id in (NATIONAL_WATER_MODEL_HOURLY_DATASET_ID, CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID)
+            for dataset_id in published_dataset_ids(has_operational)
         ],
+        **({"operationalNationalWaterModel": operational_dataset_facts()} if has_operational else {}),
         "method": {
             "id": method["id"],
             "label": method["label"],
@@ -431,6 +464,40 @@ def derivation_json_text(catalog: dict, method: dict, stage_3_manifest: dict, an
     if len(text) > DERIVATION_JSON_WIDTH:
         raise ValueError(f"derivation_json is {len(text)} characters, more than {DERIVATION_JSON_WIDTH}")
     return text
+
+
+def operational_dataset_facts() -> dict:
+    """What the operational Dataset's discharge file and Stage 0 manifest say that the versions row should carry."""
+    manifest = read_json(OPERATIONAL_NWM_MANIFEST_PATH)
+    discharge_file = read_json(EXTENT_WORKING_OUTPUT_FOLDER / "00-acquire" / manifest["parameters"]["operationalNationalWaterModel"]["dischargeFile"])
+    parameters = manifest["parameters"]["operationalNationalWaterModel"]
+    return {
+        "firstValidHourUtc": parameters["firstValidHourUtc"],
+        "lastValidHourUtc": parameters["lastValidHourUtc"],
+        "modelVersionChange": "NOAA switched the operational model from v3.0 to v3.1 on 2026-08-18 (Stage 0 manifest lists every file's version); flows either side are not strictly comparable.",
+        "reachesWithoutOperationalFlow": [warning.split()[2] for warning in manifest["warnings"] if "is not an operational NWM feature_id" in warning],
+        "normalization": discharge_file["normalization"],
+    }
+
+
+def published_dataset_ids(has_operational: bool) -> list[str]:
+    """The Datasets a version holds, in the order its versions row names them."""
+    return [
+        NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+        *([NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID] if has_operational else []),
+        CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID,
+    ]
+
+
+def water_years_with_operational_text(nwm_range_ms, operational_range_ms, cnf_range_ms) -> str:
+    """water_years of a version with the operational Dataset; the browser parses `<dataset>: … <start> to <end>` per part."""
+    years = PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS
+    return (
+        f"{water_years_text(*nwm_range_ms, *cnf_range_ms).split('; ')[0]}; "
+        f"{NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID}: WY{years[0]}–WY{years[-1]} hourly "
+        f"{utc_iso_from_epoch_ms(operational_range_ms[0])} to {utc_iso_from_epoch_ms(operational_range_ms[1])}; "
+        f"{water_years_text(*nwm_range_ms, *cnf_range_ms).split('; ')[1]}"
+    )
 
 
 def check_registry_has_no_conflicting_version(identity: DataProductVersionIdentity) -> None:
@@ -486,10 +553,14 @@ def main() -> None:
     log(f"Anchor point: {anchor_source['kind']}, {len(anchor_source['points']):,} Creek Segments with a point")
     notes = null_values_notes(stage_3_manifest)
     time_series = DepthTimeSeriesFolder(stage_3_folder / "time-series")
+    has_operational = time_series.has_dataset(NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID)
+    log(f"Datasets: NWM hourly, CNF monthly{', NWM operational hourly' if has_operational else ''}")
     source_manifest_copies = {
         "01-cross-sections-manifest.json": STAGE_1_MANIFEST_PATH,
         "03-time-series-manifest.json": stage_3_manifest_path,
     }
+    if has_operational:
+        source_manifest_copies["00-operational-national-water-model-manifest.json"] = OPERATIONAL_NWM_MANIFEST_PATH
     if anchor_source["kind"] == CHANNEL_RIBBON:
         source_manifest_copies["04-channel-ribbon-manifest.json"] = anchor_source["stage_4_manifest_path"]
 
@@ -520,9 +591,22 @@ def main() -> None:
 
         nwm_intervals = DepthHeldWseIntervalRows()
         cnf_intervals = DepthHeldWseIntervalRows()
+        operational_intervals = DepthHeldWseIntervalRows()
         cnf_values = MonthlyValueRows()
         static_values = SegmentStaticValues()
         raw_hourly_writers = RawHourlyCsvZipWriters(staging / RAW_HOURLY_VALUES_FOLDER_NAME, PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS)
+        operational_csv_writers = (
+            RawHourlyCsvZipWriters(
+                staging / RAW_HOURLY_VALUES_FOLDER_NAME,
+                PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS,
+                NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
+            )
+            if has_operational
+            else None
+        )
+        operational_range_ms: tuple[int, int] | None = None
+        operational_segment_count = 0
+        operational_all_null_segment_ids: set[str] = set()
         nwm_range_ms: tuple[int, int] | None = None
         cnf_range_ms: tuple[int, int] | None = None
         nwm_segment_count = 0
@@ -545,6 +629,22 @@ def main() -> None:
                 hourly_all_null = {segment.segment_id for segment in hourly.segments if np.all(np.isnan(segment.values))}
                 del hourly
 
+                if has_operational:
+                    operational = time_series.load_national_water_model_operational_hourly(
+                        tnc_comid, PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS
+                    )
+                    check_flowline_segments_match_network(operational, network_segment_ids_by_comid[tnc_comid], "NWM operational hourly")
+                    operational_flowline_range = (int(operational.timestamps_ms[0]), int(operational.timestamps_ms[-1]))
+                    if operational_range_ms not in (None, operational_flowline_range):
+                        raise ValueError(f"{tnc_comid}: NWM operational hourly time range differs from other flowlines")
+                    operational_range_ms = operational_flowline_range
+                    static_values.add_flowline(operational, NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID)
+                    operational_intervals.add_flowline(operational, operational_flowline_range[1] + HOUR_MS)
+                    operational_csv_writers.add_flowline(operational)
+                    operational_segment_count += len(operational.segments)
+                    operational_all_null_segment_ids |= {segment.segment_id for segment in operational.segments if np.all(np.isnan(segment.values))}
+                    del operational
+
                 monthly = time_series.load_california_natural_flows_monthly(tnc_comid)
                 check_flowline_segments_match_network(monthly, network_segment_ids_by_comid[tnc_comid], "CNF monthly")
                 monthly_range = (int(monthly.timestamps_ms[0]), int(monthly.timestamps_ms[-1]))
@@ -563,8 +663,14 @@ def main() -> None:
                     log(f"  read {index}/{len(tnc_comids)} TNC flowlines ({nwm_segment_count} Creek Segments)")
         finally:
             raw_hourly_writers.close()
+            if operational_csv_writers:
+                operational_csv_writers.close()
 
-        for label, count in [("NWM hourly", nwm_segment_count), ("CNF monthly", cnf_segment_count)]:
+        for label, count in [
+            ("NWM hourly", nwm_segment_count),
+            ("CNF monthly", cnf_segment_count),
+            *([("NWM operational hourly", operational_segment_count)] if has_operational else []),
+        ]:
             if count != len(network_segments):
                 raise ValueError(f"{label} has {count} Creek Segments, expected {len(network_segments)}")
 
@@ -593,7 +699,12 @@ def main() -> None:
         nwm_table_name = f"{identity.arcgis_prefix}_nwm_hourly_held_intervals"
         cnf_table_name = f"{identity.arcgis_prefix}_cnf_monthly_held_intervals"
         cnf_values_table_name = f"{identity.arcgis_prefix}_cnf_monthly_values"
+        operational_table_name = f"{identity.arcgis_prefix}{OPERATIONAL_NWM_HOURLY_HELD_INTERVALS_TABLE_SUFFIX}"
         table_names = [identity.versions_table_name, creek_segments_layer_name, nwm_table_name, cnf_table_name, cnf_values_table_name]
+        if has_operational:
+            table_names.append(operational_table_name)
+        # name in the file geodatabase → real name; see OPERATIONAL_TABLE_STAGING_NAME_PREFIX.
+        upload_table_names = {f"{OPERATIONAL_TABLE_STAGING_NAME_PREFIX}{operational_table_name}": operational_table_name} if has_operational else {}
         version_record = {
             "product": MODELED_WSE,
             "method_id": identity.method_id,
@@ -609,10 +720,14 @@ def main() -> None:
             "code_fingerprint": provenance["fingerprint"]["sha256"],
             "segment_network_version": SEGMENT_NETWORK_VERSION,
             "extent_id": EXTENT_ID,
-            "dataset_ids": [NATIONAL_WATER_MODEL_HOURLY_DATASET_ID, CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID],
-            "water_years": water_years_text(*nwm_range_ms, *cnf_range_ms),
-            "derivation_summary": derivation_summary(method, stage_3_manifest),
-            "derivation_json": derivation_json_text(catalog, method, stage_3_manifest, anchor_source),
+            "dataset_ids": published_dataset_ids(has_operational),
+            "water_years": (
+                water_years_with_operational_text(nwm_range_ms, operational_range_ms, cnf_range_ms)
+                if has_operational
+                else water_years_text(*nwm_range_ms, *cnf_range_ms)
+            ),
+            "derivation_summary": derivation_summary(method, stage_3_manifest, has_operational),
+            "derivation_json": derivation_json_text(catalog, method, stage_3_manifest, anchor_source, has_operational),
             "arcgis_table_names": table_names,
         }
 
@@ -622,13 +737,17 @@ def main() -> None:
         with tempfile.TemporaryDirectory(prefix=f"{MODELED_WSE}-{identity.version_label}-gdb-") as temporary_folder:
             gdb_path = Path(temporary_folder) / identity.upload_gdb_folder_name
             log(f"Writing {identity.versions_table_name}")
-            row_counts[identity.versions_table_name] = write_table(gdb_path, identity.versions_table_name, versions_table_columns(version_record))
+            row_counts[identity.versions_table_name] = write_table(gdb_path, identity.versions_table_name, versions_table_columns(version_record, water_years_width=LONG_TEXT_WIDTH if has_operational else MEDIUM_TEXT_WIDTH))
             log(f"Writing {creek_segments_layer_name}")
             segment_columns, segment_geometry = creek_segment_columns(network_segments, crosswalk_by_id, anchor_source, static_values, notes)
             row_counts[creek_segments_layer_name] = write_table(gdb_path, creek_segments_layer_name, segment_columns, segment_geometry, "LineString")
-            for name, rows in [(nwm_table_name, nwm_intervals), (cnf_table_name, cnf_intervals), (cnf_values_table_name, cnf_values)]:
-                log(f"Writing {name}")
-                row_counts[name] = write_table(gdb_path, name, rows.columns())
+            tables_to_write = [(nwm_table_name, nwm_intervals), (cnf_table_name, cnf_intervals), (cnf_values_table_name, cnf_values)]
+            if has_operational:
+                tables_to_write.append((operational_table_name, operational_intervals))
+            for name, rows in tables_to_write:
+                upload_name = next((staging for staging, real in upload_table_names.items() if real == name), name)
+                log(f"Writing {name}" + (f" (in the geodatabase as {upload_name})" if upload_name != name else ""))
+                row_counts[name] = write_table(gdb_path, upload_name, rows.columns())
                 log(f"  {row_counts[name]:,} rows")
             log("Zipping the file geodatabase")
             zip_folder(gdb_path, upload_folder / identity.upload_zip_name)
@@ -641,6 +760,8 @@ def main() -> None:
             "derivation": json.loads(version_record["derivation_json"]),
             "frozen_at_utc": utc_now_iso(),
             "arcgis_prefix": identity.arcgis_prefix,
+            # Tables written to the file geodatabase under another name and renamed right after publishing (layer-id order).
+            **({"arcgis_upload_table_names": upload_table_names} if upload_table_names else {}),
             "arcgis_service": {
                 "title": identity.service_title(method_label),
                 "name": identity.service_name,
@@ -670,6 +791,11 @@ def main() -> None:
                     nwm_table_name: "National Water Model hourly WY2021–WY2023 Held WSE Intervals",
                     cnf_table_name: "California Natural Flows monthly Held WSE Intervals",
                     cnf_values_table_name: "California Natural Flows monthly values, one row per Creek Segment per month",
+                    **(
+                        {operational_table_name: "National Water Model operational (Analysis and Assimilation) hourly WY2025–WY2027 Held WSE Intervals, 2025-09-01 to 2026-10-29"}
+                        if has_operational
+                        else {}
+                    ),
                 },
                 "creek_segments_added_columns": added_creek_segment_fields(anchor_source),
                 "anchor_point": anchor_source["description"],
@@ -700,6 +826,17 @@ def main() -> None:
                     "last_timestamp": utc_iso_from_epoch_ms(nwm_range_ms[1]),
                     "water_years": PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS,
                 },
+                **(
+                    {
+                        NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID: {
+                            "first_timestamp": utc_iso_from_epoch_ms(operational_range_ms[0]),
+                            "last_timestamp": utc_iso_from_epoch_ms(operational_range_ms[1]),
+                            "water_years": PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS,
+                        }
+                    }
+                    if has_operational
+                    else {}
+                ),
                 CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID: {
                     "first_timestamp": utc_iso_from_epoch_ms(cnf_range_ms[0]),
                     "last_timestamp": utc_iso_from_epoch_ms(cnf_range_ms[1]),
@@ -718,6 +855,15 @@ def main() -> None:
                 "nwm_hourly_held_interval_segments": nwm_intervals.segment_count,
                 "cnf_monthly_held_interval_segments": cnf_intervals.segment_count,
                 "raw_hourly_csv_rows": {f"WY{year}": count for year, count in raw_hourly_writers.row_counts.items()},
+                **(
+                    {
+                        "nwm_operational_hourly_held_interval_segments": operational_intervals.segment_count,
+                        "raw_hourly_csv_rows_operational": {f"WY{year}": count for year, count in operational_csv_writers.row_counts.items()},
+                        "operational_segments_with_all_values_null": sorted(operational_all_null_segment_ids),
+                    }
+                    if has_operational
+                    else {}
+                ),
             },
             "junction_sharing": {
                 "rule": (
@@ -747,7 +893,10 @@ def main() -> None:
                 "service_url": None,
                 "file_geodatabase_item_id": None,
                 "layer_ids": {name: None for name in table_names},
-                "raw_hourly_csv_item_ids": {f"WY{year}": None for year in PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS},
+                "raw_hourly_csv_item_ids": {
+                    f"WY{year}": None
+                    for year in [*PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS, *(PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS if has_operational else [])]
+                },
                 "published_at_utc": None,
             },
         }

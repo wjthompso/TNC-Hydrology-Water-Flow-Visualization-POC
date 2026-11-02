@@ -134,6 +134,16 @@ export interface ModeledWaterDataStore {
   loadedFlowline(tncComid: string): LoadedFlowline | null;
   /** Time Series file covering the selected time for a flowline, when fetched. */
   seriesAt(tncComid: string, timeUtcMs: number): LoadedTimeSeries | null;
+  /**
+   * Asks for every Time Series file of one flowline that the time span touches, and keeps them in memory
+   * (other flowlines keep the usual current-plus-one-neighbour rule). Replaces the previous span request.
+   */
+  requestSeriesSpan(tncComid: string, startUtcMs: number, endUtcMs: number): void;
+  /**
+   * The loaded files of the requested span, oldest first. Null while the flowline or any of its files is
+   * still loading. A year with no file in the Dataset is skipped.
+   */
+  seriesSpan(tncComid: string, startUtcMs: number, endUtcMs: number): readonly LoadedTimeSeries[] | null;
   readonly loadedFlowlineComids: readonly string[];
   readonly isLoading: boolean;
   /** Resolves once no fetch is in flight. */
@@ -176,6 +186,17 @@ export function createModeledWaterDataStore(
 
   const seriesKeyFor = (timeUtcMs: number): string =>
     options.timeStep === 'hourly' ? `WY${waterYearOf(timeUtcMs)}` : 'all';
+
+  /** Every file key a time span touches, oldest first. */
+  const seriesKeysFor = (startUtcMs: number, endUtcMs: number): string[] => {
+    if (options.timeStep !== 'hourly') return ['all'];
+    const keys: string[] = [];
+    for (let year = waterYearOf(startUtcMs); year <= waterYearOf(endUtcMs); year += 1) keys.push(`WY${year}`);
+    return keys;
+  };
+
+  /** The flowline whose span files must stay in memory, and their keys. */
+  let pinnedSpan: { tncComid: string; keys: ReadonlySet<string> } | null = null;
 
   const settle = (): void => {
     if (inFlight.size > 0 || queue.length > 0 || running > 0) return;
@@ -221,10 +242,11 @@ export function createModeledWaterDataStore(
     enqueue(`series:${cacheGeneration}:${flowline.tncComid}/${seriesKey}`, async () => {
       const file = await options.dataSource.loadTimeSeries(options.extentId, relative);
       flowline.seriesByKey.set(seriesKey, readTimeSeriesFile(file));
-      // Keep only the current water year plus one neighbour per flowline.
+      // Keep only the current water year plus one neighbour per flowline, plus any requested span.
+      const pinnedKeys = pinnedSpan?.tncComid === flowline.tncComid ? pinnedSpan.keys : new Set<string>();
       for (const key of [...flowline.seriesByKey.keys()]) {
         if (flowline.seriesByKey.size <= 2) break;
-        if (key !== seriesKey) flowline.seriesByKey.delete(key);
+        if (key !== seriesKey && !pinnedKeys.has(key)) flowline.seriesByKey.delete(key);
       }
     });
   };
@@ -267,6 +289,7 @@ export function createModeledWaterDataStore(
           };
           cache.set(comid, flowline);
           ensureSeries(flowline, seriesKeyFor(timeUtcMs));
+          if (pinnedSpan?.tncComid === comid) for (const key of pinnedSpan.keys) ensureSeries(flowline, key);
         });
       }
       evict();
@@ -276,6 +299,23 @@ export function createModeledWaterDataStore(
     },
     seriesAt(tncComid, timeUtcMs) {
       return cache.get(tncComid)?.seriesByKey.get(seriesKeyFor(timeUtcMs)) ?? null;
+    },
+    requestSeriesSpan(tncComid, startUtcMs, endUtcMs) {
+      pinnedSpan = { tncComid, keys: new Set(seriesKeysFor(startUtcMs, endUtcMs)) };
+      const loaded = cache.get(tncComid);
+      if (loaded) for (const key of pinnedSpan.keys) ensureSeries(loaded, key);
+    },
+    seriesSpan(tncComid, startUtcMs, endUtcMs) {
+      const flowline = cache.get(tncComid);
+      if (!flowline) return null;
+      const files: LoadedTimeSeries[] = [];
+      for (const key of seriesKeysFor(startUtcMs, endUtcMs)) {
+        const file = flowline.seriesByKey.get(key);
+        if (file) files.push(file);
+        else if (inFlight.has(`series:${cacheGeneration}:${tncComid}/${key}`)) return null;
+        else if (pathByKey.has(`${tncComid}/${key}`)) return null; // Not queued yet: the next request starts it.
+      }
+      return files;
     },
     get loadedFlowlineComids() {
       return [...cache.keys()];

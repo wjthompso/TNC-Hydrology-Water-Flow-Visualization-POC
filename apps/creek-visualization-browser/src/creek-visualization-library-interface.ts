@@ -26,12 +26,10 @@ import {
 } from './selected-time-creek-state-resolver';
 import { bindSteelheadTroutConditionsControls } from './steelhead-trout-conditions-controls';
 import { classifySteelheadCondition } from './steelhead-trout-conditions';
-import { anchorWaterDepthSeriesM } from './water-level-units';
-
 const OBSERVED_CHART_SOURCE_LABEL = 'Observed at USGS gauge 11120600, Jalama Creek near Lompoc (gauge height)';
-/** Inferred water is a guess made from the gauge; it is never labeled as measured. */
-const INFERRED_CHART_SOURCE_LABEL =
-  'Inferred from the USGS gauge 11120600 reading, not measured here: the gauge segment\'s water depth applied to this segment\'s bed';
+/** Shown over the empty chart when a person selects a segment that draws inferred water. */
+const INFERRED_SEGMENT_CHART_EMPTY_TEXT =
+  'The water surface elevation here is unknown. This water is inferred from the gauge, not measured.';
 
 /** The gauge segment's chart shows the gauge height the feature service reports (feet, converted to meters). */
 function gaugeHeightSeriesM(waterSurfaceElevationM: readonly (number | null)[]): (number | null)[] {
@@ -209,25 +207,24 @@ export function attachCreekVisualization(
       chartElements,
       chartContentForSegment: (segmentId) => {
         const observedWseM = options.data.waterSurfaceElevationMBySegmentId.get(segmentId);
-        const inferredWseM = options.data.propagation?.inferredWaterSurfaceElevationMBySegmentId.get(segmentId);
-        const wseM = observedWseM ?? inferredWseM;
-        if (!wseM) return { emptyText: `No observed readings for Creek Segment ${segmentId}.` };
+        // Inferred water has no measured elevation of its own, so it gets no chart.
+        if (!observedWseM) {
+          return {
+            emptyText: options.data.propagation?.inferredWaterSurfaceElevationMBySegmentId.has(segmentId)
+              ? INFERRED_SEGMENT_CHART_EMPTY_TEXT
+              : `No observed readings for Creek Segment ${segmentId}.`,
+          };
+        }
         // The chart redraws only when the arrays change, so each source array maps to one depth array.
-        let depthM = chartDepthBySourceSeries.get(wseM);
+        let depthM = chartDepthBySourceSeries.get(observedWseM);
         if (!depthM) {
-          if (observedWseM) {
-            depthM = gaugeHeightSeriesM(observedWseM);
-          } else {
-            const bedElevationM = options.data.propagation?.nodesById.get(segmentId)?.bedElevationM;
-            if (bedElevationM === undefined) return { emptyText: `No bed elevation for Creek Segment ${segmentId}.` };
-            depthM = anchorWaterDepthSeriesM(wseM, bedElevationM);
-          }
-          chartDepthBySourceSeries.set(wseM, depthM);
+          depthM = gaugeHeightSeriesM(observedWseM);
+          chartDepthBySourceSeries.set(observedWseM, depthM);
         }
         return {
           series: {
             segmentId,
-            sourceLabel: observedWseM ? OBSERVED_CHART_SOURCE_LABEL : INFERRED_CHART_SOURCE_LABEL,
+            sourceLabel: OBSERVED_CHART_SOURCE_LABEL,
             timestampsUtcMs: options.data.timestampsUtcMs,
             depthM,
           },

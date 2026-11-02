@@ -15,6 +15,7 @@ import {
   MAXIMUM_TRANSFER_DISTANCE_M,
 } from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/method-config.ts';
 import { timeSeriesDerivation } from './modeled-wse-derivation-methods/m1-drainage-area-ratio-manning-rating-curve/time-series-derivation.ts';
+import { operationalCatalogDataset } from './operational-national-water-model/operational-national-water-model-config.ts';
 import { writeReadableJson } from './readable-json.ts';
 import {
   CROSS_SECTIONS_FILE,
@@ -59,6 +60,15 @@ import { DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID } from './wse-polygon-generati
 const crossSectionsDirectory = stageDirectory('crossSections');
 const waterSurfacePolygonsDirectory = stageDirectory('waterSurfacePolygons');
 const outputDirectory = stageDirectory('catalog');
+
+/** The fields of a catalog Dataset before its time range is measured. */
+interface CatalogDataset {
+  datasetId: string;
+  publisherId: string;
+  kind: string;
+  timeStep: string;
+  accuracyNote: string;
+}
 
 /** One saved WSE Polygon Generation Method version, as listed in `catalog.json`. */
 interface CatalogWsePolygonMethodVersion {
@@ -177,6 +187,20 @@ function publisherNameOf(publisherId: string): string {
   return publisher.name;
 }
 
+/**
+ * The Datasets the validated modeled WSE version carries: `CATALOG.datasets`, plus the operational National Water Model Dataset
+ * when that version's recorded method parameters name it (m5 v2 and later). Its catalog text lives in
+ * `operational-national-water-model/`, not in `CATALOG`, which m3 v2's fingerprint covers.
+ */
+function catalogDatasetsOf(modeledWse: CurrentModeledWseVersion): readonly CatalogDataset[] {
+  const carriesOperational = isRecordValue(modeledWse.method.parameters.operationalHourlyDataset);
+  return carriesOperational ? [...CATALOG.datasets, operationalCatalogDataset()] : CATALOG.datasets;
+}
+
+function isRecordValue(value: unknown): boolean {
+  return typeof value === 'object' && value !== null;
+}
+
 function isoUtcOrEmpty(timestampMs: number | null): string {
   return timestampMs === null ? '' : new Date(timestampMs).toISOString();
 }
@@ -187,6 +211,7 @@ async function validateMethodVersion(
   timeSeriesDirectory: string,
   segmentIds: string[],
   crossSections: CrossSectionsFile,
+  catalogDatasets: readonly CatalogDataset[],
 ): Promise<{ validation: ModeledWaterSurfaceElevationValidationResult; polygonSetFileCount: number }> {
   const versionDirectory = path.join(waterSurfacePolygonsDirectory, saved.relativePath);
   const polygonSetFiles: { relativePath: string; contents: WaterSurfacePolygonSetsFile }[] = [];
@@ -200,7 +225,7 @@ async function validateMethodVersion(
     crossSections,
     ladders: (await readJson(path.join(versionDirectory, POLYGON_LADDERS_FILE))) as PolygonLaddersFile,
     polygonSetFiles,
-    catalogDatasets: CATALOG.datasets,
+    catalogDatasets,
     timeSeriesDirectory,
   });
   return { validation, polygonSetFileCount: polygonSetFiles.length };
@@ -208,6 +233,7 @@ async function validateMethodVersion(
 
 async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Promise<StageResult> {
   const timeSeriesDirectory = modeledWse.outputDirectory;
+  const catalogDatasets = catalogDatasetsOf(modeledWse);
   const expectedVersion = MODELED_EXTENT.segmentNetworkVersion;
   const segmentIds = (await loadCreekSegmentNetwork()).map((segment) => segment.segmentId);
   const crossSections = (await readJson(path.join(crossSectionsDirectory, CROSS_SECTIONS_FILE))) as CrossSectionsFile;
@@ -220,7 +246,7 @@ async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Pr
   let defaultValidation: ModeledWaterSurfaceElevationValidationResult | null = null;
   let polygonSetFileCount = 0;
   for (const saved of savedVersions) {
-    const checked = await validateMethodVersion(saved, timeSeriesDirectory, segmentIds, crossSections);
+    const checked = await validateMethodVersion(saved, timeSeriesDirectory, segmentIds, crossSections, catalogDatasets);
     const passed = gatingFailures(checked.validation.checks, saved.method.browserDrawing).length === 0;
     if (saved === defaultVersion) {
       defaultValidation = checked.validation;
@@ -251,7 +277,7 @@ async function buildCatalogAndValidate(modeledWse: CurrentModeledWseVersion): Pr
   const validatedByDatasetId = new Map(validation.datasets.map((dataset) => [dataset.datasetId, dataset]));
   const datasets: Catalog['datasets'] = [];
   const timeSeries: Catalog['timeSeries'] = [];
-  for (const dataset of CATALOG.datasets) {
+  for (const dataset of catalogDatasets) {
     const validated = validatedByDatasetId.get(dataset.datasetId);
     datasets.push({
       datasetId: dataset.datasetId,
@@ -369,8 +395,9 @@ await runStageEntryPoint(async () => {
       segmentNetworkVersion: MODELED_EXTENT.segmentNetworkVersion,
       modeledWseVersion: { methodId: modeledWse.method.id, version: modeledWse.method.version, methodSha256: modeledWse.method.methodSha256 },
       catalog: CATALOG,
+      catalogDatasets: catalogDatasetsOf(modeledWse),
       drainageAreaRatioTransfer: { ...DRAINAGE_AREA_RATIO_TRANSFER, maximumTransferDistanceM: MAXIMUM_TRANSFER_DISTANCE_M },
-      derivations: CATALOG.datasets.map((dataset) => timeSeriesDerivation(publisherNameOf(dataset.publisherId), CATALOG.derivedBy)),
+      derivations: catalogDatasetsOf(modeledWse).map((dataset) => timeSeriesDerivation(publisherNameOf(dataset.publisherId), CATALOG.derivedBy)),
       checks: MODELED_WSE_VALIDATION_CHECKS,
       defaultWsePolygonGenerationMethodId: DEFAULT_WSE_POLYGON_GENERATION_METHOD_ID,
       defaultModeledWseDerivationMethodId: DEFAULT_MODELED_WSE_DERIVATION_METHOD_ID,

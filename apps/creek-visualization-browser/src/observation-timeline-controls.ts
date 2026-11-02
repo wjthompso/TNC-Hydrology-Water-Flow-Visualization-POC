@@ -146,6 +146,10 @@ export interface ObservationTimelineController {
    * does: the readout and the map follow, and running playback keeps going.
    */
   selectTime(timeUtcMs: number): void;
+  /** First and last time of the From and To dates now narrowing the slider (the whole record until a person picks dates). */
+  readonly rangeUtcMs: readonly [number, number];
+  /** Calls the listener each time the From or To range changes. */
+  onRangeChange(listener: () => void): void;
 }
 
 /**
@@ -182,6 +186,7 @@ export function bindObservationTimelineControls(
   let direction: PlaybackDirection = 'forward';
   let playbackTimer: number | null = null;
   const listening = { signal: lifetime.signal };
+  const rangeListeners: (() => void)[] = [];
   lifetime.onEnd(() => {
     if (playbackTimer != null) window.clearInterval(playbackTimer);
     playbackTimer = null;
@@ -336,6 +341,7 @@ export function bindObservationTimelineControls(
     const setRange = (next: SlotRange): void => {
       range = next;
       applyRangeToSlider();
+      for (const listener of rangeListeners) listener();
       showRange();
       // Moves the selection to the nearest edge when the new range excludes it.
       scrubToIndex(currentIndex);
@@ -369,6 +375,12 @@ export function bindObservationTimelineControls(
   }
 
   return {
+    get rangeUtcMs() {
+      return [timeAtGridIndex(clock, range.firstIndex), timeAtGridIndex(clock, range.lastIndex)] as const;
+    },
+    onRangeChange(listener) {
+      rangeListeners.push(listener);
+    },
     selectTime(timeUtcMs) {
       if (!Number.isFinite(timeUtcMs)) return;
       scrubToIndex(Math.round((timeUtcMs - clock.firstUtcMs) / clock.stepMs));

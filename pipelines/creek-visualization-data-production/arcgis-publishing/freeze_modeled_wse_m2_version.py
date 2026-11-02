@@ -279,7 +279,7 @@ class RawHourlyCsvZipWriters:
         ]
     )
 
-    def __init__(self, folder: Path, water_years: list[int]) -> None:
+    def __init__(self, folder: Path, water_years: list[int], dataset_id: str = NATIONAL_WATER_MODEL_HOURLY_DATASET_ID) -> None:
         folder.mkdir(parents=True, exist_ok=True)
         self.paths: dict[int, Path] = {}
         self.row_counts: dict[int, int] = {}
@@ -287,9 +287,9 @@ class RawHourlyCsvZipWriters:
         self._streams: dict[int, io.BufferedIOBase] = {}
         self._writers: dict[int, pyarrow_csv.CSVWriter] = {}
         for water_year in water_years:
-            path = folder / raw_hourly_csv_zip_name(water_year)
+            path = folder / raw_hourly_csv_zip_name(water_year, dataset_id)
             archive = zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6)
-            stream = archive.open(raw_hourly_csv_name(water_year), "w", force_zip64=True)
+            stream = archive.open(raw_hourly_csv_name(water_year, dataset_id), "w", force_zip64=True)
             self.paths[water_year] = path
             self.row_counts[water_year] = 0
             self._archives[water_year] = archive

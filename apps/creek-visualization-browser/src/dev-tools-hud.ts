@@ -1141,7 +1141,7 @@ function buildWaterClickInspector(options: WaterClickInspectorOptions): WaterCli
       createElement(
         'p',
         ['text-[11px]', 'font-bold', 'text-hud-label'],
-        'Needs a modeled Dataset, for example ?dataset=national-water-model-hourly.',
+        'Needs a modeled Dataset, for example ?dataset=national-water-model-operational-hourly.',
       ),
     );
     return { root: section.root, noteClick() {}, setOpen() {}, snapshot: () => null };

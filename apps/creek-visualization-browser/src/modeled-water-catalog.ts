@@ -15,7 +15,11 @@ export const OBSERVED_DATASET_OPTION_ID = 'observed-gauge';
 export const DEFAULT_MODELED_EXTENT_ID = 'dangermond-preserve';
 export const MODELED_EXTENT_IDS = ['jalama-gauge-reach', 'dangermond-preserve'] as const;
 
-/** Picker entries. The observed gauge keeps the existing experience and is the default. */
+/**
+ * Every Dataset option the page knows. The observed gauge keeps the existing experience and is the default.
+ * The sidebar offers only two buttons, Observed and Modeled; Modeled opens `DEFAULT_MODELED_DATASET_ID`.
+ * The other modeled Datasets stay reachable through `?dataset=<id>` and the dev tools.
+ */
 export const DATASET_PICKER_OPTIONS = [
   { id: OBSERVED_DATASET_OPTION_ID, label: 'Observed gauge', kind: 'observed' },
   {
@@ -28,10 +32,31 @@ export const DATASET_PICKER_OPTIONS = [
     label: 'Modeled Creek Water Levels — hourly (from NOAA National Water Model v3.0 flows)',
     kind: 'modeled',
   },
+  {
+    id: 'national-water-model-operational-hourly',
+    label: 'NOAA National Water Model (operational, 2025–2026)',
+    kind: 'modeled',
+  },
 ] as const;
 
+/** The two sidebar buttons. Any modeled Dataset counts as `modeled`. */
+export type DatasetMode = 'observed' | 'modeled';
+
+/** The modeled Dataset the Modeled button opens. */
+export const DEFAULT_MODELED_DATASET_ID = 'national-water-model-operational-hourly' satisfies ModeledDatasetId;
+
+/** Which button is pressed for an open Dataset option: any modeled Dataset presses Modeled. */
+export function datasetModeOf(datasetOptionId: string): DatasetMode {
+  return datasetOptionId === OBSERVED_DATASET_OPTION_ID ? 'observed' : 'modeled';
+}
+
+/** The Dataset option a sidebar button opens. */
+export function datasetOptionIdForMode(mode: DatasetMode): string {
+  return mode === 'observed' ? OBSERVED_DATASET_OPTION_ID : DEFAULT_MODELED_DATASET_ID;
+}
+
 /**
- * Picker entries this build offers: the California Natural Flows monthly
+ * Dataset options this build accepts in `?dataset=`: the California Natural Flows monthly
  * Dataset only when `VITE_SHOW_CALIFORNIA_NATURAL_FLOWS_MONTHLY` is true.
  */
 export function availableDatasetPickerOptions(): readonly (typeof DATASET_PICKER_OPTIONS)[number][] {
@@ -109,7 +134,7 @@ export function readOpeningTimeQuery(locationSearch: string): number | null {
 }
 
 /**
- * Builds the page URL for a picker choice, keeping the extent and devtools
+ * Builds the page URL for a Dataset option, keeping the extent and devtools
  * flags. The selected time and camera ride along, so the new Dataset opens at
  * the same moment and view; each experience snaps the time to its own grid.
  */

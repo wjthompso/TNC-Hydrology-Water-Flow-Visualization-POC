@@ -63,6 +63,11 @@ PLAIN_TEXT_BY_VERSION = {
         "m3-v2's channel and bed with a flow resistance that rises with slope on steep creeks, from Jarrett's (1984) "
         "field-fitted equation, which needs no grain size.",
     ),
+    (MODELED_WSE, "m5-v2"): (
+        "Jarrett steep-creek roughness, with NOAA's operational flows to Oct 2026",
+        "m5-v1's water heights, plus a third set from NOAA's operational National Water Model flows, hourly from Sep 2025 "
+        "to Oct 2026 (NOAA moved from model v3.0 to v3.1 on 2026-08-18).",
+    ),
     (WSE_POLYGONS, "m2-v1"): (
         "height above nearest drainage fill, for m2-v1",
         "Water outlines that flood the 1 m lidar up to each water depth above the local creek bed; drawn with "

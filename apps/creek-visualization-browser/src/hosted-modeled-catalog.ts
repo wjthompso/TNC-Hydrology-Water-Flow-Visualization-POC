@@ -21,6 +21,7 @@
 import {
   FALLBACK_MODELED_WSE_LAYER_IDS,
   FALLBACK_WSE_POLYGONS_LAYER_IDS,
+  NWM_OPERATIONAL_HOURLY_INTERVALS_TABLE_SUFFIX,
   resolveLayerIdsFromArcgisTableNames,
   type ModeledWseLayerIds,
 } from './creek-data-source-configuration.ts';
@@ -36,10 +37,22 @@ import {
 import { queryAllRows } from './hosted-feature-service-query.ts';
 
 export const NATIONAL_WATER_MODEL_HOURLY_DATASET_ID = 'national-water-model-hourly';
+export const NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID = 'national-water-model-operational-hourly';
 export const CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID = 'california-natural-flows-monthly';
 export type HostedModeledDatasetId =
   | typeof NATIONAL_WATER_MODEL_HOURLY_DATASET_ID
+  | typeof NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID
   | typeof CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID;
+
+/** Datasets whose Time Series files are hourly, one file per water year. */
+export const HOURLY_DATASET_IDS: readonly HostedModeledDatasetId[] = [
+  NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+  NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
+];
+
+export function isHourlyHostedDataset(datasetId: string): datasetId is HostedModeledDatasetId {
+  return (HOURLY_DATASET_IDS as readonly string[]).includes(datasetId);
+}
 
 const WATER_SURFACE_ELEVATION_VARIABLE_ID = 'water-surface-elevation';
 const TIME_SERIES_FOLDER = 'time-series';
@@ -57,6 +70,7 @@ const PUBLISHER_NAME_BY_ID: Readonly<Record<string, string>> = {
  */
 export const FALLBACK_TIME_RANGE_UTC: Readonly<Record<HostedModeledDatasetId, readonly [string, string]>> = {
   [NATIONAL_WATER_MODEL_HOURLY_DATASET_ID]: ['2020-10-01T00:00:00.000Z', '2023-02-01T00:00:00.000Z'],
+  [NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID]: ['2025-09-01T00:00:00.000Z', '2026-10-29T23:00:00.000Z'],
   [CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID]: ['1950-01-01T00:00:00.000Z', '2024-12-01T00:00:00.000Z'],
 };
 
@@ -159,6 +173,7 @@ export async function loadHostedModeledWseVersion(
       californiaNaturalFlowsIntervals: `${prefix}_cnf_monthly_held_intervals`,
       californiaNaturalFlowsValues: `${prefix}_cnf_monthly_values`,
       nationalWaterModelIntervals: `${prefix}_nwm_hourly_held_intervals`,
+      nationalWaterModelOperationalIntervals: `${prefix}${NWM_OPERATIONAL_HOURLY_INTERVALS_TABLE_SUFFIX}`,
       versions: 'modeled_wse_versions',
     }),
     timeRangeUtcMsByDatasetId: readTimeRanges(stringOrEmpty(attributes.water_years)),
@@ -243,7 +258,7 @@ export function buildHostedModeledCatalog(
       datasetId,
       publisherId: dataset.publisherId ?? '',
       kind: 'modeled',
-      timeStep: dataset.timeStep ?? (datasetId === NATIONAL_WATER_MODEL_HOURLY_DATASET_ID ? 'hourly' : 'monthly'),
+      timeStep: dataset.timeStep ?? (isHourlyHostedDataset(datasetId) ? 'hourly' : 'monthly'),
       timeRangeUtc: [new Date(startMs).toISOString(), new Date(endMs).toISOString()] as [string, string],
       accuracyNote: dataset.accuracyNote ?? null,
     };
