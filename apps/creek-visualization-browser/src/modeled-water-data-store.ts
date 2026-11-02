@@ -126,6 +126,11 @@ export interface ModeledWaterDataStoreOptions {
   timeStep: string;
   /** Called whenever a fetch lands so the caller can re-resolve the frame. */
   onChange: () => void;
+  /**
+   * Called instead of `onChange` when a file requested only for a chart span lands. The map does not
+   * need those files, so the caller can skip a scene redraw. Absent means `onChange`.
+   */
+  onSeriesSpanChange?: () => void;
 }
 
 export interface ModeledWaterDataStore {
@@ -140,8 +145,8 @@ export interface ModeledWaterDataStore {
    */
   requestSeriesSpan(tncComid: string, startUtcMs: number, endUtcMs: number): void;
   /**
-   * The loaded files of the requested span, oldest first. Null while the flowline or any of its files is
-   * still loading. A year with no file in the Dataset is skipped.
+   * The files of the requested span that have loaded so far, oldest first, so a chart can draw what it has
+   * and fill in the rest as files land. Null until the flowline or its first file has loaded.
    */
   seriesSpan(tncComid: string, startUtcMs: number, endUtcMs: number): readonly LoadedTimeSeries[] | null;
   readonly loadedFlowlineComids: readonly string[];
@@ -195,6 +200,9 @@ export function createModeledWaterDataStore(
     return keys;
   };
 
+  /** Queue keys of Time Series files the map (not only the chart's span) is waiting for. */
+  const fileKeysTheMapNeeds = new Set<string>();
+
   /** The flowline whose span files must stay in memory, and their keys. */
   let pinnedSpan: { tncComid: string; keys: ReadonlySet<string> } | null = null;
 
@@ -216,7 +224,7 @@ export function createModeledWaterDataStore(
     }
   };
 
-  const enqueue = (key: string, job: () => Promise<void>): void => {
+  const enqueue = (key: string, job: () => Promise<void>, notify: () => void = options.onChange): void => {
     if (inFlight.has(key)) return;
     inFlight.add(key);
     queue.push(async () => {
@@ -228,18 +236,21 @@ export function createModeledWaterDataStore(
         console.error(error);
       } finally {
         inFlight.delete(key);
-        options.onChange();
+        notify();
       }
     });
     pump();
   };
 
-  const ensureSeries = (flowline: LoadedFlowline, seriesKey: string): void => {
+  const ensureSeries = (flowline: LoadedFlowline, seriesKey: string, forChartSpanOnly = false): void => {
     if (flowline.seriesByKey.has(seriesKey)) return;
     const relative = pathByKey.get(`${flowline.tncComid}/${seriesKey}`);
     if (!relative) return; // No Time Series for this flowline and time; nothing to show.
     // The generation keeps a fetch for the previous method's Time Series folder from blocking this one.
-    enqueue(`series:${cacheGeneration}:${flowline.tncComid}/${seriesKey}`, async () => {
+    const queueKey = `series:${cacheGeneration}:${flowline.tncComid}/${seriesKey}`;
+    // A file the map needs redraws the scene when it lands, even if the chart asked for it first.
+    if (!forChartSpanOnly) fileKeysTheMapNeeds.add(queueKey);
+    enqueue(queueKey, async () => {
       const file = await options.dataSource.loadTimeSeries(options.extentId, relative);
       flowline.seriesByKey.set(seriesKey, readTimeSeriesFile(file));
       // Keep only the current water year plus one neighbour per flowline, plus any requested span.
@@ -248,6 +259,9 @@ export function createModeledWaterDataStore(
         if (flowline.seriesByKey.size <= 2) break;
         if (key !== seriesKey && !pinnedKeys.has(key)) flowline.seriesByKey.delete(key);
       }
+    }, () => {
+      const mapNeedsFile = fileKeysTheMapNeeds.delete(queueKey);
+      (mapNeedsFile ? options.onChange : (options.onSeriesSpanChange ?? options.onChange))();
     });
   };
 
@@ -289,7 +303,7 @@ export function createModeledWaterDataStore(
           };
           cache.set(comid, flowline);
           ensureSeries(flowline, seriesKeyFor(timeUtcMs));
-          if (pinnedSpan?.tncComid === comid) for (const key of pinnedSpan.keys) ensureSeries(flowline, key);
+          if (pinnedSpan?.tncComid === comid) for (const key of pinnedSpan.keys) ensureSeries(flowline, key, true);
         });
       }
       evict();
@@ -303,19 +317,13 @@ export function createModeledWaterDataStore(
     requestSeriesSpan(tncComid, startUtcMs, endUtcMs) {
       pinnedSpan = { tncComid, keys: new Set(seriesKeysFor(startUtcMs, endUtcMs)) };
       const loaded = cache.get(tncComid);
-      if (loaded) for (const key of pinnedSpan.keys) ensureSeries(loaded, key);
+      if (loaded) for (const key of pinnedSpan.keys) ensureSeries(loaded, key, true);
     },
     seriesSpan(tncComid, startUtcMs, endUtcMs) {
       const flowline = cache.get(tncComid);
       if (!flowline) return null;
-      const files: LoadedTimeSeries[] = [];
-      for (const key of seriesKeysFor(startUtcMs, endUtcMs)) {
-        const file = flowline.seriesByKey.get(key);
-        if (file) files.push(file);
-        else if (inFlight.has(`series:${cacheGeneration}:${tncComid}/${key}`)) return null;
-        else if (pathByKey.has(`${tncComid}/${key}`)) return null; // Not queued yet: the next request starts it.
-      }
-      return files;
+      const files = seriesKeysFor(startUtcMs, endUtcMs).flatMap((key) => flowline.seriesByKey.get(key) ?? []);
+      return files.length > 0 ? files : null;
     },
     get loadedFlowlineComids() {
       return [...cache.keys()];

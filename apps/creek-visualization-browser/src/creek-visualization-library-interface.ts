@@ -100,6 +100,12 @@ export function attachCreekVisualization(
 
   const pinnedBySegmentId = new Map<string, number>();
   const chartDepthBySourceSeries = new WeakMap<readonly (number | null)[], readonly (number | null)[]>();
+  /** The chart's arrays clipped to the time slider's From–To range; one entry per source array, reused until the range changes. */
+  const clippedChartDepthBySourceSeries = new WeakMap<
+    readonly (number | null)[],
+    { firstIndex: number; lastIndex: number; depthM: readonly (number | null)[] }
+  >();
+  let clippedTimestamps: { firstIndex: number; lastIndex: number; timestampsUtcMs: readonly number[] } | null = null;
   let selectedCreekSegmentChart: SelectedCreekSegmentChart | null = null;
 
   const renderer = createArcGISSceneRenderer(
@@ -221,12 +227,28 @@ export function attachCreekVisualization(
           depthM = gaugeHeightSeriesM(observedWseM);
           chartDepthBySourceSeries.set(observedWseM, depthM);
         }
+        // The chart spans the same From–To range as the time slider, so clip the record to it.
+        const [rangeStartUtcMs, rangeEndUtcMs] = timeline.rangeUtcMs;
+        const firstIndex = firstIndexAtOrAfter(options.data.timestampsUtcMs, rangeStartUtcMs);
+        const lastIndex = firstIndexAtOrAfter(options.data.timestampsUtcMs, rangeEndUtcMs + 1) - 1;
+        if (!clippedTimestamps || clippedTimestamps.firstIndex !== firstIndex || clippedTimestamps.lastIndex !== lastIndex) {
+          clippedTimestamps = {
+            firstIndex,
+            lastIndex,
+            timestampsUtcMs: options.data.timestampsUtcMs.slice(firstIndex, lastIndex + 1),
+          };
+        }
+        let clipped = clippedChartDepthBySourceSeries.get(observedWseM);
+        if (!clipped || clipped.firstIndex !== firstIndex || clipped.lastIndex !== lastIndex) {
+          clipped = { firstIndex, lastIndex, depthM: depthM.slice(firstIndex, lastIndex + 1) };
+          clippedChartDepthBySourceSeries.set(observedWseM, clipped);
+        }
         return {
           series: {
             segmentId,
             sourceLabel: OBSERVED_CHART_SOURCE_LABEL,
-            timestampsUtcMs: options.data.timestampsUtcMs,
-            depthM,
+            timestampsUtcMs: clippedTimestamps.timestampsUtcMs,
+            depthM: clipped.depthM,
           },
         };
       },
@@ -247,6 +269,8 @@ export function attachCreekVisualization(
       lifetime,
     });
     selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
+    // A new From or To date re-spans the chart.
+    timeline.onRangeChange(() => selectedCreekSegmentChart?.refresh());
     selectedCreekSegmentChart.selectSegment(options.initialSelectedSegmentId ?? null);
   }
 
@@ -304,4 +328,16 @@ function bucketContaining(
     }
   }
   return null;
+}
+
+/** Index of the first timestamp at or after the time (the length when none is). The timestamps are ascending. */
+function firstIndexAtOrAfter(timestampsUtcMs: readonly number[], timeUtcMs: number): number {
+  let low = 0;
+  let high = timestampsUtcMs.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (timestampsUtcMs[mid] < timeUtcMs) low = mid + 1;
+    else high = mid;
+  }
+  return low;
 }

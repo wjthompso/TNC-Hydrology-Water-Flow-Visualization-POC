@@ -473,6 +473,10 @@ export async function startModeledCreekExperience(
     onChange: () => {
       if (!lifetime.signal.aborted) applySelectedTime(state.selectedTimeUtcMs);
     },
+    // Files that only widen the chart's span change nothing on the map, so only the chart reloads.
+    onSeriesSpanChange: () => {
+      if (!lifetime.signal.aborted) selectedCreekSegmentChart?.refresh();
+    },
   });
 
   /** Straight-line length from the segment path's first to last vertex (its chord), or null without a path. */
@@ -811,7 +815,8 @@ export async function startModeledCreekExperience(
 
   /**
    * The chart spans the same From–To range as the time slider, so it loads every Time Series file that
-   * range touches (one per water year for hourly Datasets), joins them, and clips to the range. It charts
+   * range touches (one per water year for hourly Datasets), joins them, and clips to the range. It draws
+   * the files loaded so far and fills in the rest as they land (see `onSeriesSpanChange`). It charts
    * Anchor Water Depth: each file's WSE minus the segment's anchor bed.
    */
   const chartContentForSegment = (segmentId: string): SegmentChartContent => {
