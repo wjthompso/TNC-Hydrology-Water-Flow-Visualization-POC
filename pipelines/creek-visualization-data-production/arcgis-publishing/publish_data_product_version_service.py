@@ -185,10 +185,12 @@ def add_attribute_indexes_and_time(service_item) -> list[str]:
 
 def upload_raw_hourly_csv_item(folder, csv_zip: Path, upload_file_name: str, title: str, tags: list[str], description: str):
     water_year = csv_zip.name.removesuffix(".csv.zip").split("-")[-1]
+    # The operational Dataset's files (m5 v2 and later) carry its id in the name; its water years never overlap the retrospective's.
+    dataset_words = " (NOAA operational run)" if "operational" in csv_zip.name else ""
     properties = {
-        "title": f"{title} — raw hourly values {water_year}",
+        "title": f"{title} — raw hourly values{dataset_words} {water_year}",
         "tags": tags + ["raw-hourly-values", water_year],
-        "snippet": f"Every hourly modeled WSE value of every Creek Segment in {water_year} (zipped CSV). Not a layer. Experimental, private.",
+        "snippet": f"Every hourly modeled WSE value of every Creek Segment in {water_year}{dataset_words} (zipped CSV). Not a layer. Experimental, private.",
         "description": description,
         "accessInformation": ACCESS_INFORMATION,
         "licenseInfo": LICENSE_INFORMATION,
@@ -214,13 +216,36 @@ def frozen_row_counts(version_json: dict, identity: DataProductVersionIdentity) 
     return {identity.versions_table_name: 1, identity.arcgis_prefix: counts["features"]}
 
 
+def rename_upload_tables(service_item, version_json: dict) -> list[str]:
+    """Give tables their real names after publishing (`arcgis_upload_table_names`: geodatabase name → real name).
+
+    ArcGIS numbers tables alphabetically by geodatabase name; the browser needs the versions table at layer id 4 and the
+    operational Held WSE Intervals table at 5, so the freeze names that table to sort last. Renaming keeps its layer id.
+    Idempotent: a table already carrying its real name is left alone. Returns notes.
+    """
+    notes = []
+    layers_by_name = {layer.properties.name: layer for layer in all_layers_and_tables(service_item)}
+    for upload_name, real_name in version_json.get("arcgis_upload_table_names", {}).items():
+        if real_name in layers_by_name:
+            continue
+        layer = layers_by_name[upload_name]
+        layer.manager.update_definition({"name": real_name})
+        notes.append(f"{upload_name} renamed to {real_name} (layer id {layer.properties.id} unchanged)")
+    return notes
+
+
+def refreshed_service_item(service_item):
+    return service_item._gis.content.get(service_item.id)
+
+
 def resumed_items(gis, item_ids: str, identity: DataProductVersionIdentity, version_json: dict, expected_rows: dict[str, int]):
     """The file geodatabase and service items of an earlier failed run, after checking they are this version's."""
     geodatabase_item_id, service_item_id = item_ids.split(",")
     geodatabase_item, service_item = gis.content.get(geodatabase_item_id), gis.content.get(service_item_id)
     from arcgis.features import FeatureLayerCollection
 
-    layers = {layer.properties.name: layer for layer in all_layers_and_tables(service_item)}
+    upload_to_real_name = version_json.get("arcgis_upload_table_names", {})
+    layers = {upload_to_real_name.get(layer.properties.name, layer.properties.name): layer for layer in all_layers_and_tables(service_item)}
     versions_row = layers[identity.versions_table_name].query(where="1=1", out_fields="version_label,published_at_utc").features[0].attributes
     problems = [
         message
@@ -348,6 +373,9 @@ def main() -> None:
                 "licenseInfo": LICENSE_INFORMATION,
             }
         )
+        for note in rename_upload_tables(service_item, version_json):
+            print(f"  {note}")
+        service_item = refreshed_service_item(service_item)
         for note in add_attribute_indexes_and_time(service_item):
             print(f"  {note}")
 

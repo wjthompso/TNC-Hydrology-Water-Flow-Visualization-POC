@@ -637,6 +637,87 @@
             "version_label": "m3-v2",
             "method_sha256": "8a55b1446e70aa851343addc8368f2f984a006763e5b31dccb28a9022f95dce7"
           }
+        },
+        {
+          "product": "modeled-wse",
+          "method_id": "m5-flowline-profile-jarrett-depth",
+          "method_number": 5,
+          "version_number": 2,
+          "version_label": "m5-v2",
+          "status": "active",
+          "change_type": "parameter change",
+          "change_note": "Adds the operational National Water Model hourly Dataset (Sep 2025 – Oct 2026) next to the two existing Datasets; the hydraulics and the two existing Datasets are unchanged.",
+          "method_date_utc": "2026-10-30T21:06:37Z",
+          "generated_at_utc": "2026-10-30T20:06:54.605Z",
+          "frozen_from_commit": "36fb14c9695a3ab144b1bb64ef43e1b599758738",
+          "code_fingerprint": "9cc21066370cf5838202dba3ceb166133334f9a883038c598b33a524fccc746e",
+          "segment_network_version": "dangermond-preserve-v1",
+          "extent_id": "dangermond-preserve",
+          "dataset_ids": [
+            "national-water-model-hourly",
+            "national-water-model-operational-hourly",
+            "california-natural-flows-monthly"
+          ],
+          "water_years": "national-water-model-hourly: WY2021–WY2023 hourly 2020-10-01T00:00:00Z to 2023-02-01T00:00:00Z; national-water-model-operational-hourly: WY2025–WY2027 hourly 2025-09-01T00:00:00Z to 2026-10-29T23:00:00Z; california-natural-flows-monthly: monthly 1950-01 to 2024-12",
+          "derivation_summary": "Modeled water-surface elevation (m NAVD88) and junction water depth per Creek Segment. Discharge per NHDPlusV2 reach (NOAA National Water Model v3.0 retrospective, hourly; NOAA National Water Model operational run, hourly; California Natural Flows, monthly) is scaled to each Creek Segment by the USGS drainage-area ratio method (segment Q = reach Q × drainageAreaRatio from the crosswalk (USGS drainage-area ratio method, ratio capped at 1), as m1). The operational Dataset is NOAA's National Water Model Analysis and Assimilation run, hourly from 2025-09-01 to 2026-10-29 (WY2025 to WY2027 files), not the v3.0 retrospective: NOAA switched the operational model from v3.0 to v3.1 on 2026-08-18, so flows either side of that date are not strictly comparable, and NHDPlusV2 reach 17594937 has no operational flow (its Creek Segments are null in that Dataset). Flowline channel profile (Jarrett steep-creek depth), version 2: m3 v2’s channel, raw lidar bed, anchor cross-section, discharge and pool-filled water surface, with a steep-creek roughness: Jarrett (1984), n = 0.32 S^0.38 R^−0.16, which needs no grain size, blended from Manning’s n 0.04/0.07 over 2–8% slope as in m4. Time-varying values are stored as Held WSE Intervals: a new interval starts when the anchor WSE or either junction depth changes.",
+          "arcgis_table_names": [
+            "modeled_wse_versions",
+            "modeled_wse_m5_v2_creek_segments",
+            "modeled_wse_m5_v2_nwm_hourly_held_intervals",
+            "modeled_wse_m5_v2_cnf_monthly_held_intervals",
+            "modeled_wse_m5_v2_cnf_monthly_values",
+            "modeled_wse_m5_v2_nwm_operational_hourly_held_intervals"
+          ],
+          "version_folder": "data/data-product-versions/modeled-wse/m5-flowline-profile-jarrett-depth/m5-v2",
+          "arcgis_upload_sha256": "81f1f0e9e0ff97f102ee49e4b290bf1a40475bfea271a58812e180fd48c2ad46",
+          "arcgis_service_name": "creek_water_visualization_modeled_wse_m5_v2",
+          "arcgis_service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m5-v2, Jarrett steep-creek roughness, with NOAA's operational flows to Oct 2026)",
+          "arcgis": {
+            "service_item_id": "fef2a659578b42d49860396f81c2916e",
+            "service_url": "https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m5_v2/FeatureServer",
+            "file_geodatabase_item_id": "74c0f05d767e4fdcb2758155d1b2a495",
+            "layer_ids": {
+              "modeled_wse_versions": 4,
+              "modeled_wse_m5_v2_creek_segments": 0,
+              "modeled_wse_m5_v2_nwm_hourly_held_intervals": 3,
+              "modeled_wse_m5_v2_cnf_monthly_held_intervals": 1,
+              "modeled_wse_m5_v2_cnf_monthly_values": 2,
+              "modeled_wse_m5_v2_nwm_operational_hourly_held_intervals": 5
+            },
+            "raw_hourly_csv_item_ids": {
+              "WY2021": "03ac5ea846474db4b8fa45e6939ee3f4",
+              "WY2022": "aa917df692bd4021ba6bf016849f83a8",
+              "WY2023": "68afcf10e4154589b8afb52b57122484",
+              "WY2025": "7d6da4a379e9424d8cd173fbff536bb9",
+              "WY2026": "d2d9f9460d0247eca509070e5933f476",
+              "WY2027": "4f9ac342af4b49d4a96caa44d3191bf6"
+            },
+            "published_at_utc": "2026-10-30T22:04:26Z",
+            "service_name": "creek_water_visualization_modeled_wse_m5_v2",
+            "service_title": "Dangermond Preserve — Inferred Creek Water Surface Elevations (m5-v2, Jarrett steep-creek roughness, with NOAA's operational flows to Oct 2026)",
+            "portal_folder": "Creek Water Visualization",
+            "row_counts": {
+              "modeled_wse_m5_v2_creek_segments": 3338,
+              "modeled_wse_m5_v2_cnf_monthly_held_intervals": 1144270,
+              "modeled_wse_m5_v2_cnf_monthly_values": 3004200,
+              "modeled_wse_m5_v2_nwm_hourly_held_intervals": 1376408,
+              "modeled_wse_versions": 1,
+              "modeled_wse_m5_v2_nwm_operational_hourly_held_intervals": 769096
+            },
+            "sharing": "private (owner only); not shared",
+            "versions_table_row_updated": true,
+            "public_sharing": {
+              "access": "public",
+              "shared_at_utc": "2026-10-31T01:39:47Z",
+              "access_before": "private"
+            }
+          },
+          "channel_from_modeled_wse_version": {
+            "product": "modeled-wse",
+            "method_id": "m3-flowline-profile-manning-depth",
+            "version_label": "m3-v2",
+            "method_sha256": "8a55b1446e70aa851343addc8368f2f984a006763e5b31dccb28a9022f95dce7"
+          }
         }
       ],
       "title": "Dangermond Preserve — Inferred Creek Water Surface Elevations",

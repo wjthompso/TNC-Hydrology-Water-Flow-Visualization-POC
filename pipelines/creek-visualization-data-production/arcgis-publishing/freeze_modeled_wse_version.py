@@ -379,7 +379,7 @@ def float_or_none(value) -> float | None:
     return None if value is None else float(value)
 
 
-def versions_table_columns(version_record: dict) -> list:
+def versions_table_columns(version_record: dict, water_years_width: int = MEDIUM_TEXT_WIDTH) -> list:
     record = version_record
     return [
         text_column("product", [record["product"]], SHORT_TEXT_WIDTH),
@@ -397,7 +397,7 @@ def versions_table_columns(version_record: dict) -> list:
         text_column("segment_network_version", [record["segment_network_version"]], SHORT_TEXT_WIDTH),
         text_column("extent_id", [record["extent_id"]], SHORT_TEXT_WIDTH),
         text_column("dataset_ids", [", ".join(record["dataset_ids"])], MEDIUM_TEXT_WIDTH),
-        text_column("water_years", [record["water_years"]], MEDIUM_TEXT_WIDTH),
+        text_column("water_years", [record["water_years"]], water_years_width),
         text_column("derivation_summary", [record["derivation_summary"]], LONG_TEXT_WIDTH),
         text_column("derivation_json", [record["derivation_json"]], DERIVATION_JSON_WIDTH),
         text_column("arcgis_table_names", [", ".join(record["arcgis_table_names"])], LONG_TEXT_WIDTH),

@@ -50,7 +50,9 @@ from modeled_wse_version_layout import (  # noqa: E402
     ARCGIS_UPLOAD_FOLDER_NAME,
     CREEK_SEGMENT_NETWORK_FILE_NAME,
     HOUR_MS,
+    NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
     PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS,
+    PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS,
     RAW_HOURLY_VALUES_FOLDER_NAME,
     VERSION_JSON_NAME,
     add_one_month_ms,
@@ -69,6 +71,7 @@ from validate_modeled_wse_m2_version import (  # noqa: E402
 )
 from validate_modeled_wse_version import ArrayComparison, ValidationReport, log  # noqa: E402
 
+OPERATIONAL_SUFFIX = "_nwm_operational_hourly_held_intervals"
 ANCHOR_COORDINATE_TOLERANCE_DEGREES = 1e-9
 ANCHOR_MAXIMUM_DISTANCE_FROM_SEGMENT_DEGREES = 0.0005  # about 50 m; the anchor search reaches 30 m from the flowline
 SPOT_CHECK_SEGMENT_IDS = ["27714697-043", "27714697-044", "27714697-045"]
@@ -84,23 +87,32 @@ class TableNames:
         self.cnf_intervals = f"{prefix}_cnf_monthly_held_intervals"
         self.cnf_values = f"{prefix}_cnf_monthly_values"
         self.all = version_json["arcgis_table_names"]
+        # m5 v2 and later hold the operational Dataset's table. It sits in the file geodatabase under another name
+        # (`arcgis_upload_table_names`: geodatabase name → real name) so that ArcGIS gives it layer id 5 and the versions table 4.
+        self.operational_intervals = next((name for name in self.all if name.endswith(OPERATIONAL_SUFFIX)), None)
+        self.gdb_name_by_real_name = {real: upload for upload, real in version_json.get("arcgis_upload_table_names", {}).items()}
+
+    def gdb_name(self, real_name: str) -> str:
+        return self.gdb_name_by_real_name.get(real_name, real_name)
 
 
 def check_field_types(gdb_path: Path, tables: TableNames, added_fields: list[str], report: ValidationReport) -> None:
     names = layer_names(gdb_path)
-    report.check(sorted(names) == sorted(tables.all), f"layers and tables: {sorted(names)}")
+    report.check(sorted(names) == sorted(tables.gdb_name(name) for name in tables.all), f"layers and tables: {sorted(names)}")
     date_fields = {
         tables.versions: ["method_date_utc", "generated_at_utc", "published_at_utc"],
         tables.nwm_intervals: ["valid_from_utc", "valid_until_utc"],
         tables.cnf_intervals: ["valid_from_utc", "valid_until_utc"],
         tables.cnf_values: ["month_start_utc"],
     }
+    if tables.operational_intervals:
+        date_fields[tables.operational_intervals] = ["valid_from_utc", "valid_until_utc"]
     for table_name, fields in date_fields.items():
-        dtypes = dict(zip(*[layer_info(gdb_path, table_name)[key] for key in ("fields", "dtypes")]))
+        dtypes = dict(zip(*[layer_info(gdb_path, tables.gdb_name(table_name))[key] for key in ("fields", "dtypes")]))
         for field in fields:
             report.check(str(dtypes.get(field, "")).startswith("datetime64"), f"{table_name}.{field} is a Date field ({dtypes.get(field)})")
-    for table_name in (tables.nwm_intervals, tables.cnf_intervals):
-        info = layer_info(gdb_path, table_name)
+    for table_name in (tables.nwm_intervals, tables.cnf_intervals, *([tables.operational_intervals] if tables.operational_intervals else [])):
+        info = layer_info(gdb_path, tables.gdb_name(table_name))
         report.check(list(info["fields"]) == HELD_INTERVAL_FIELDS, f"{table_name} fields {list(info['fields'])}")
     segments_info = layer_info(gdb_path, tables.creek_segments)
     report.check(segments_info["crs"] == "EPSG:4326", f"{tables.creek_segments} CRS {segments_info['crs']}")
@@ -119,8 +131,9 @@ def check_field_types(gdb_path: Path, tables: TableNames, added_fields: list[str
         (tables.nwm_intervals, "segment_id", 16),
         (tables.cnf_intervals, "segment_id", 16),
         (tables.cnf_values, "segment_id", 16),
+        *([(tables.operational_intervals, "segment_id", 16)] if tables.operational_intervals else []),
     ]:
-        schema_field = read_table(gdb_path, table_name, max_features=1).schema.field(field)
+        schema_field = read_table(gdb_path, tables.gdb_name(table_name), max_features=1).schema.field(field)
         stored_width = (schema_field.metadata or {}).get(GDAL_WIDTH_METADATA_KEY.encode(), b"").decode()
         report.check(stored_width == str(width), f"{table_name}.{field} text width {stored_width} == {width}")
 
@@ -290,11 +303,18 @@ def main() -> None:
 
         log(f"Reading {tables.nwm_intervals}, {tables.cnf_intervals}, {tables.cnf_values}")
         nwm_intervals = HeldIntervalsBySegment(read_table(gdb_path, tables.nwm_intervals))
+        operational_intervals = (
+            HeldIntervalsBySegment(read_table(gdb_path, tables.gdb_name(tables.operational_intervals))) if tables.operational_intervals else None
+        )
         cnf_intervals = HeldIntervalsBySegment(read_table(gdb_path, tables.cnf_intervals))
         cnf_values = MonthlyValuesBySegment(read_table(gdb_path, tables.cnf_values))
-        row_counts = {name: layer_info(gdb_path, name)["features"] for name in tables.all}
+        row_counts = {name: layer_info(gdb_path, tables.gdb_name(name))["features"] for name in tables.all}
         report.check(row_counts == version_json["counts"]["arcgis_rows"], f"row counts equal version.json: {row_counts}")
-        for label, intervals in [("NWM hourly", nwm_intervals), ("CNF monthly", cnf_intervals)]:
+        for label, intervals in [
+            ("NWM hourly", nwm_intervals),
+            ("CNF monthly", cnf_intervals),
+            *([("NWM operational hourly", operational_intervals)] if operational_intervals else []),
+        ]:
             report.check(
                 len(intervals.rows_by_segment) == expected_segment_count and set(intervals.rows_by_segment) == set(segment_rows),
                 f"{label} Held WSE Intervals: {len(intervals.rows_by_segment):,} Creek Segments",
@@ -307,7 +327,13 @@ def main() -> None:
         cnf_values_comparison = ArrayComparison(f"CNF monthly from {tables.cnf_values}")
         nwm_junction_wse = ArrayComparison("NWM hourly junction WSE rebuilt as junction bed + depth (m2 family only)")
         cnf_junction_wse = ArrayComparison("CNF monthly junction WSE rebuilt as junction bed + depth (m2 family only)")
+        operational_comparison = ArrayComparison("NWM operational hourly WY2025–WY2027 from Held WSE Intervals (wse, junction depths)")
+        operational_junction_wse = ArrayComparison("NWM operational hourly junction WSE rebuilt as junction bed + depth (m2 family only)")
         csv_comparisons = {year: ArrayComparison(f"raw hourly CSV WY{year}") for year in PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS}
+        operational_csv_comparisons = {
+            year: ArrayComparison(f"raw operational hourly CSV WY{year}") for year in PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS if operational_intervals
+        }
+        operational_by_comid: dict[str, DepthFlowlineSeries] = {}
         problems: list[str] = []
         all_null_problems: list[str] = []
         null_pattern_mismatched_segments = 0
@@ -320,6 +346,14 @@ def main() -> None:
             )  # fmt: skip
             null_pattern_mismatched_segments += depth_null_pattern_mismatches(hourly)
             hourly_by_comid[tnc_comid] = hourly
+            if operational_intervals:
+                operational = time_series.load_national_water_model_operational_hourly(tnc_comid, PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS)
+                compare_flowline(
+                    operational, operational_intervals, int(operational.timestamps_ms[-1]) + HOUR_MS, segment_rows, operational_comparison,
+                    operational_junction_wse, all_null_problems, problems,
+                )  # fmt: skip
+                null_pattern_mismatched_segments += depth_null_pattern_mismatches(operational)
+                operational_by_comid[tnc_comid] = operational
             monthly = monthly_by_comid[tnc_comid]
             compare_flowline(
                 monthly, cnf_intervals, add_one_month_ms(int(monthly.timestamps_ms[-1])), segment_rows, cnf_comparison, cnf_junction_wse,
@@ -350,7 +384,7 @@ def main() -> None:
                 f"  {segment_id}: wse {rebuilt['values'][step]} (source {segment.values[step]}), anchor bed {segment.anchor_bed_elevation_m}, "
                 f"depth up {rebuilt['junctionDepthUpstreamM'][step]}, depth down {rebuilt['junctionDepthDownstreamM'][step]}"
             )
-        del nwm_intervals, cnf_intervals, cnf_values
+        del nwm_intervals, cnf_intervals, cnf_values, operational_intervals
 
         csv_row_counts = {}
         for water_year in PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS:
@@ -373,7 +407,40 @@ def main() -> None:
             del csv
         report.check(csv_row_counts == version_json["counts"]["raw_hourly_csv_rows"], f"raw hourly CSV rows equal version.json: {csv_row_counts}")
 
+        operational_csv_row_counts = {}
+        for water_year in operational_csv_comparisons:
+            log(f"Reading raw operational hourly CSV WY{water_year}")
+            csv = RawHourlyCsv(
+                version_folder / RAW_HOURLY_VALUES_FOLDER_NAME / raw_hourly_csv_zip_name(water_year, NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID),
+                water_year,
+                NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
+            )
+            operational_csv_row_counts[f"WY{water_year}"] = csv.row_count
+            report.check(
+                len(csv.slice_by_segment) == expected_segment_count and csv.segment_split_into_blocks == 0,
+                f"raw operational hourly CSV WY{water_year}: {len(csv.slice_by_segment):,} Creek Segments",
+            )
+            for operational in operational_by_comid.values():
+                start, end = operational.water_year_slices[water_year]
+                expected_times = [f"{text}Z" for text in np.datetime_as_string(operational.timestamps_ms[start:end].astype("datetime64[ms]"), unit="s")]
+                if csv.times_of(operational.segments[0].segment_id) != expected_times:
+                    problems.append(f"raw operational hourly CSV WY{water_year} {operational.segments[0].segment_id}: time_utc differs")
+                for segment in operational.segments:
+                    csv_start, csv_end = csv.slice_by_segment.get(segment.segment_id, (0, 0))
+                    for source_name, source in time_varying_arrays(segment).items():
+                        operational_csv_comparisons[water_year].compare(
+                            f"{segment.segment_id}.{source_name}", csv.columns[source_name][csv_start:csv_end], source[start:end]
+                        )
+            del csv
+        if operational_csv_comparisons:
+            report.check(
+                operational_csv_row_counts == version_json["counts"]["raw_hourly_csv_rows_operational"],
+                f"raw operational hourly CSV rows equal version.json: {operational_csv_row_counts}",
+            )
+
         all_comparisons = [nwm_comparison, cnf_comparison, cnf_values_comparison, *csv_comparisons.values()]
+        if tables.operational_intervals:
+            all_comparisons += [operational_comparison, *operational_csv_comparisons.values()]
         if method["parameters"].get("solvedSections"):
             all_comparisons += [nwm_junction_wse, cnf_junction_wse]
         for comparison in all_comparisons:
@@ -387,6 +454,8 @@ def main() -> None:
         print(f"  {name:<52} {count:>12,}")
     for name, count in csv_row_counts.items():
         print(f"  raw hourly CSV {name:<37} {count:>12,}")
+    for name, count in (operational_csv_row_counts if tables.operational_intervals else {}).items():
+        print(f"  raw operational hourly CSV {name:<25} {count:>12,}")
     print("Round trips:")
     for comparison in all_comparisons:
         print(f"  {comparison.summary()}")

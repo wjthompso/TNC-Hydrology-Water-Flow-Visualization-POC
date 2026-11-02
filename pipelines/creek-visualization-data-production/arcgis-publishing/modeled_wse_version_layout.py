@@ -44,6 +44,11 @@ ARCGIS_LAYER_AND_TABLE_NAMES = [
 NATIONAL_WATER_MODEL_HOURLY_DATASET_ID = "national-water-model-hourly"
 CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID = "california-natural-flows-monthly"
 PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS = [2021, 2022, 2023]
+# NOAA operational Analysis and Assimilation run (m5 v2 and later). Its Time Series files are one per water year,
+# WY2025 (Sep 2025 only), WY2026, WY2027 (Oct 2026 only); all three are published.
+NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID = "national-water-model-operational-hourly"
+PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS = [2025, 2026, 2027]
+OPERATIONAL_NWM_HOURLY_HELD_INTERVALS_TABLE_SUFFIX = "_nwm_operational_hourly_held_intervals"  # the browser's NWM_OPERATIONAL_HOURLY_INTERVALS_TABLE_SUFFIX
 HOUR_MS = 3_600_000
 
 # Version folder contents
@@ -58,12 +63,12 @@ UPLOAD_GDB_FOLDER_NAME = f"{ARCGIS_PREFIX}.gdb"
 RAW_HOURLY_VALUES_FOLDER_NAME = "raw-hourly-values"
 
 
-def raw_hourly_csv_name(water_year: int) -> str:
-    return f"national-water-model-hourly-WY{water_year}.csv"
+def raw_hourly_csv_name(water_year: int, dataset_id: str = NATIONAL_WATER_MODEL_HOURLY_DATASET_ID) -> str:
+    return f"{dataset_id}-WY{water_year}.csv"
 
 
-def raw_hourly_csv_zip_name(water_year: int) -> str:
-    return f"{raw_hourly_csv_name(water_year)}.zip"
+def raw_hourly_csv_zip_name(water_year: int, dataset_id: str = NATIONAL_WATER_MODEL_HOURLY_DATASET_ID) -> str:
+    return f"{raw_hourly_csv_name(water_year, dataset_id)}.zip"
 
 
 # Pipeline working output (sources)

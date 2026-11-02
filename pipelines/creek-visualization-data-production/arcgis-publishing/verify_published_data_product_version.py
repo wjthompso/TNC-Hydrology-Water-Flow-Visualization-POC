@@ -41,7 +41,12 @@ from file_geodatabase_tables import unzip_gdb  # noqa: E402
 from freeze_wse_polygons_depth_version import iterate_polygon_sets  # noqa: E402
 from freeze_wse_polygons_version import assemble_prepared_water_surface_polygon  # noqa: E402
 from modeled_wse_depth_source_series import DepthTimeSeriesFolder  # noqa: E402
-from modeled_wse_version_layout import PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS  # noqa: E402
+from modeled_wse_version_layout import (  # noqa: E402
+    NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
+    OPERATIONAL_NWM_HOURLY_HELD_INTERVALS_TABLE_SUFFIX,
+    PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS,
+    PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS,
+)
 from publish_data_product_version_service import EXPECTED_CAPABILITIES, frozen_row_counts, registry_version  # noqa: E402
 from publish_data_products_to_arcgis import all_layers_and_tables, load_portal_credentials  # noqa: E402
 from validate_wse_polygons_depth_version import closed, ring_match  # noqa: E402
@@ -54,21 +59,33 @@ SERVER_NORMALIZATION_FOOTPRINT_TOLERANCE = 1e-4
 STAGE_3_ROOT = REPOSITORY_ROOT / "data" / "pipeline-working-output" / "dangermond-preserve" / "03-time-series"
 
 
-def frozen_field_names(version_folder: Path, identity: DataProductVersionIdentity) -> dict[str, list[str]]:
+def frozen_field_names(version_folder: Path, identity: DataProductVersionIdentity, version_json: dict) -> dict[str, list[str]]:
     with tempfile.TemporaryDirectory(prefix=f"verify-{identity.version_label}-") as temporary_folder:
         gdb_path = unzip_gdb(version_folder / "arcgis-upload" / identity.upload_zip_name, Path(temporary_folder))
-        return {str(name): list(pyogrio.read_info(str(gdb_path), layer=str(name))["fields"]) for name, _ in pyogrio.list_layers(str(gdb_path))}
+        upload_to_real_name = version_json.get("arcgis_upload_table_names", {})  # m5 v2: a table is renamed after publishing
+        return {
+            upload_to_real_name.get(str(name), str(name)): list(pyogrio.read_info(str(gdb_path), layer=str(name))["fields"])
+            for name, _ in pyogrio.list_layers(str(gdb_path))
+        }
 
 
 def same_value(hosted, source: float) -> bool:
     return (hosted is None and np.isnan(source)) or (hosted is not None and not np.isnan(source) and float(hosted) == float(source))
 
 
-def check_modeled_sample(service_item, identity: DataProductVersionIdentity, version_json: dict, sample_size: int) -> dict:
+def check_modeled_sample(
+    service_item,
+    identity: DataProductVersionIdentity,
+    version_json: dict,
+    sample_size: int,
+    table_name_suffix: str = "_nwm_hourly_held_intervals",
+    dataset_id: str | None = None,
+    water_years: list[int] = PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS,
+) -> dict:
     stage_3_folder = REPOSITORY_ROOT / version_json.get("stage_3_folder", f"{STAGE_3_ROOT.relative_to(REPOSITORY_ROOT)}/{identity.method_id}/v{identity.version_number}")
     time_series = DepthTimeSeriesFolder(stage_3_folder / "time-series")
     intervals_table = next(
-        table for table in all_layers_and_tables(service_item) if table.properties.name == f"{identity.arcgis_prefix}_nwm_hourly_held_intervals"
+        table for table in all_layers_and_tables(service_item) if table.properties.name == f"{identity.arcgis_prefix}{table_name_suffix}"
     )
     network = json.loads((identity.version_folder / "creek-segment-network.json").read_text(encoding="utf-8"))
     segment_ids = sorted(segment["segmentId"] for segment in network["segments"])
@@ -76,7 +93,11 @@ def check_modeled_sample(service_item, identity: DataProductVersionIdentity, ver
     sample = sorted(generator.sample(segment_ids, sample_size))
     comparisons, mismatches = [], []
     for segment_id in sample:
-        flowline = time_series.load_national_water_model_hourly(segment_id.split("-")[0], PUBLISHED_NATIONAL_WATER_MODEL_WATER_YEARS)
+        flowline = (
+            time_series.load_national_water_model_hourly(segment_id.split("-")[0], water_years)
+            if dataset_id is None
+            else time_series.load_national_water_model_hourly(segment_id.split("-")[0], water_years, dataset_id)
+        )
         segment = next(s for s in flowline.segments if s.segment_id == segment_id)
         intervals = [
             feature.attributes
@@ -206,7 +227,7 @@ def main() -> None:
         failures.append(f"capabilities {capabilities}, expected {EXPECTED_CAPABILITIES}")
 
     expected_counts = frozen_row_counts(version_json, identity)
-    frozen_fields = frozen_field_names(version_folder, identity)
+    frozen_fields = frozen_field_names(version_folder, identity, version_json)
     findings["layers"] = []
     for layer in all_layers_and_tables(service_item):
         name = layer.properties.name
@@ -228,6 +249,21 @@ def main() -> None:
         findings["value_sample"] = check_modeled_sample(service_item, identity, version_json, arguments.sample_size)
         if findings["value_sample"]["mismatches"]:
             failures.append(f"{len(findings['value_sample']['mismatches'])} sampled hourly values differ from Stage 3")
+        if NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID in version_json.get("dataset_ids", []):
+            findings["operational_value_sample"] = check_modeled_sample(
+                service_item, identity, version_json, arguments.sample_size,
+                OPERATIONAL_NWM_HOURLY_HELD_INTERVALS_TABLE_SUFFIX,
+                NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
+                PUBLISHED_OPERATIONAL_NATIONAL_WATER_MODEL_WATER_YEARS,
+            )  # fmt: skip
+            if findings["operational_value_sample"]["mismatches"]:
+                failures.append(f"{len(findings['operational_value_sample']['mismatches'])} sampled operational hourly values differ from Stage 3")
+            expected_ids = {"modeled_wse_versions": 4, f"{identity.arcgis_prefix}{OPERATIONAL_NWM_HOURLY_HELD_INTERVALS_TABLE_SUFFIX}": 5}
+            hosted_ids = {layer["name"]: layer["id"] for layer in findings["layers"]}
+            findings["browser_expected_layer_ids"] = {"expected": expected_ids, "hosted": {name: hosted_ids.get(name) for name in expected_ids}}
+            for name, expected_id in expected_ids.items():
+                if hosted_ids.get(name) != expected_id:
+                    failures.append(f"{name} has layer id {hosted_ids.get(name)}, the browser expects {expected_id}")
     else:
         findings["geometry_sample"] = check_polygon_sample(service_item, identity, version_json, arguments.sample_size)
         if findings["geometry_sample"]["mismatches"]:
@@ -241,6 +277,9 @@ def main() -> None:
         print(f"  {layer['id']}  {layer['name']}: {layer['rows']:,} rows (frozen {layer['expected_rows']:,})")
     access_text = ", ".join(f"{role} {item['access']}" for role, item in findings["items"].items())
     print(f"  capabilities {capabilities}; access {access_text}")
+    if "operational_value_sample" in findings:
+        operational_sample = findings["operational_value_sample"]
+        print(f"  operational sample: {operational_sample['hours_compared']} compared, {len(operational_sample['mismatches'])} mismatched")
     sample = findings.get("value_sample") or findings.get("geometry_sample")
     print(f"  sample: {sample.get('hours_compared', sample.get('features_sampled'))} compared, {len(sample['mismatches'])} mismatched")
     print(f"{'PASSED' if not failures else 'FAILED'} in {findings['seconds']} s; findings written to {arguments.output}")
