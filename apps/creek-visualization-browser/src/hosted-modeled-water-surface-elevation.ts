@@ -23,6 +23,8 @@
 import {
   CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID,
   NATIONAL_WATER_MODEL_HOURLY_DATASET_ID,
+  NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID,
+  isHourlyHostedDataset,
   type HostedModeledDatasetId,
   type HostedModeledWseVersion,
 } from './hosted-modeled-catalog.ts';
@@ -93,14 +95,11 @@ export async function loadHostedTimeSeriesForFlowline(
   }
 
   const timestampsUtcMs = datasetTimestamps(version, datasetId, request.waterYear);
-  const intervalsLayerId =
-    datasetId === NATIONAL_WATER_MODEL_HOURLY_DATASET_ID
-      ? version.layerIds.nationalWaterModelIntervals
-      : version.layerIds.californiaNaturalFlowsIntervals;
+  const intervalsLayerId = intervalsLayerIdOf(version, datasetId);
 
   const depthLayout = version.timeSeriesLayout === 'junction-depth';
   const whereClauses = [`tnc_comid = ${sqlString(tncComid)}`];
-  if (datasetId === NATIONAL_WATER_MODEL_HOURLY_DATASET_ID && timestampsUtcMs.length > 0) {
+  if (isHourlyHostedDataset(datasetId) && timestampsUtcMs.length > 0) {
     // Time overlap with [first timestamp, last timestamp + 1 hour).
     const windowEndMs = timestampsUtcMs[timestampsUtcMs.length - 1] + HOUR_MS;
     whereClauses.push(`valid_from_utc < ${sqlTimestamp(windowEndMs)}`);
@@ -159,6 +158,18 @@ export async function loadHostedTimeSeriesForFlowline(
   });
 
   return { ...file, segments } as HostedTimeSeriesFile;
+}
+
+/** The Held WSE Intervals table (layer id) each Dataset reads. */
+function intervalsLayerIdOf(version: HostedModeledWseVersion, datasetId: HostedModeledDatasetId): number {
+  switch (datasetId) {
+    case NATIONAL_WATER_MODEL_HOURLY_DATASET_ID:
+      return version.layerIds.nationalWaterModelIntervals;
+    case NATIONAL_WATER_MODEL_OPERATIONAL_HOURLY_DATASET_ID:
+      return version.layerIds.nationalWaterModelOperationalIntervals;
+    case CALIFORNIA_NATURAL_FLOWS_MONTHLY_DATASET_ID:
+      return version.layerIds.californiaNaturalFlowsIntervals;
+  }
 }
 
 const DEPTH_INTERVAL_VALUE_FIELDS = ['wse_m', 'junction_depth_upstream_m', 'junction_depth_downstream_m'] as const;

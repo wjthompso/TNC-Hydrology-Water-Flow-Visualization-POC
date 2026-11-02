@@ -14,11 +14,16 @@ export interface ModeledDatasetAccuracyNotice {
   readonly acknowledgeLabel: string;
 }
 
-/** Keyed by catalog datasetId. Edit the wording here; the Dataset's public name stays in the picker label. */
+/** Keyed by catalog datasetId. Edit the wording here; the Dataset's public name stays in its `DATASET_PICKER_OPTIONS` label. */
 export const MODELED_DATASET_ACCURACY_NOTICES: Readonly<Partial<Record<ModeledDatasetId, ModeledDatasetAccuracyNotice>>> = {
   'national-water-model-hourly': {
     title: 'Estimated values, not measurements',
     body: "These modeled water levels (water-surface elevation, WSE: the water's height above sea level, NAVD88) are calculated from modeled flow rates (NOAA National Water Model v3.0) and USGS 3DEP terrain using Manning's equation. The modeled flows are not corrected against gauge readings and can be off by a factor of 2 to 5 on small creeks like these, so the timing of rises and falls is more reliable than the exact heights.",
+    acknowledgeLabel: 'I understand',
+  },
+  'national-water-model-operational-hourly': {
+    title: 'Estimated values, not measurements',
+    body: "These modeled water levels are calculated from NOAA's National Water Model operational flow estimates and lidar terrain using Manning's equation. We have compared the flow estimates with only one stream gauge (Jalama Creek, Sep 2025 – Oct 2026): they averaged about 5 times the gauge's flow, and the Jan 3, 2026 storm peak was about 45% too low. Treat the timing of rises and falls as more reliable than the exact heights; the Observed button shows the gauge's own readings.",
     acknowledgeLabel: 'I understand',
   },
 };

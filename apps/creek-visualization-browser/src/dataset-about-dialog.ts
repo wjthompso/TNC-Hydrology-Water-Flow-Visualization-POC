@@ -1,4 +1,4 @@
-// "About this data" button next to the Dataset picker. Opens a dialog that
+// "About this data" button next to the Observed | Modeled buttons. Opens a dialog that
 // says how the active Dataset's water levels were made. The observed text is
 // fixed here; the modeled content comes from modeled-dataset-info-panel.ts.
 

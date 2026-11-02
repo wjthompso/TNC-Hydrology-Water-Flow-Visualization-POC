@@ -14,9 +14,11 @@
  *
  * Every Data-Product Version has its own service. The modeled experience opens
  * the default pairing: WSE polygons `m3-v2` (the channel ribbon) drawn with
- * modeled WSE `m5-v1`, which was solved on the ribbon's channel. Pointing both
- * service URLs at the `m1-v1` services (below) opens junction-sloped `m1-v1`
- * instead. The observed gauge experience keeps reading the `m1-v1` services:
+ * modeled WSE `m5-v2` (m5-v1's hydraulics solved on the ribbon's channel, plus the
+ * NOAA operational National Water Model Dataset; public since 2026-10-30).
+ * Pointing the modeled service URL at the `m5-v1` service (below) opens the
+ * version without the operational Dataset; pointing both service URLs at the
+ * `m1-v1` services opens junction-sloped `m1-v1` instead. The observed gauge experience keeps reading the `m1-v1` services:
  * its observed water surface elevations need elevation buckets.
  */
 
@@ -24,8 +26,15 @@ export type CreekDataSourceKind = 'hosted' | 'local';
 
 export const DEFAULT_ARCGIS_PORTAL_URL = 'https://dangermondpreserve-spatial.com/portal';
 
-/** Modeled WSE `m5-v1` (Jarrett steep-creek roughness), the default modeled experience's Time Series. */
+/**
+ * Modeled WSE `m5-v2` (Jarrett steep-creek roughness; NOAA retrospective hourly, California Natural Flows monthly, and
+ * NOAA operational hourly Datasets), the default modeled experience's Time Series. Public (Everyone), Query-only.
+ */
 export const DEFAULT_MODELED_WSE_SERVICE_URL =
+  'https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m5_v2/FeatureServer';
+
+/** Modeled WSE `m5-v1`, the previous default (no operational Dataset); set `VITE_MODELED_WSE_SERVICE_URL` to reopen it. */
+export const M5_V1_MODELED_WSE_SERVICE_URL =
   'https://dangermondpreserve-spatial.com/server/rest/services/Hosted/creek_water_visualization_modeled_wse_m5_v1/FeatureServer';
 
 /** WSE polygons `m3-v2` (channel ribbon on the raw lidar bed), the default modeled experience's polygons. */
@@ -54,6 +63,12 @@ export const FALLBACK_MODELED_WSE_LAYER_IDS = {
   californiaNaturalFlowsValues: 2,
   nationalWaterModelIntervals: 3,
   versions: 4,
+  /**
+   * The `national-water-model-operational-hourly` Held WSE Intervals table (published in `m5-v2` as layer 5, after
+   * the versions table). It only applies when `arcgis_table_names` (name → id object) does not name the table;
+   * discovery by name wins.
+   */
+  nationalWaterModelOperationalIntervals: 5,
 } as const;
 
 /** Published layer/table ids in the WSE polygons feature service. */
@@ -186,12 +201,21 @@ export const creekDataSourceConfiguration: CreekDataSourceConfiguration = resolv
   ...testModeDataSourceOverride(runtimeEnvironment, typeof location === 'undefined' ? '' : location.search),
 });
 
+/**
+ * HOSTED NAMING FOR `national-water-model-operational-hourly` (the one place to change).
+ * Table name: `<prefix>` + this suffix, e.g. `modeled_wse_m5_v2_nwm_operational_hourly_held_intervals` (published in
+ * the `m5-v2` service), with the same columns as the other Held WSE Interval tables (`segment_id`, `valid_from_utc`,
+ * `valid_until_utc`, `wse_m`, the junction depth columns, `tnc_comid`).
+ */
+export const NWM_OPERATIONAL_HOURLY_INTERVALS_TABLE_SUFFIX = '_nwm_operational_hourly_held_intervals';
+
 /** Published table names (from `arcgis_table_names`) for each modeled WSE layer role. */
 export const MODELED_WSE_M1_V1_TABLE_NAME_BY_ROLE = {
   creekSegments: 'modeled_wse_m1_v1_creek_segments',
   californiaNaturalFlowsIntervals: 'modeled_wse_m1_v1_cnf_monthly_held_intervals',
   californiaNaturalFlowsValues: 'modeled_wse_m1_v1_cnf_monthly_values',
   nationalWaterModelIntervals: 'modeled_wse_m1_v1_nwm_hourly_held_intervals',
+  nationalWaterModelOperationalIntervals: `modeled_wse_m1_v1${NWM_OPERATIONAL_HOURLY_INTERVALS_TABLE_SUFFIX}`,
   versions: 'modeled_wse_versions',
 } as const satisfies Record<keyof ModeledWseLayerIds, string>;
 

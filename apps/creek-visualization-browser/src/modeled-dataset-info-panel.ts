@@ -43,6 +43,11 @@ const DATASET_SUMMARIES: Readonly<Record<string, DatasetSummary>> = {
       'The NOAA National Water Model is a nationwide computer simulation of rivers and streams driven by weather data. Its retrospective run gives an hourly flow for every stream reach but is not corrected to local gauges, so the timing of rises and falls is more trustworthy than the size of the flow. The water heights shown here were derived from those flows by the UCSB Spatial Center.',
     sources: [{ label: 'NOAA National Water Model retrospective', url: 'https://registry.opendata.aws/nwm-archive/' }],
   },
+  'national-water-model-operational-hourly': {
+    summary:
+      'The NOAA National Water Model is a nationwide computer simulation of rivers and streams driven by weather data. Its operational run (the Analysis and Assimilation run) gives an hourly flow for every stream reach from September 2025 to October 2026, but is not corrected to local gauges, so the timing of rises and falls is more trustworthy than the size of the flow. The water heights shown here were derived from those flows by the UCSB Spatial Center.',
+    sources: [{ label: 'NOAA National Water Model', url: 'https://www.nco.ncep.noaa.gov/pmb/products/nwm/' }],
+  },
 };
 
 /**
