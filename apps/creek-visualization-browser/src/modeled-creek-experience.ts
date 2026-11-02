@@ -70,6 +70,7 @@ import {
   type LoadedTimeSeries,
 } from './modeled-water-data-store';
 import { anchorWaterDepthSeriesM } from './water-level-units';
+import type { WaterSurfaceElevationSeries } from './water-surface-elevation-chart';
 import { createModeledWaterSceneRenderer } from './modeled-water-scene-renderer';
 import { buildModeledSegmentInspection, type ModeledSegmentInspection } from './modeled-segment-inspection';
 import { modeledDataSource } from './modeled-data-source';
@@ -800,38 +801,66 @@ export async function startModeledCreekExperience(
     lifetime,
   );
 
-  /** One depth array per loaded WSE array, so the chart sees the same content until a new file lands. */
-  const anchorWaterDepthByWseSeries = new WeakMap<readonly (number | null)[], readonly (number | null)[]>();
+  /** Stitched, range-clipped chart arrays of the last request, so an unchanged picture keeps the same arrays. */
+  let lastChartSeries: {
+    segmentId: string;
+    files: readonly LoadedTimeSeries[];
+    rangeUtcMs: readonly [number, number];
+    series: Pick<WaterSurfaceElevationSeries, 'timestampsUtcMs' | 'depthM'>;
+  } | null = null;
 
   /**
-   * The chart shows the Time Series file that covers the selected time: the
-   * water year for hourly Datasets, the whole record otherwise. Only that file
-   * is in memory, so a click on the chart always lands on a loaded value. It
-   * charts Anchor Water Depth: the file's WSE minus the segment's anchor bed.
+   * The chart spans the same From–To range as the time slider, so it loads every Time Series file that
+   * range touches (one per water year for hourly Datasets), joins them, and clips to the range. It charts
+   * Anchor Water Depth: each file's WSE minus the segment's anchor bed.
    */
   const chartContentForSegment = (segmentId: string): SegmentChartContent => {
     const tncComid = segmentId.split('-')[0];
-    const series = store.seriesAt(tncComid, state.selectedTimeUtcMs);
-    if (!series) return { emptyText: `Loading modeled water depth for Creek Segment ${segmentId}…` };
-    const wseM = series.valuesBySegmentId.get(segmentId);
-    if (!wseM) return { emptyText: `${datasetLabel} has no values for Creek Segment ${segmentId}.` };
-    const anchorBedElevationM = series.anchorBedElevationMBySegmentId.get(segmentId);
-    if (anchorBedElevationM === undefined) {
+    const [rangeStartUtcMs, rangeEndUtcMs] = timeline.rangeUtcMs;
+    store.requestSeriesSpan(tncComid, rangeStartUtcMs, rangeEndUtcMs);
+    const files = store.seriesSpan(tncComid, rangeStartUtcMs, rangeEndUtcMs);
+    if (!files) return { emptyText: `Loading modeled water depth for Creek Segment ${segmentId}…` };
+    const filesWithValues = files.filter((file) => file.valuesBySegmentId.has(segmentId));
+    if (filesWithValues.length === 0) return { emptyText: `${datasetLabel} has no values for Creek Segment ${segmentId}.` };
+    if (filesWithValues.some((file) => !file.anchorBedElevationMBySegmentId.has(segmentId))) {
       return { emptyText: `No anchor bed elevation for Creek Segment ${segmentId}.` };
     }
-    let depthM = anchorWaterDepthByWseSeries.get(wseM);
-    if (!depthM) {
-      depthM = anchorWaterDepthSeriesM(wseM, anchorBedElevationM);
-      anchorWaterDepthByWseSeries.set(wseM, depthM);
+    const unchanged =
+      lastChartSeries !== null &&
+      lastChartSeries.segmentId === segmentId &&
+      lastChartSeries.rangeUtcMs[0] === rangeStartUtcMs &&
+      lastChartSeries.rangeUtcMs[1] === rangeEndUtcMs &&
+      lastChartSeries.files.length === filesWithValues.length &&
+      lastChartSeries.files.every((file, index) => file === filesWithValues[index]);
+    if (!unchanged) {
+      const timestampsUtcMs: number[] = [];
+      const depthM: (number | null)[] = [];
+      for (const file of filesWithValues) {
+        const wseM = file.valuesBySegmentId.get(segmentId) as readonly (number | null)[];
+        const bedM = file.anchorBedElevationMBySegmentId.get(segmentId) as number;
+        const fileDepthM = anchorWaterDepthSeriesM(wseM, bedM);
+        file.timestampsUtcMs.forEach((timeUtcMs, index) => {
+          if (timeUtcMs < rangeStartUtcMs || timeUtcMs > rangeEndUtcMs) return;
+          timestampsUtcMs.push(timeUtcMs);
+          depthM.push(fileDepthM[index]);
+        });
+      }
+      lastChartSeries = {
+        segmentId,
+        files: filesWithValues,
+        rangeUtcMs: [rangeStartUtcMs, rangeEndUtcMs],
+        series: { timestampsUtcMs, depthM },
+      };
     }
     const coverage =
-      selected.dataset.timeStep === 'hourly' ? `, water year ${waterYearOf(state.selectedTimeUtcMs)}` : '';
+      selected.dataset.timeStep === 'hourly'
+        ? `, water year${filesWithValues.length > 1 ? 's' : ''} ${[...new Set(filesWithValues.map((file) => waterYearOf(file.timestampsUtcMs[0])))].join(', ')}`
+        : '';
     return {
       series: {
         segmentId,
         sourceLabel: `Modeled, ${datasetLabel}${coverage}`,
-        timestampsUtcMs: series.timestampsUtcMs,
-        depthM,
+        ...(lastChartSeries as NonNullable<typeof lastChartSeries>).series,
       },
     };
   };
@@ -856,6 +885,8 @@ export async function startModeledCreekExperience(
       lifetime,
     });
     selectedCreekSegmentChart.setSelectedTime(state.selectedTimeUtcMs);
+    // A new From or To date re-spans the chart.
+    timeline.onRangeChange(() => selectedCreekSegmentChart?.refresh());
   }
 
   troutConditions.onChange(() => applySelectedTime(state.selectedTimeUtcMs));
