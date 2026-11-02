@@ -4,7 +4,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Runs Stages 0–5 in order and forwards every command-line argument (for example
+ * Runs Stages 0–5 in order, with the operational National Water Model acquisition (Stage 0b) after Stage 0 and forwards every command-line argument (for example
  * `--extent=jalama-gauge-reach`, `--force`, `--water-years=2018-2023`,
  * `--wse-polygon-method=<method-id>`) to each stage. Only Stage 4 reads `--wse-polygon-method=`;
  * Stage 5 catalogs every saved WSE Polygon Generation Method version either way.
@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const STAGE_FILES = [
   'stage-00-acquire.ts',
+  'operational-national-water-model/stage-00-acquire-operational-national-water-model.ts',
   'stage-01-cross-sections.ts',
   'stage-02-rating-curves.ts',
   'stage-03-time-series.ts',
@@ -32,7 +33,7 @@ for (const stageFile of STAGE_FILES) {
     ['--experimental-strip-types', '--disable-warning=ExperimentalWarning', path.join(stageDirectoryPath, stageFile), ...forwardedArguments],
     { stdio: 'inherit' },
   );
-  timings.push(`${stageFile.replace(/\.ts$/, '')}: ${((Date.now() - stageStartedAt) / 1000).toFixed(1)} s`);
+  timings.push(`${path.basename(stageFile).replace(/\.ts$/, '')}: ${((Date.now() - stageStartedAt) / 1000).toFixed(1)} s`);
   if (result.status !== 0) {
     console.error(`Stopped: ${stageFile} exited with ${result.status ?? result.signal}.`);
     process.exitCode = result.status ?? 1;

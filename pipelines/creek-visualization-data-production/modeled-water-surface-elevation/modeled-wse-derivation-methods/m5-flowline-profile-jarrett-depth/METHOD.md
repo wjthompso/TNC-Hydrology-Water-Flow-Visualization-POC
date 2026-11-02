@@ -1,12 +1,14 @@
 # Modeled WSE Derivation Method `m5-flowline-profile-jarrett-depth`
 
-Version 1 (experimental). Data-Product Version `m5-v1` once frozen. Stages 0–2 are shared with m1; Stage 3 runs from `stage-03-flowline-profile-jarrett-time-series.ts` in this folder. Like m4, it has no polygon version of its own: `flowline-channel-ribbon` v2 (built from `m3-v2`) draws it through a channel pairing (METHODOLOGY.md, "Channel pairing").
+Version 2 (experimental). Data-Product Version `m5-v2` once frozen (`m5-v1` is frozen from v1). Stages 0–2 are shared with m1; Stage 3 runs from `stage-03-flowline-profile-jarrett-time-series.ts` in this folder. Like m4, it has no polygon version of its own: `flowline-channel-ribbon` v2 (built from `m3-v2`) draws it through a channel pairing (METHODOLOGY.md, "Channel pairing").
 
 ```text
 npm run pipeline:modeled-wse:m5-time-series -- --extent=dangermond-preserve --modeled-wse-method=m5-flowline-profile-jarrett-depth
 ```
 
-Browser: `?wsePolygonMethod=flowline-channel-ribbon@v2&modeledWse=m5-flowline-profile-jarrett-depth@v1`, or Dev tools → Derived data products → Modeled WSE version "m5-v1".
+Browser: `?wsePolygonMethod=flowline-channel-ribbon@v2&modeledWse=m5-flowline-profile-jarrett-depth@v2`, or Dev tools → Derived data products → Modeled WSE version "m5-v2". Without `?modeledWse=`, the default pairing opens the newest saved version of this method, v2.
+
+Before Stage 3, run the operational acquisition once (it is also in `pipeline:modeled-wse:all`, after Stage 0): `npm run pipeline:modeled-wse:acquire-operational-national-water-model -- --extent=dangermond-preserve`.
 
 ## What it does
 
@@ -26,6 +28,20 @@ So an m4 → m5 difference comes from the law alone, and an m3 v2 → m5 differe
    - The n is blended with m4's rule: Manning's n (0.04 / 0.07) at S ≤ 2%, Jarrett at S ≥ 8%, ln n linear in ln S between.
    - The effective n never drops below Manning's.
    - A segment whose anchor slope is 2% or less gets m3 v2's rating curve value for value.
+
+## Datasets (v2)
+
+| Dataset | Publisher | Time step | Window | Source |
+| --- | --- | --- | --- | --- |
+| `california-natural-flows-monthly` | `california-natural-flows` | monthly | 1950-01 – 2024-12 | unchanged from v1 |
+| `national-water-model-hourly` | `noaa-national-water-model` | hourly | 2017-10-01 – 2023-02-01 | NWM v3.0 retrospective, unchanged from v1 |
+| `national-water-model-operational-hourly` | `noaa-national-water-model` | hourly | 2025-09-01T00Z – 2026-10-29T23Z (override with `--operational-nwm-start=` / `--operational-nwm-end=`) | NOAA operational National Water Model (NWM) Analysis and Assimilation run, new in v2 |
+
+- **Why.** The observed USGS gauge 11120600 (Jalama) starts 2025-09-04, after the retrospective ends, so observed and modeled flow never overlapped. The operational run is the only NWM record that covers the gauge's period.
+- **Not the retrospective.** The operational run uses different rainfall inputs, assimilates USGS gauge flows (nudging) on any reach with an assimilated gauge, and carries no guarantee of the same model version. Every file's `NWM_version_number`, `code_version`, and `model_configuration` is recorded in the acquisition manifest (`00-acquire/operational-national-water-model/manifest.json`, `measurements.nwmVersionRuns`), and a change mid-range is a loud warning.
+- **Same hydraulics.** The Dataset goes through the same Stage 3 as the other two: reach discharge × drainage-area ratio, the anchor rating curve, junction depths, pool-filled surface. The two existing Datasets are byte-identical to v1.
+- **Accuracy.** Checked against one gauge only: flows averaged about 5× the gauge's (about 7× in Jan 2026) and the 2026-01-03 peak was about 45% too low; timing is more reliable than values. The text is `OPERATIONAL_NATIONAL_WATER_MODEL_CATALOG_DATASET` / `operationalCatalogDataset()` in `operational-national-water-model/operational-national-water-model-config.ts`, and Stage 5 lists the Dataset in `catalog.json` for any version whose parameters carry `operationalHourlyDataset`.
+- **Polygons.** Reused through the channel pairing (`flowline-channel-ribbon` v2 on m3 v2's channel); Stage 4 is not rerun.
 
 ## Why the depths are reasonable
 
@@ -70,3 +86,4 @@ So an m4 → m5 difference comes from the law alone, and an m3 v2 → m5 differe
 | Version | Change |
 | --- | --- |
 | 1 | New method: m3 v2 with Jarrett's (1984) flow resistance, blended from Manning's n over 2–8% slope as in m4, on m3 v2's channel. |
+| 2 | Adds the operational National Water Model hourly Dataset (`national-water-model-operational-hourly`, 2025-09-01 – 2026-10-29) next to the two existing Datasets. Hydraulics and the two existing Datasets are unchanged. `steep-creek-time-series.ts` (shared with m4) gained an optional extra-Datasets input, so m4 v1's fingerprint no longer matches its saved manifest. |

@@ -77,6 +77,17 @@ const STEEP_EXAMPLE_SEGMENT_ID = '27714697-045';
 
 type OutcomeCounts = Record<InversionOutcome, number>;
 
+/**
+ * An hourly Dataset a method adds to Stage 3 beyond California Natural Flows and the retrospective National Water Model: its
+ * normalized discharge file in `00-acquire/`, solved exactly like the retrospective one and written under its own `datasetId`.
+ * m4 passes none; m5 v2 passes the operational National Water Model.
+ */
+export interface ExtraHourlyDischargeDataset {
+  datasetId: string;
+  /** File name in `00-acquire/`, a `NormalizedDischargeFile`. */
+  file: string;
+}
+
 function emptyOutcomeCounts(): OutcomeCounts {
   return { bed: 0, interpolated: 0, clamped: 0, missing: 0 };
 }
@@ -447,6 +458,7 @@ async function buildTimeSeries(input: {
   roughnessN: SubsectionRoughnessN;
   blend: SteepCreekRoughnessBlend;
   outputDirectory: string;
+  extraHourlyDatasets: readonly ExtraHourlyDischargeDataset[];
 }): Promise<StageResult> {
   const warnings: string[] = [];
   const counts: Record<string, number> = {};
@@ -479,6 +491,7 @@ async function buildTimeSeries(input: {
   const datasets = [
     { datasetId: CALIFORNIA_NATURAL_FLOWS.datasetId, file: CNF_DISCHARGE_FILE, hourly: false },
     { datasetId: NATIONAL_WATER_MODEL.datasetId, file: NWM_DISCHARGE_FILE, hourly: true },
+    ...input.extraHourlyDatasets.map((extra) => ({ datasetId: extra.datasetId, file: extra.file, hourly: true })),
   ];
   for (const dataset of datasets) {
     const discharge = await readNormalizedDischarge(path.join(stageDirectory('acquire'), dataset.file));
@@ -572,7 +585,10 @@ export async function runSteepCreekTimeSeriesStage(input: {
   channelFromModeledWseVersion: { methodId: string; version: number };
   roughnessN: SubsectionRoughnessN;
   blend: SteepCreekRoughnessBlend;
+  /** Optional hourly Datasets beyond the two every steep-creek method writes; their discharge files are Stage 3 inputs. */
+  extraHourlyDatasets?: readonly ExtraHourlyDischargeDataset[];
 }): Promise<void> {
+  const extraHourlyDatasets = input.extraHourlyDatasets ?? [];
   await runStageEntryPoint(async () => {
     const requested = requestedModeledWseDerivationMethod(process.argv);
     if (requested.id !== input.method.id) {
@@ -595,6 +611,7 @@ export async function runSteepCreekTimeSeriesStage(input: {
         NHDPLUSV2_CROSSWALK_PATH,
         path.join(acquireDirectory, CNF_DISCHARGE_FILE),
         path.join(acquireDirectory, NWM_DISCHARGE_FILE),
+        ...extraHourlyDatasets.map((extra) => path.join(acquireDirectory, extra.file)),
         terrainTileIndexPath,
         ...readTerrainTileIndex(await readJson(terrainTileIndexPath)).tiles.map((tile) => path.join(acquireDirectory, tile.file)),
       ],
@@ -625,7 +642,7 @@ export async function runSteepCreekTimeSeriesStage(input: {
           poolFilledWaterSurface: POOL_FILLED_WATER_SURFACE,
         },
       },
-      run: () => buildTimeSeries({ method: input.method, roughnessN: input.roughnessN, blend: input.blend, outputDirectory }),
+      run: () => buildTimeSeries({ method: input.method, roughnessN: input.roughnessN, blend: input.blend, outputDirectory, extraHourlyDatasets }),
     });
   });
 }
