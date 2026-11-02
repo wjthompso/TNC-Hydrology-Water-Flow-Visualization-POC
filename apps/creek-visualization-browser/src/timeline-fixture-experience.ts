@@ -4,7 +4,7 @@ import {
 } from './creek-data-contract';
 import {
   bindObservationTimelineControls,
-  readPlaybackSpeedButtons,
+  readPlaybackControlGroup,
 } from './observation-timeline-controls';
 import { timelineOnlyMode } from './timeline-fixture-request';
 
@@ -29,19 +29,19 @@ async function startTimelineExperience(): Promise<void> {
     if (!(timeReadout instanceof HTMLElement)) throw new Error('The time readout is missing.');
 
     const mode = timelineOnlyMode(window.location.search, import.meta.env.VITE_TEST_MODE === 'true');
-    const speedButtons = readPlaybackSpeedButtons();
+    const playbackControls = readPlaybackControlGroup();
     if (mode === 'opening') {
       const { loadPublishedCreekVisualizationData } = await import('./http-data-contract-loader');
       const data = await loadPublishedCreekVisualizationData();
       bindObservationTimelineControls(
-        { playButton, slider, timeReadout, speedButtons },
+        { playButton, slider, timeReadout, playbackControls },
         data.clock,
         data.openingGridIndex,
         () => {},
       );
     } else {
       bindObservationTimelineControls(
-        { playButton, slider, timeReadout, speedButtons },
+        { playButton, slider, timeReadout, playbackControls },
         fixtureClock,
         0,
         () => {},

@@ -1,54 +1,59 @@
 import { expect, test, type Page } from '../../../../support/browser/deterministic-network.ts';
 import { timelineFixturePath } from '../../../../../apps/creek-visualization-browser/src/timeline-fixture-request.ts';
+import {
+  PLAYBACK_SPEEDS,
+  chooseSpeed,
+  openSpeedMenu,
+  speedButton,
+  speedMenu,
+} from './playback-controls.ts';
 
 /**
- * Methodology: Opens the timeline fixture page, waits until the page
- * stylesheet has painted, and reads the computed background, border, and text
- * color of the five speed buttons. Before any click, 1× is the only button
- * whose paint differs. It then clicks 2× and checks that 2× is the only
- * button whose paint differs. The ArcGIS scene and published gauge series are
- * not loaded. It does not press Play, and it does not check how fast the
- * slider moves or the map.
+ * Methodology: Opens the timeline fixture page and waits until the page
+ * stylesheet has painted. Before any pick, it reads the speed button text, which
+ * must be 1×, then opens the speed menu and checks that exactly the 1× option
+ * has aria-selected="true" and a check mark (✓) in its text, and that no other
+ * option is selected or shows one. It then picks 2× from the menu and checks
+ * that the speed button text is 2× and that, in the reopened menu, only the 2×
+ * option is selected and marked. The ArcGIS scene and published gauge series are
+ * not loaded. It does not press Play, and it does not check colors, how fast
+ * the slider moves, or the map.
  */
 
-const SPEED_BUTTON_IDS = [
-  'timeline-speed-0-5x',
-  'timeline-speed-1x',
-  'timeline-speed-2x',
-  'timeline-speed-5x',
-  'timeline-speed-10x',
-] as const;
-
-test('Highlight the current playback speed, starting at 1× until another speed is chosen.', async ({
+test('Show the current playback speed on the speed button and mark it in the speed menu, starting at 1× until another speed is chosen.', async ({
   page,
 }) => {
   // Open the timeline and wait until the page has painted.
-  // Before any click, 1× is the only speed button that looks selected.
   await page.goto(timelineFixturePath());
   await expect(page.locator('#timeline-readout')).not.toHaveText('Loading time…');
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(2, 6, 23)');
 
-  await expectHighlightedSpeed(page, 'timeline-speed-1x');
-  // Choosing 2× moves that highlight onto 2× alone.
-  await page.getByRole('button', { name: '2 times speed', exact: true }).click();
-  await expectHighlightedSpeed(page, 'timeline-speed-2x');
+  // Before any pick, the button reads 1× and the menu marks 1× alone.
+  await expect(speedButton(page)).toHaveText('1×');
+  await expectMarkedSpeed(page, '1 times speed');
+
+  // Picking 2× moves the button text and the menu mark onto 2× alone.
+  await chooseSpeed(page, '2 times speed');
+  await expect(speedButton(page)).toHaveText('2×');
+  await expectMarkedSpeed(page, '2 times speed');
 });
 
-async function expectHighlightedSpeed(page: Page, selectedId: string): Promise<void> {
-  const paints = await page.evaluate((ids: readonly string[]) => {
-    const result: Record<string, string> = {};
-    for (const id of ids) {
-      const button = document.getElementById(id);
-      if (!(button instanceof HTMLElement)) throw new Error(`The speed button ${id} is missing.`);
-      const style = getComputedStyle(button);
-      result[id] = `${style.backgroundColor}|${style.borderTopColor}|${style.color}`;
-    }
-    return result;
-  }, SPEED_BUTTON_IDS);
+async function expectMarkedSpeed(page: Page, markedOptionName: string): Promise<void> {
+  await openSpeedMenu(page);
+  const options = speedMenu(page).getByRole('option');
+  await expect(options).toHaveCount(PLAYBACK_SPEEDS.length);
 
-  const selected = paints[selectedId];
-  const others = SPEED_BUTTON_IDS.filter((id) => id !== selectedId).map((id) => paints[id]);
-  const detail = JSON.stringify(paints);
-  expect(others.every((paint) => paint === others[0]), `Inactive speeds should match. ${detail}`).toBe(true);
-  expect(selected, `${selectedId} should use a different highlight. ${detail}`).not.toBe(others[0]);
+  for (const speed of PLAYBACK_SPEEDS) {
+    const option = speedMenu(page).getByRole('option', { name: speed.optionName, exact: true });
+    if (speed.optionName === markedOptionName) {
+      await expect(option, `${speed.optionName} should be selected.`).toHaveAttribute('aria-selected', 'true');
+      await expect(option, `${speed.optionName} should show a check mark.`).toContainText('✓');
+    } else {
+      await expect(option, `${speed.optionName} should not be selected.`).not.toHaveAttribute('aria-selected', 'true');
+      await expect(option, `${speed.optionName} should not show a check mark.`).not.toContainText('✓');
+    }
+  }
+
+  // Close the menu again so the next step opens it fresh.
+  await page.keyboard.press('Escape');
 }

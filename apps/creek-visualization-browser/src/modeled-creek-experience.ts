@@ -30,7 +30,7 @@ import type { CreekVisualizationAttachment } from './creek-visualization-library
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import {
   bindObservationTimelineControls,
-  type PlaybackSpeedControl,
+  type PlaybackControlGroup,
   type TimeRangeControls,
 } from './observation-timeline-controls';
 import {
@@ -188,8 +188,8 @@ export interface ModeledExperienceElements {
   slider: HTMLInputElement;
   timeReadout: HTMLElement;
   status: HTMLElement;
-  speedButtons: readonly PlaybackSpeedControl[];
-    timeRangeControls: TimeRangeControls | null;
+  playbackControls: PlaybackControlGroup;
+  timeRangeControls: TimeRangeControls | null;
   modeledPanel: HTMLElement;
   transferToggle: HTMLInputElement;
   transferToggleLabel: HTMLElement;
@@ -791,7 +791,7 @@ export async function startModeledCreekExperience(
       playButton: elements.playButton,
       slider: elements.slider,
       timeReadout: elements.timeReadout,
-      speedButtons: elements.speedButtons,
+      playbackControls: elements.playbackControls,
       timeRangeControls: elements.timeRangeControls ?? undefined,
     },
     clock,

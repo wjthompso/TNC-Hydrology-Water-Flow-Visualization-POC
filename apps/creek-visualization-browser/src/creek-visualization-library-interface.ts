@@ -10,7 +10,7 @@ import { createExperienceLifetime, type ExperienceLifetime } from './experience-
 import { FEET_TO_METERS, GAUGE_DATUM_FT, gaugeHeightFtFromWaterSurfaceElevationM } from './observed-gauge-readings';
 import {
   bindObservationTimelineControls,
-  type PlaybackSpeedControl,
+  type PlaybackControlGroup,
   type TimeRangeControls,
 } from './observation-timeline-controls';
 import {
@@ -46,7 +46,8 @@ export interface AttachCreekVisualizationOptions {
   slider: HTMLInputElement;
   timeReadout: HTMLElement;
   status: HTMLElement;
-  speedButtons: readonly PlaybackSpeedControl[];
+  /** Direction button and speed menu. */
+  playbackControls: PlaybackControlGroup;
   /** Date pickers that narrow the slider; omit on pages without them. */
   timeRangeControls?: TimeRangeControls | null;
   /** Opens at the grid slot nearest this time (clamped to the record); null opens at the data's opening slot. */
@@ -188,7 +189,7 @@ export function attachCreekVisualization(
       playButton: options.playButton,
       slider: options.slider,
       timeReadout: options.timeReadout,
-      speedButtons: options.speedButtons,
+      playbackControls: options.playbackControls,
       timeRangeControls: options.timeRangeControls ?? undefined,
     },
     options.data.clock,

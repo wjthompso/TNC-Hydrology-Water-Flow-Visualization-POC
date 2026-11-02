@@ -33,7 +33,7 @@ import { bindSceneImageryWidget } from './scene-imagery-widget';
 import { showLoadingMessage } from './loading-spinner';
 import { installMonitoringStationLocator } from './monitoring-station-locator';
 import { addMonitoringStationMarkers } from './monitoring-station-marker-layer';
-import { readPlaybackSpeedButtons, readTimeRangeControls } from './observation-timeline-controls';
+import { readPlaybackControlGroup, readTimeRangeControls } from './observation-timeline-controls';
 import { createStandaloneExperienceShell } from './standalone-experience-shell';
 import type { WaterSurfaceElevationChartState } from './water-surface-elevation-chart';
 
@@ -236,7 +236,7 @@ async function openModeledExperience(
     selection,
     {
       ...elements,
-      speedButtons: readPlaybackSpeedButtons(),
+      playbackControls: readPlaybackControlGroup(),
       timeRangeControls: readTimeRangeControls(),
       ...readModeledPanelElements(),
     },
@@ -271,7 +271,7 @@ async function openObservedExperience(
     slider: elements.slider,
     timeReadout: elements.timeReadout,
     status: elements.status,
-    speedButtons: readPlaybackSpeedButtons(),
+    playbackControls: readPlaybackControlGroup(),
     timeRangeControls: readTimeRangeControls(),
     openingTimeUtcMs: readOpeningTimeQuery(location.search),
     // The gauge's creek segment opens selected, so the chart is visible before anyone discovers clicking.

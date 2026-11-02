@@ -39,6 +39,21 @@ export function dateInputValue(timeUtcMs: number): string {
   return new Date(wallClockAsUtcMs(timeUtcMs)).toISOString().slice(0, 10);
 }
 
+const dateTextFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'UTC',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+/** `Sep 30, 2017` for a `YYYY-MM-DD` date input value. Empty when the text is not a date. */
+export function formatDateInputValue(dateText: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText);
+  if (!match) return '';
+  // The calendar day is formatted as a UTC date, so the viewer's time zone cannot shift it.
+  return dateTextFormatter.format(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+}
+
 /** The instant a Pacific day starts. Null when the text is not `YYYY-MM-DD`. */
 export function dayStartUtcMs(dateText: string): number | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText);

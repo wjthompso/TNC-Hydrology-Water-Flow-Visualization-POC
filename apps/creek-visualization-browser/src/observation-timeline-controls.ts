@@ -5,55 +5,82 @@ import {
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
 import {
   dateInputValue,
+  formatDateInputValue,
   fullSlotRange,
   slotRangeForDates,
   slotRangesEqual,
   type SlotRange,
 } from './observation-time-range';
+import { DEFAULT_PLAYBACK_SPEED, bindPlaybackSpeedMenu } from './playback-speed-menu';
 
 /** One slot per 100 ms. 1× uses this delay. 2× halves it. */
 const BASE_PLAYBACK_STEP_INTERVAL_MS = 100;
 
-export const PLAYBACK_SPEED_BUTTONS = [
-  { speed: 0.5, elementId: 'timeline-speed-0-5x' },
-  { speed: 1, elementId: 'timeline-speed-1x' },
-  { speed: 2, elementId: 'timeline-speed-2x' },
-  { speed: 5, elementId: 'timeline-speed-5x' },
-  { speed: 10, elementId: 'timeline-speed-10x' },
-] as const;
-
-export interface PlaybackSpeedControl {
-  readonly speed: number;
-  readonly button: HTMLButtonElement;
+/** Direction button, speed button, and the speed listbox the button opens. */
+export interface PlaybackControlGroup {
+  directionButton: HTMLButtonElement;
+  speedButton: HTMLButtonElement;
+  speedMenu: HTMLElement;
 }
 
-export function readPlaybackSpeedButtons(): PlaybackSpeedControl[] {
-  return PLAYBACK_SPEED_BUTTONS.map(({ speed, elementId }) => {
-    const button = document.getElementById(elementId);
-    if (!(button instanceof HTMLButtonElement)) {
-      throw new Error(`The ${speed} times speed button is missing.`);
-    }
-    return { speed, button };
-  });
+/** Reads the playback direction and speed controls from the page. Throws when one is missing. */
+export function readPlaybackControlGroup(): PlaybackControlGroup {
+  const directionButton = document.getElementById('timeline-direction-btn');
+  const speedButton = document.getElementById('timeline-speed-btn');
+  const speedMenu = document.getElementById('timeline-speed-menu');
+  if (!(directionButton instanceof HTMLButtonElement)) throw new Error('The playback direction button is missing.');
+  if (!(speedButton instanceof HTMLButtonElement)) throw new Error('The playback speed button is missing.');
+  if (!(speedMenu instanceof HTMLElement)) throw new Error('The playback speed menu is missing.');
+  return { directionButton, speedButton, speedMenu };
 }
 
-/** Reads the time range block from the page. Null on pages without it, such as the timeline test page. */
+/** Reads the time range controls from the page. Null on pages without them. */
 export function readTimeRangeControls(): TimeRangeControls | null {
   const container = document.getElementById('timeline-range');
+  const startPicker = document.getElementById('timeline-range-start-picker');
+  const endPicker = document.getElementById('timeline-range-end-picker');
   const startDateInput = document.getElementById('timeline-range-start');
   const endDateInput = document.getElementById('timeline-range-end');
+  const startDateText = document.getElementById('timeline-range-start-text');
+  const endDateText = document.getElementById('timeline-range-end-text');
   const resetButton = document.getElementById('timeline-range-reset');
   const message = document.getElementById('timeline-range-message');
   if (
     !(container instanceof HTMLElement) ||
+    !(startPicker instanceof HTMLElement) ||
+    !(endPicker instanceof HTMLElement) ||
     !(startDateInput instanceof HTMLInputElement) ||
     !(endDateInput instanceof HTMLInputElement) ||
+    !(startDateText instanceof HTMLElement) ||
+    !(endDateText instanceof HTMLElement) ||
     !(resetButton instanceof HTMLButtonElement) ||
     !(message instanceof HTMLElement)
   ) {
     return null;
   }
-  return { container, startDateInput, endDateInput, resetButton, message };
+  return {
+    container,
+    startPicker,
+    endPicker,
+    startDateInput,
+    endDateInput,
+    startDateText,
+    endDateText,
+    resetButton,
+    message,
+  };
+}
+
+/**
+ * Opens the browser's calendar. Browsers without `showPicker`, or that refuse it, get focus,
+ * and the keyboard still opens the native picker. (A synthetic click here would re-enter this handler.)
+ */
+function openDatePicker(input: HTMLInputElement): void {
+  try {
+    input.showPicker();
+  } catch {
+    input.focus();
+  }
 }
 
 function stepIntervalMs(speed: number): number {
@@ -64,6 +91,13 @@ const PLAY_ICON =
   '<svg class="ml-0.5 h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9.5-5.5L4 2.5Z"/></svg>';
 const PAUSE_ICON =
   '<svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3.5" y="2.5" width="3" height="11" rx="0.75"/><rect x="9.5" y="2.5" width="3" height="11" rx="0.75"/></svg>';
+
+const FORWARD_ICON =
+  '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+const REVERSE_ICON =
+  '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>';
+
+type PlaybackDirection = 'forward' | 'reverse';
 
 const observationTimeFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Los_Angeles',
@@ -81,10 +115,17 @@ export function formatObservationTime(timeUtcMs: number): string {
 
 /** Date pickers that narrow the slider to part of the record. */
 export interface TimeRangeControls {
-  /** Whole block; hidden until the controls are bound. */
+  /** Holds the Full record button and the message; hidden until the controls are bound. */
   container: HTMLElement;
+  /** Wrappers of the two date pickers; hidden until the controls are bound. */
+  startPicker: HTMLElement;
+  endPicker: HTMLElement;
+  /** The inputs hold the dates. Their native text is invisible; the text elements below show them. */
   startDateInput: HTMLInputElement;
   endDateInput: HTMLInputElement;
+  /** Show each date as "Sep 30, 2017". */
+  startDateText: HTMLElement;
+  endDateText: HTMLElement;
   resetButton: HTMLButtonElement;
   /** Polite live region for a rejected date. */
   message: HTMLElement;
@@ -94,7 +135,8 @@ export interface ObservationTimelineElements {
   playButton: HTMLButtonElement;
   slider: HTMLInputElement;
   timeReadout: HTMLElement;
-  speedButtons?: readonly PlaybackSpeedControl[];
+  /** Direction button and speed menu. The timeline works without them. */
+  playbackControls?: PlaybackControlGroup;
   timeRangeControls?: TimeRangeControls;
 }
 
@@ -107,17 +149,22 @@ export interface ObservationTimelineController {
 }
 
 /**
- * The slider indexes the 15-minute grid, including gap slots.
- * Speed buttons choose 0.5×, 1×, 2×, 5×, or 10× and do not start playback.
- * The chosen speed uses a brighter button color. The page starts at 1×.
- * 1× steps one slot every 100 ms. Play starts at the chosen speed. Pause stops.
+ * The slider indexes the observation grid, including gap slots.
+ * The speed button opens a menu of 0.1×, 0.2×, 0.5×, 1×, 2×, 5×, and 10×. Choosing a speed
+ * does not start playback. The page starts at 1×, which steps one slot every 100 ms,
+ * so 0.1× steps one slot per second. Play starts at the chosen speed. Pause stops.
  * Changing speed while playback is running keeps playing at the new speed.
- * Scrubbing while playback is running keeps playing from the new slot.
- * Play on the last slot restarts at the first slot.
- * Reaching the last slot stops playback and returns the button to Play.
- * Time range controls narrow the slider to whole days. The slider, playback,
- * and Play-restart then use only that range. A selected time outside a new
+ * The direction button starts on forward and flips between forward and reverse.
+ * Forward moves the slider up one slot per step. Reverse moves it down one slot per step.
+ * Flipping the direction while playback is running keeps playing the other way, without pausing.
+ * Forward reaching the last slot of the range, or reverse reaching the first, stops playback
+ * and returns the button to Play. Play at that slot restarts from the opposite end of the range:
+ * forward restarts at the first slot, reverse at the last.
+ * Scrubbing while playback is running keeps playing from the new slot, in the same direction.
+ * Time range controls narrow the slider to whole days. The slider, playback in both
+ * directions, and Play-restart then use only that range. A selected time outside a new
  * range moves to its nearest edge. Reset restores the whole record.
+ * Every step reaches `onSelectedTime` through `selectIndex`, the same path a scrub takes.
  * Ending the `lifetime` stops playback and unbinds every control.
  */
 export function bindObservationTimelineControls(
@@ -127,11 +174,12 @@ export function bindObservationTimelineControls(
   onSelectedTime: (timeUtcMs: number) => void,
   lifetime: ExperienceLifetime = createExperienceLifetime(),
 ): ObservationTimelineController {
-  const { playButton, slider, timeReadout, speedButtons = [], timeRangeControls } = elements;
+  const { playButton, slider, timeReadout, playbackControls, timeRangeControls } = elements;
   const fullRange = fullSlotRange(clock);
   let range: SlotRange = fullRange;
   let currentIndex = 0;
-  let selectedSpeed = 1;
+  let selectedSpeed = DEFAULT_PLAYBACK_SPEED;
+  let direction: PlaybackDirection = 'forward';
   let playbackTimer: number | null = null;
   const listening = { signal: lifetime.signal };
   lifetime.onEnd(() => {
@@ -182,19 +230,20 @@ export function bindObservationTimelineControls(
     updatePlayButton();
   };
 
+  /** The slot playback in this direction ends on: the last slot going forward, the first going in reverse. */
+  const endIndex = (): number => (direction === 'forward' ? range.lastIndex : range.firstIndex);
+  /** The slot a restart begins on: the opposite end of the range. */
+  const restartIndex = (): number => (direction === 'forward' ? range.firstIndex : range.lastIndex);
+  const atPlaybackEnd = (): boolean => currentIndex === endIndex();
+  const nextIndex = (): number => currentIndex + (direction === 'forward' ? 1 : -1);
+
   const advance = (): void => {
-    if (currentIndex >= range.lastIndex) {
+    if (atPlaybackEnd()) {
       stopPlayback();
       return;
     }
-    selectIndex(currentIndex + 1);
-    if (currentIndex >= range.lastIndex) stopPlayback();
-  };
-
-  const updateSpeedButtons = (): void => {
-    for (const { speed, button } of speedButtons) {
-      button.setAttribute('aria-pressed', speed === selectedSpeed ? 'true' : 'false');
-    }
+    selectIndex(nextIndex());
+    if (atPlaybackEnd()) stopPlayback();
   };
 
   const startPlayback = (): void => {
@@ -208,24 +257,43 @@ export function bindObservationTimelineControls(
       stopPlayback();
       return;
     }
-    if (currentIndex >= range.lastIndex) selectIndex(range.firstIndex);
-    if (currentIndex >= range.lastIndex) return;
+    if (atPlaybackEnd()) selectIndex(restartIndex());
+    if (atPlaybackEnd()) return;
     startPlayback();
   }, listening);
 
-  for (const { speed, button } of speedButtons) {
-    button.addEventListener('click', () => {
-      selectedSpeed = speed;
-      updateSpeedButtons();
-      if (playbackTimer != null) startPlayback();
-    }, listening);
-  }
+  if (playbackControls) {
+    const { directionButton, speedButton, speedMenu } = playbackControls;
 
-  updateSpeedButtons();
+    const drawDirection = (): void => {
+      directionButton.innerHTML = direction === 'forward' ? FORWARD_ICON : REVERSE_ICON;
+      const label = `Playback direction: ${direction}`;
+      directionButton.setAttribute('aria-label', label);
+      directionButton.title = label;
+    };
+
+    directionButton.addEventListener('click', () => {
+      direction = direction === 'forward' ? 'reverse' : 'forward';
+      drawDirection();
+      // Running playback keeps going the other way. At the edge it was heading away from, it has nowhere to go.
+      if (playbackTimer != null && atPlaybackEnd()) stopPlayback();
+    }, listening);
+    drawDirection();
+
+    bindPlaybackSpeedMenu(
+      { button: speedButton, menu: speedMenu },
+      selectedSpeed,
+      (speed) => {
+        selectedSpeed = speed;
+        if (playbackTimer != null) startPlayback();
+      },
+      lifetime.signal,
+    );
+  }
 
   const scrubToIndex = (index: number): void => {
     selectIndex(index);
-    if (playbackTimer != null && currentIndex >= range.lastIndex) stopPlayback();
+    if (playbackTimer != null && atPlaybackEnd()) stopPlayback();
   };
 
   slider.addEventListener('input', () => {
@@ -237,7 +305,17 @@ export function bindObservationTimelineControls(
   selectIndex(openingGridIndex);
 
   if (timeRangeControls) {
-    const { container, startDateInput, endDateInput, resetButton, message } = timeRangeControls;
+    const {
+      container,
+      startPicker,
+      endPicker,
+      startDateInput,
+      endDateInput,
+      startDateText,
+      endDateText,
+      resetButton,
+      message,
+    } = timeRangeControls;
     const firstDate = dateInputValue(timeAtGridIndex(clock, fullRange.firstIndex));
     const lastDate = dateInputValue(timeAtGridIndex(clock, fullRange.lastIndex));
 
@@ -250,6 +328,8 @@ export function bindObservationTimelineControls(
     const showRange = (): void => {
       startDateInput.value = dateInputValue(timeAtGridIndex(clock, range.firstIndex));
       endDateInput.value = dateInputValue(timeAtGridIndex(clock, range.lastIndex));
+      startDateText.textContent = formatDateInputValue(startDateInput.value);
+      endDateText.textContent = formatDateInputValue(endDateInput.value);
       resetButton.hidden = slotRangesEqual(range, fullRange);
     };
 
@@ -274,12 +354,17 @@ export function bindObservationTimelineControls(
 
     startDateInput.addEventListener('change', applyDateInputs, listening);
     endDateInput.addEventListener('change', applyDateInputs, listening);
+    // The input sits invisibly over the formatted date, so a click anywhere on the picker opens the calendar.
+    startDateInput.addEventListener('click', () => openDatePicker(startDateInput), listening);
+    endDateInput.addEventListener('click', () => openDatePicker(endDateInput), listening);
     resetButton.addEventListener('click', () => {
       message.textContent = '';
       setRange(fullRange);
     }, listening);
 
     showRange();
+    startPicker.hidden = false;
+    endPicker.hidden = false;
     container.hidden = false;
   }
 

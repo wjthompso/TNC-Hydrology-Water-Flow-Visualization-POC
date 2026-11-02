@@ -1,9 +1,10 @@
 import { expect, test } from '../../../../support/browser/deterministic-network.ts';
 import { timelineFixturePath } from '../../../../../apps/creek-visualization-browser/src/timeline-fixture-request.ts';
+import { chooseSpeed, speedButton } from './playback-controls.ts';
 
 /**
- * Methodology: Opens the timeline fixture page, picks 10× speed, and starts
- * playback. It then moves the real mouse to the centre of the play/pause icon,
+ * Methodology: Opens the timeline fixture page, opens the speed menu and picks
+ * 10× speed, and starts playback. It then moves the real mouse to the centre of the play/pause icon,
  * confirms the point sits on the icon itself and not the button's padding,
  * presses, holds 100 ms like a person's click, and releases. After 100 ms it
  * reads, once and without retrying, that the button is named Play, and checks
@@ -32,7 +33,8 @@ test('Pressing the pause icon itself at 10× speed pauses playback, the same as 
   await expect(page.locator('#timeline-readout')).not.toHaveText('Loading time…');
 
   // Pick 10× and start playback, so the button is showing the pause icon.
-  await page.getByRole('button', { name: '10 times speed', exact: true }).click();
+  await expect(speedButton(page), 'The page has no speed button to open the speed menu.').toBeVisible();
+  await chooseSpeed(page, '10 times speed');
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   const button = page.locator('#timeline-play-btn');
   await expect(button).toHaveAttribute('aria-label', 'Pause');

@@ -24,7 +24,7 @@
     {
       "id": "F-130",
       "featureSetId": "FS-100",
-      "name": "Observation playback speed buttons (0.5x, 1x, 2x, 5x, and 10x speed)",
+      "name": "Observation playback controls (direction, play, speed)",
       "lifecycle": "active",
       "lifecycleChange": null
     },
@@ -594,8 +594,8 @@
     },
     {
       "id": "FBT-131",
-      "name": "Playing at 0.5×, 1×, 2×, 5×, and 10× advances the observation slider by about 5, 10, 20, 50, and 100 slots in one second.",
-      "methodology": "Opens the local page on the timeline fixture while the test server has VITE_TEST_MODE set. That path runs the real Play button, time slider, and speed buttons through the production timeline control, on a 500-slot stand-in clock. The ArcGIS scene, imagery, terrain, and published gauge series are not loaded, and the test fails if the page requests ArcGIS. For each of 0.5×, 1×, 2×, 5×, and 10×, the test pauses, returns the slider to the first slot, clicks that speed button, clicks Play, and reads the slider index at the start and end of one second inside the page. The slot count must sit within 10% of the target for that elapsed time, and the margin is never tighter than one slot, so 1× passes at 9–11 slots in one second. It does not check water, button highlight color, reverse playback, or a chosen calendar date.",
+      "name": "Playing at 0.1×, 0.2×, 0.5×, 1×, 2×, 5×, and 10× advances the observation slider by about 1, 2, 5, 10, 20, 50, and 100 slots per second.",
+      "methodology": "Opens the local page on the timeline fixture while the test server has VITE_TEST_MODE set. That path runs the real Play button, time slider, and speed menu through the production timeline control, on a 500-slot stand-in clock. The ArcGIS scene, imagery, terrain, and published gauge series are not loaded, and the test fails if the page requests ArcGIS. For each of 0.1×, 0.2×, 0.5×, 1×, 2×, 5×, and 10×, the test pauses, returns the slider to the first slot, opens the speed menu and picks that speed, clicks Play, and reads the slider index at the start and end of a sample inside the page. The sample lasts one second, or three seconds for 0.1× and 0.2×, so a stalled slider cannot pass inside the margin. The slot count must sit within 10% of the target for that elapsed time, and the margin is never tighter than one slot, so 1× passes at 9–11 slots in one second and 0.1× passes at 2–4 slots in three seconds. It does not check water, reverse playback, or a chosen calendar date.",
       "category": "feature-behavior",
       "owner": "F-130",
       "additionalFeatureAssociations": [],
@@ -607,14 +607,14 @@
       "rootCauseAnalysis": null,
       "enforcement": "required",
       "enforcementChange": null,
-      "durationBudgetMs": 12000,
+      "durationBudgetMs": 20000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-130-observation-playback-speed-buttons/behavior/FBT-131.deterministic.spec.ts"
     },
     {
       "id": "FBT-132",
-      "name": "Highlight the current playback speed, starting at 1× until another speed is chosen.",
-      "methodology": "Opens the timeline fixture page, waits until the page stylesheet has painted, and reads the computed background, border, and text color of the five speed buttons. Before any click, 1× is the only button whose paint differs. It then clicks 2× and checks that 2× is the only button whose paint differs. The ArcGIS scene and published gauge series are not loaded. It does not press Play, and it does not check how fast the slider moves or the map.",
+      "name": "Show the current playback speed on the speed button and mark it in the speed menu, starting at 1× until another speed is chosen.",
+      "methodology": "Opens the timeline fixture page and waits until the page stylesheet has painted. Before any pick, it reads the speed button text, which must be 1×, then opens the speed menu and checks that exactly the 1× option has aria-selected=\"true\" and a check mark (✓) in its text, and that no other option is selected or shows one. It then picks 2× from the menu and checks that the speed button text is 2× and that, in the reopened menu, only the 2× option is selected and marked. The ArcGIS scene and published gauge series are not loaded. It does not press Play, and it does not check colors, how fast the slider moves, or the map.",
       "category": "feature-behavior",
       "owner": "F-130",
       "additionalFeatureAssociations": [],
@@ -652,7 +652,7 @@
     {
       "id": "FBT-134",
       "name": "Pressing the pause icon itself at 10× speed pauses playback, the same as pressing the button edge.",
-      "methodology": "Opens the timeline fixture page, picks 10× speed, and starts playback. It then moves the real mouse to the centre of the play/pause icon, confirms the point sits on the icon itself and not the button's padding, presses, holds 100 ms like a person's click, and releases. After 100 ms it reads, once and without retrying, that the button is named Play, and checks that the slider index does not change over the next 300 ms. It does not wait for the button to become Play, because playback also ends by itself at the last slot and would hide a lost click. The page and the production timeline control are real. The ArcGIS scene and published gauge series are not loaded, and nothing is mocked. The test runs in the Chromium browser channel, because the default headless shell delivers the click even when the bug is present. It does not check the icon's look, the hover tooltip, keyboard use, or speeds other than 10×.",
+      "methodology": "Opens the timeline fixture page, opens the speed menu and picks 10× speed, and starts playback. It then moves the real mouse to the centre of the play/pause icon, confirms the point sits on the icon itself and not the button's padding, presses, holds 100 ms like a person's click, and releases. After 100 ms it reads, once and without retrying, that the button is named Play, and checks that the slider index does not change over the next 300 ms. It does not wait for the button to become Play, because playback also ends by itself at the last slot and would hide a lost click. The page and the production timeline control are real. The ArcGIS scene and published gauge series are not loaded, and nothing is mocked. The test runs in the Chromium browser channel, because the default headless shell delivers the click even when the bug is present. It does not check the icon's look, the hover tooltip, keyboard use, or speeds other than 10×.",
       "category": "feature-behavior",
       "owner": "F-130",
       "additionalFeatureAssociations": [],
@@ -688,6 +688,46 @@
       "durationBudgetMs": 20000,
       "fast": false,
       "sourceFile": "tests/features/FS-100-creek-water-visualization/F-160-water-surface-elevation-chart/behavior/FBT-135.live.spec.ts"
+    },
+    {
+      "id": "FBT-136",
+      "name": "On the observed Jalama gauge time slider, playing forward moves toward the To date and playing in reverse moves toward the From date, at the chosen speed.",
+      "methodology": "Opens the timeline-only page for the real published Jalama record, which stands for the observed data state, through the production Play button, direction button, speed menu, and time slider. The 3D scene, modeled data, and map are not loaded, and the test fails if the page requests ArcGIS. The page must open with the direction button named \"Playback direction: forward\". The test picks 5× speed, scrubs the slider to the middle slot with input and change events, and presses Play. It reads the slider index at the start and end of one second inside the page, which must rise by about 50 slots. The margin is 10% of the target for that elapsed time, never tighter than one slot. After Pause, the test presses the direction button until it reads \"Playback direction: reverse\", presses Play, and reads one second again, which must fall by about 50 slots. After each leg, the time readout text must equal the slider's aria-valuetext and differ from the text at the start of that leg. Last, at 10× speed in reverse, the test scrubs the slider to slot 5 and presses Play. Within one second the slider must sit on the first slot, and the play button must be named \"Play\" again. It does not check water, the map, modeled data, the look of the speed menu, or the chosen calendar dates.",
+      "category": "feature-behavior",
+      "owner": "F-130",
+      "additionalFeatureAssociations": [],
+      "scope": "component",
+      "environment": "browser",
+      "browserMode": "deterministic",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 8000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-130-observation-playback-speed-buttons/behavior/FBT-136.deterministic.spec.ts"
+    },
+    {
+      "id": "FBT-137",
+      "name": "On the modeled creek page, playing forward and in reverse moves the time slider, the time readout, and the modeled water together, so the slider, the readout, and the water always show the same time.",
+      "methodology": "Opens the locally served page on the \"Inferred Creek WSE — hourly (from NOAA National Water Model v3.0 flows)\" Dataset for the dangermond-preserve extent at 2023-01-08T00:00Z, with no polygon method in the URL, so the page opens the default pairing: flowline-channel-ribbon v2 drawn with the m5-flowline-profile-jarrett-depth v1 Time Series. This is the modeled data state. The test waits until the test seam reports ready and the modeled seam has finished loading, then checks the opening sync. The page must open with the direction button named \"Playback direction: forward\". The test scrubs the time slider to 2023-01-09T12:00Z, about 12 hours before the January 2023 storm peak, with input and change events, picks 10× speed from the speed menu, and presses Play. It polls until the slider has moved forward at least 20 slots, presses Pause, and waits for the modeled loads to finish. Then four times must agree: the time the slider points at (the opening slot plus the slots moved, on the Dataset's 1-hour grid), the time readout text (which must equal the production formatter's text for that time and the slider's spoken value), the test seam's selected time, and the modeled seam's selected time. The modeled elevation the page holds for Creek Segment 27714637-026 must be loaded and equal the elevation in the developer's local pipeline output at that time. The test then presses the direction button, which must now read \"Playback direction: reverse\", presses Play, polls until the slider has moved backward at least 20 slots, presses Pause, and repeats the same checks; the selected time must be earlier than after the forward leg. Last, it presses the direction button back to \"Playback direction: forward\", plays at least 5 slots, pauses, and repeats the checks; the selected time must be later than after the reverse leg, so no reverse state is left over. Across the four stops, the segment's local-output elevation must differ at least once, so a water level stuck at the starting time cannot pass. What is real: the browser page, ArcGIS SceneView, the production Play button, direction button, speed menu, time slider, and time readout, the modeled-water seam, the local pipeline output served by the development middleware, and Esri World Imagery and Esri World Elevation responses reused from the local disk cache; a response missing from the cache is fetched live, and when that fetch is unavailable and nothing was measured wrong the result is inconclusive rather than passed. What is saved or test-only: the opening and scrub times, the segment, and the read-only seams. The expected elevation comes from the local pipeline output; when it is missing the test is inconclusive with a message naming the pipeline command, and it never passes without it. The water is compared as the elevation the page holds for the segment (the seam), not as drawn pixels. A measured sync failure stays a failure even when Esri also reported an outage. It does not check camera framing, water polygon shape or colour, the observed record, the speed menu look, how fast the slider moves, or whether the modeled elevations are hydrologically right. Imagery dataset used in the visualization: Esri World Imagery.",
+      "category": "feature-behavior",
+      "owner": "F-130",
+      "additionalFeatureAssociations": [
+        "F-140"
+      ],
+      "scope": "end-to-end",
+      "environment": "browser",
+      "browserMode": "live",
+      "regression": false,
+      "bugReference": null,
+      "rootCauseAnalysis": null,
+      "enforcement": "required",
+      "enforcementChange": null,
+      "durationBudgetMs": 20000,
+      "fast": false,
+      "sourceFile": "tests/features/FS-100-creek-water-visualization/F-130-observation-playback-speed-buttons/behavior/FBT-137.live.spec.ts"
     },
     {
       "id": "FST-001",

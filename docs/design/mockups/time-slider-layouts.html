@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Time slider: five layouts (v2)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: {
+    panel: '#0f1b2a', edge: '#1f3347', well: '#12303d', accent: '#22d3ee', ink: '#cfeaf2', mute: '#7f99a8'
+  } } } }
+</script>
+<style>
+  body { background:#070d14; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .track { height:6px; border-radius:9999px; background:#22d3ee; position:relative; }
+  .thumb { position:absolute; right:-7px; top:-5px; width:16px; height:16px; border-radius:9999px; background:#22d3ee; }
+</style>
+</head>
+<body class="p-8 text-ink">
+<div class="flex flex-wrap items-center gap-6 mb-2">
+  <h1 class="text-xl font-semibold">Time slider: five layouts (v2)</h1>
+  <div class="flex items-center gap-2 text-sm">
+    <span class="text-mute">Date labels:</span>
+    <div class="flex rounded-md border border-edge overflow-hidden text-xs">
+      <button id="labels-on" class="px-3 py-1 bg-accent text-panel font-semibold">From / To</button>
+      <button id="labels-off" class="px-3 py-1 text-mute">No labels</button>
+    </div>
+  </div>
+</div>
+<p class="text-mute text-sm mb-8">Play sits on the right with a larger icon and toggles Play/Pause on click. Date pickers keep the calendar icon; "From" and "To" sit left of each picker (toggle above to remove them).</p>
+
+<div class="grid gap-8" style="grid-template-columns:repeat(auto-fill,minmax(400px,1fr))">
+
+  <!-- A -->
+  <section>
+    <h2 class="text-sm font-semibold mb-1">A. Play right of the date readout</h2>
+    <p class="text-xs text-mute mb-3">Play sits on the same line as the date it controls, at the right edge. Speed is a segmented pill.</p>
+    <div class="w-[380px] bg-panel border border-edge rounded-lg p-4 space-y-3">
+      <div class="text-sm">Time</div>
+      <div class="flex items-center justify-between">
+        <div class="text-accent text-base">Jan 31, 2023, 4:00 PM PST</div>
+        <button data-play id="a-play" class="w-9 h-9 shrink-0 rounded-full bg-accent text-panel grid place-items-center"></button>
+      </div>
+      <div class="track"><div class="thumb"></div></div>
+      <div data-dates></div>
+      <div class="flex rounded-md border border-edge overflow-hidden text-xs">
+        <button class="flex-1 py-1 text-mute">0.5×</button>
+        <button class="flex-1 py-1 bg-accent text-panel font-semibold">1×</button>
+        <button class="flex-1 py-1 text-mute border-l border-edge">2×</button>
+        <button class="flex-1 py-1 text-mute border-l border-edge">5×</button>
+        <button class="flex-1 py-1 text-mute border-l border-edge">10×</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- B -->
+  <section>
+    <h2 class="text-sm font-semibold mb-1">B. Play right of the slider</h2>
+    <p class="text-xs text-mute mb-3">Track and Play share one row, with Play as the end cap. Speed is a small chip row.</p>
+    <div class="w-[380px] bg-panel border border-edge rounded-lg p-4 space-y-3">
+      <div class="flex items-baseline justify-between"><span class="text-sm">Time</span><span class="text-accent text-sm">Jan 31, 2023, 4:00 PM PST</span></div>
+      <div class="flex items-center gap-4">
+        <div class="track flex-1"><div class="thumb"></div></div>
+        <button data-play data-style="outline" id="b-play" class="w-10 h-10 shrink-0 rounded-full border border-accent text-accent grid place-items-center"></button>
+      </div>
+      <div data-dates></div>
+      <div class="flex gap-1.5 text-xs">
+        <button class="px-2.5 py-0.5 rounded border border-edge text-mute">0.5×</button>
+        <button class="px-2.5 py-0.5 rounded border border-accent bg-accent text-panel font-semibold">1×</button>
+        <button class="px-2.5 py-0.5 rounded border border-edge text-mute">2×</button>
+        <button class="px-2.5 py-0.5 rounded border border-edge text-mute">5×</button>
+        <button class="px-2.5 py-0.5 rounded border border-edge text-mute">10×</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- C -->
+  <section>
+    <h2 class="text-sm font-semibold mb-1">C. Header Play (right); speed as text tabs</h2>
+    <p class="text-xs text-mute mb-3">Closest to today. Play stays top-right but is larger. Speeds are underlined text tabs.</p>
+    <div class="w-[380px] bg-panel border border-edge rounded-lg p-4 space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-sm">Time</span>
+        <button data-play data-style="outline" id="c-play" class="w-9 h-9 rounded-full border border-accent text-accent grid place-items-center"></button>
+      </div>
+      <div class="text-accent">Jan 31, 2023, 4:00 PM PST</div>
+      <div class="track"><div class="thumb"></div></div>
+      <div data-dates></div>
+      <div class="flex justify-between text-xs border-t border-edge pt-2">
+        <span class="text-mute">Speed</span>
+        <div class="flex gap-4">
+          <button class="text-mute">0.5×</button>
+          <button class="text-accent border-b border-accent">1×</button>
+          <button class="text-mute">2×</button>
+          <button class="text-mute">5×</button>
+          <button class="text-mute">10×</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- D -->
+  <section>
+    <h2 class="text-sm font-semibold mb-1">D. Play + speed menu fused, bottom right</h2>
+    <p class="text-xs text-mute mb-3">Smallest footprint. Five speeds collapse into "1× ▾" fused to Play. Costs one extra click to change speed.</p>
+    <div class="w-[380px] bg-panel border border-edge rounded-lg p-4 space-y-3">
+      <div class="text-sm">Time</div>
+      <div class="text-accent">Jan 31, 2023, 4:00 PM PST</div>
+      <div class="track"><div class="thumb"></div></div>
+      <div class="flex items-end justify-between gap-3">
+        <div class="flex-1" data-dates></div>
+        <div class="flex rounded-full border border-accent overflow-hidden shrink-0">
+          <button id="d-speed" class="pl-3 pr-2 text-xs text-accent flex items-center gap-1">1× <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg></button>
+          <button data-play id="d-play" class="w-10 h-9 bg-accent text-panel grid place-items-center"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- E -->
+  <section>
+    <h2 class="text-sm font-semibold mb-1">E. Control bar: speed pill, then Play at right</h2>
+    <p class="text-xs text-mute mb-3">Speed pill and Play share one bar, with Play as the right-hand anchor.</p>
+    <div class="w-[380px] bg-panel border border-edge rounded-lg p-4 space-y-3">
+      <div class="text-sm">Time</div>
+      <div class="text-accent">Jan 31, 2023, 4:00 PM PST</div>
+      <div class="track"><div class="thumb"></div></div>
+      <div data-dates></div>
+      <div class="flex items-center gap-3">
+        <div class="flex flex-1 h-8 rounded-full bg-well p-0.5 text-xs">
+          <button class="flex-1 rounded-full text-mute">0.5×</button>
+          <button class="flex-1 rounded-full bg-accent/20 text-accent font-semibold">1×</button>
+          <button class="flex-1 rounded-full text-mute">2×</button>
+          <button class="flex-1 rounded-full text-mute">5×</button>
+          <button class="flex-1 rounded-full text-mute">10×</button>
+        </div>
+        <button data-play id="e-play" class="w-10 h-10 shrink-0 rounded-full bg-accent text-panel grid place-items-center"></button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  const PLAY  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-left:2px"><path d="M7 4l13 8-13 8z"/></svg>';
+  const PAUSE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+  const CAL   = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+
+  const picker = (label, value, id) => `
+    <label class="flex items-center gap-2 text-[11px] text-mute">
+      <span data-label class="uppercase tracking-wide">${label}</span>
+      <span class="flex items-center gap-2 rounded-md border border-edge bg-well px-2 py-1 text-xs text-ink">
+        <span>${value}</span><button aria-label="Open ${label} calendar" id="${id}" class="text-mute">${CAL}</button>
+      </span>
+    </label>`;
+
+  document.querySelectorAll('[data-dates]').forEach((el, i) => {
+    el.className += ' flex items-center justify-between gap-2';
+    el.innerHTML = picker('From', '09/30/2017', `from-${i}`) + picker('To', '01/31/2023', `to-${i}`);
+  });
+
+  document.querySelectorAll('[data-play]').forEach(btn => {
+    btn.innerHTML = PLAY; btn.setAttribute('aria-label', 'Play');
+    btn.addEventListener('click', () => {
+      const playing = btn.getAttribute('aria-label') === 'Play';
+      btn.innerHTML = playing ? PAUSE : PLAY;
+      btn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    });
+  });
+
+  const on = document.getElementById('labels-on'), off = document.getElementById('labels-off');
+  function setLabels(show) {
+    document.querySelectorAll('[data-label]').forEach(l => l.style.display = show ? '' : 'none');
+    on.className  = 'px-3 py-1 ' + (show ? 'bg-accent text-panel font-semibold' : 'text-mute');
+    off.className = 'px-3 py-1 ' + (show ? 'text-mute' : 'bg-accent text-panel font-semibold');
+  }
+  on.onclick = () => setLabels(true); off.onclick = () => setLabels(false);
+</script>
+</body>
+</html>
