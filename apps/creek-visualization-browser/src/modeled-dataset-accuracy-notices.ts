@@ -23,7 +23,7 @@ export const MODELED_DATASET_ACCURACY_NOTICES: Readonly<Partial<Record<ModeledDa
   },
   'national-water-model-operational-hourly': {
     title: 'Estimated values, not measurements',
-    body: "These modeled water levels are calculated from NOAA's National Water Model operational flow estimates and lidar terrain using Manning's equation. We have compared the flow estimates with only one stream gauge (Jalama Creek, Sep 2025 – Oct 2026): they averaged about 5 times the gauge's flow, and the Jan 3, 2026 storm peak was about 45% too low. Treat the timing of rises and falls as more reliable than the exact heights; the Observed button shows the gauge's own readings.",
+    body: "These modeled water levels are calculated from NOAA's National Water Model operational flow estimates and lidar terrain using Manning's equation. The flow estimates are not corrected to local gauges. When we compared them with the one stream gauge available (Jalama Creek, Sep 2025 – Oct 2026), they ran roughly 3 times too high overall, while the Jan 3, 2026 storm peak was about 45% too low. Treat the timing of rises and falls as more reliable than the exact heights; the Observed button shows the gauge's own readings.",
     acknowledgeLabel: 'I understand',
   },
 };

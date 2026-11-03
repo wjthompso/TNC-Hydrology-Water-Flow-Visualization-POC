@@ -25,14 +25,39 @@ interface SourceLink {
 interface DatasetSummary {
   /** Two or three plain-language sentences about the Dataset. */
   summary: string;
+  /** The "Flow rate:" input of the calculation, named and described; the rest of the method is shared. */
+  flowRateInput: string;
   sources: readonly SourceLink[];
 }
+
+const ELEVATION_INPUT =
+  'USGS (U.S. Geological Survey) 3DEP (3D Elevation Program) 1 m lidar, an airborne laser survey of the ground';
+
+/** Text after the two inputs; identical for every modeled Dataset. */
+const CALCULATION_METHOD =
+  "We cut the preserve's creeks into short segments along The Nature Conservancy's creek lines. For each segment we scaled the reach's flow by the segment's share of the drainage area, built a flow-versus-water-level curve from its lidar cross-section and slope using Manning's equation (an engineering formula that relates flow, channel shape, slope, and bed roughness; Manning, 1891; Chow, 1959), and solved for the water level that carries that flow. On steep creeks, roughness follows Jarrett's (1984) formula. This is a simplified steady-flow estimate that ignores wood, bedrock steps, and culverts, and the lidar cannot see below the water line.";
+
+const CALCULATION_REFERENCES: readonly { label: string; url?: string }[] = [
+  {
+    label: 'Chow, V.T. (1959). Open-Channel Hydraulics. McGraw-Hill.',
+  },
+  {
+    label:
+      'Manning, R. (1891). On the flow of water in open channels and pipes. Transactions of the Institution of Civil Engineers of Ireland, 20, 161–207.',
+  },
+  {
+    label: 'Jarrett, R.D. (1984). Hydraulics of high-gradient streams. Journal of Hydraulic Engineering, 110(11), 1519–1539.',
+    url: 'https://doi.org/10.1061/(ASCE)0733-9429(1984)110:11(1519)',
+  },
+];
 
 /** Keyed by catalog datasetId. Written for a reader who is not a hydrologist. */
 const DATASET_SUMMARIES: Readonly<Record<string, DatasetSummary>> = {
   'california-natural-flows-monthly': {
     summary:
       'California Natural Flows estimates the average flow each stream in California would carry every month if people did not divert or store water. It is a statistical model that learns from gauged streams and gives one flow per stream reach, not a water level. The water heights shown here were derived from those flows by the UCSB Spatial Center and have not been checked against measurements on this creek.',
+    flowRateInput:
+      'California Natural Flows, a statistical model of the average monthly flow each California stream would carry without diversions or storage',
     sources: [
       { label: 'California Natural Flows', url: 'https://rivers.codefornature.org/' },
       { label: 'API docs', url: 'https://flow-api.codefornature.org/' },
@@ -41,11 +66,15 @@ const DATASET_SUMMARIES: Readonly<Record<string, DatasetSummary>> = {
   'national-water-model-hourly': {
     summary:
       'The NOAA National Water Model is a nationwide computer simulation of rivers and streams driven by weather data. Its retrospective run gives an hourly flow for every stream reach but is not corrected to local gauges, so the timing of rises and falls is more trustworthy than the size of the flow. The water heights shown here were derived from those flows by the UCSB Spatial Center.',
+    flowRateInput:
+      'the NOAA (National Oceanic and Atmospheric Administration) National Water Model v3.0 retrospective, an hourly computer simulation of flow for every stream reach in the US',
     sources: [{ label: 'NOAA National Water Model retrospective', url: 'https://registry.opendata.aws/nwm-archive/' }],
   },
   'national-water-model-operational-hourly': {
     summary:
       'The NOAA National Water Model is a nationwide computer simulation of rivers and streams driven by weather data. Its operational run (the Analysis and Assimilation run) gives an hourly flow for every stream reach from September 2025 to October 2026, but is not corrected to local gauges, so the timing of rises and falls is more trustworthy than the size of the flow. The water heights shown here were derived from those flows by the UCSB Spatial Center.',
+    flowRateInput:
+      'the NOAA (National Oceanic and Atmospheric Administration) National Water Model operational Analysis and Assimilation run, hourly flow estimates for every stream reach in the US',
     sources: [{ label: 'NOAA National Water Model', url: 'https://www.nco.ncep.noaa.gov/pmb/products/nwm/' }],
   },
 };
@@ -84,6 +113,8 @@ function summaryBlock(selected: SelectedModeledDataset): HTMLElement {
     `${selected.publisher.name} publishes this ${selected.dataset.timeStep} modeled Dataset. The water heights shown here were derived from its flows by the UCSB Spatial Center.`;
   block.append(summary);
 
+  if (known) block.append(calculationBlock(known), referencesBlock());
+
   if (known && known.sources.length > 0) {
     const sourceRow = element('p', '');
     const label = element('span', 'font-medium text-slate-200');
@@ -101,6 +132,43 @@ function summaryBlock(selected: SelectedModeledDataset): HTMLElement {
   const transferNote = element('p', '');
   transferNote.textContent = DRAINAGE_AREA_RATIO_TRANSFER_EXPLANATION;
   block.append(transferHeading, transferNote);
+  return block;
+}
+
+/** "How the water heights are calculated": the two input sources named and described, then the shared method. */
+function calculationBlock(known: DatasetSummary): HTMLElement {
+  const block = element('p', '');
+  const lead = element('span', 'font-medium text-slate-200');
+  lead.textContent = 'How the water heights are calculated. ';
+  const flow = element('span', 'font-medium text-slate-200');
+  flow.textContent = 'Flow rate: ';
+  const elevation = element('span', 'font-medium text-slate-200');
+  elevation.textContent = 'Elevation: ';
+  block.append(
+    lead,
+    document.createTextNode('We combined two public data sources. '),
+    flow,
+    document.createTextNode(`${known.flowRateInput}. `),
+    elevation,
+    document.createTextNode(`${ELEVATION_INPUT}. ${CALCULATION_METHOD}`),
+  );
+  return block;
+}
+
+function referencesBlock(): HTMLElement {
+  const block = element('div', '');
+  block.append(heading('References'));
+  const items = element('ul', `${LIST_CLASS} list-disc`);
+  for (const reference of CALCULATION_REFERENCES) {
+    const item = element('li', '');
+    if (reference.url) {
+      item.append(externalLink({ label: reference.label, url: reference.url }));
+    } else {
+      item.textContent = reference.label;
+    }
+    items.append(item);
+  }
+  block.append(items);
   return block;
 }
 
