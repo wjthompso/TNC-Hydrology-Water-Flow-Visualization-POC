@@ -16,7 +16,7 @@ export const DEFAULT_MODELED_EXTENT_ID = 'dangermond-preserve';
 export const MODELED_EXTENT_IDS = ['jalama-gauge-reach', 'dangermond-preserve'] as const;
 
 /**
- * Every Dataset option the page knows. The observed gauge keeps the existing experience and is the default.
+ * Every Dataset option the page knows. The default Dataset is the modeled `DEFAULT_MODELED_DATASET_ID`; the observed gauge needs `?dataset=observed-gauge`.
  * The sidebar offers only two buttons, Observed and Modeled; Modeled opens `DEFAULT_MODELED_DATASET_ID`.
  * The other modeled Datasets stay reachable through `?dataset=<id>` and the dev tools.
  */
@@ -87,7 +87,11 @@ export type DatasetSelection =
 export function readDatasetSelection(locationSearch: string): DatasetSelection {
   const params = new URLSearchParams(locationSearch);
   const datasetId = params.get(DATASET_QUERY_PARAM);
-  const option = availableDatasetPickerOptions().find((item) => item.id === datasetId);
+  if (datasetId === OBSERVED_DATASET_OPTION_ID) return { kind: 'observed' };
+  // No `?dataset=` (or an unknown one) opens the default modeled Dataset.
+  const option =
+    availableDatasetPickerOptions().find((item) => item.id === datasetId && item.kind === 'modeled') ??
+    availableDatasetPickerOptions().find((item) => item.id === DEFAULT_MODELED_DATASET_ID);
   if (!option || option.kind !== 'modeled') return { kind: 'observed' };
   const extentParam = params.get(MODELED_EXTENT_QUERY_PARAM);
   const extentId = extentParam && extentParam.trim().length > 0 ? extentParam.trim() : DEFAULT_MODELED_EXTENT_ID;
@@ -157,11 +161,8 @@ export function datasetPageUrl(
   if (carry.selectedCreekSegmentId) params.set(SEGMENT_QUERY_PARAM, carry.selectedCreekSegmentId);
   if (carry.selectedTimeUtcMs !== null) params.set(TIME_QUERY_PARAM, new Date(carry.selectedTimeUtcMs).toISOString());
   if (carry.cameraPose) params.set(CAMERA_QUERY_PARAM, writeCameraQuery(carry.cameraPose));
-  if (datasetOptionId === OBSERVED_DATASET_OPTION_ID) {
-    params.delete(DATASET_QUERY_PARAM);
-  } else {
-    params.set(DATASET_QUERY_PARAM, datasetOptionId);
-  }
+  // Observed must be explicit because a missing `?dataset=` opens Modeled.
+  params.set(DATASET_QUERY_PARAM, datasetOptionId);
   const query = params.toString();
   return `${current.pathname}${query ? `?${query}` : ''}`;
 }
