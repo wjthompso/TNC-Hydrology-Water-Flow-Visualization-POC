@@ -18,12 +18,12 @@ export interface ModeledDatasetAccuracyNotice {
 export const MODELED_DATASET_ACCURACY_NOTICES: Readonly<Partial<Record<ModeledDatasetId, ModeledDatasetAccuracyNotice>>> = {
   'national-water-model-hourly': {
     title: 'Estimated values, not measurements',
-    body: "These modeled water levels (water-surface elevation, WSE: the water's height above sea level, NAVD88) are calculated from modeled flow rates (NOAA National Water Model v3.0) and USGS 3DEP terrain using Manning's equation. The modeled flows are not corrected against gauge readings and can be off by a factor of 2 to 5 on small creeks like these, so the timing of rises and falls is more reliable than the exact heights.",
+    body: "These modeled water levels (water-surface elevation, WSE: the water's height above sea level, NAVD88) are calculated from modeled flow rates (NOAA National Water Model v3.0 retrospective) and terrain elevation (USGS 3DEP 1 m lidar) using Manning's equation. The modeled flow rates are not corrected against gauge readings and can be off by a factor of 2 to 5 on small creeks like these, so the timing of rises and falls is more reliable than the exact heights.",
     acknowledgeLabel: 'I understand',
   },
   'national-water-model-operational-hourly': {
     title: 'Estimated values, not measurements',
-    body: "These modeled water levels are calculated from NOAA's National Water Model operational flow estimates and lidar terrain using Manning's equation. The flow estimates are not corrected to local gauges. When we compared them with the one stream gauge available (Jalama Creek, Sep 2025 – Oct 2026), they ran roughly 3 times too high overall, while the Jan 3, 2026 storm peak was about 45% too low. Treat the timing of rises and falls as more reliable than the exact heights; the Observed button shows the gauge's own readings.",
+    body: "These modeled water levels are calculated from modeled flow rates (NOAA National Water Model operational Analysis and Assimilation run) and terrain elevation (USGS 3DEP 1 m lidar) using Manning's equation. The flow rates are not corrected to local gauges. When we compared them with the one stream gauge available (Jalama Creek, Sep 2025 – Oct 2026), they ran roughly 3 times too high overall, while the Jan 3, 2026 storm peak was about 45% too low. Treat the timing of rises and falls as more reliable than the exact heights; the Observed button shows the gauge's own readings.",
     acknowledgeLabel: 'I understand',
   },
 };

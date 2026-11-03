@@ -23,19 +23,29 @@ interface SourceLink {
 }
 
 interface DatasetSummary {
-  /** Two or three plain-language sentences about the Dataset. */
+  /** Two or three plain-language sentences about the flow data. */
   summary: string;
-  /** The "Flow rate:" input of the calculation, named and described; the rest of the method is shared. */
-  flowRateInput: string;
+  /** Source name shown in parentheses after "Flow rate", e.g. "NOAA National Water Model v3.0 retrospective". */
+  flowRateSourceName: string;
+  /** What the flow-rate source is, in a sentence fragment; spells out any acronym on first use. */
+  flowRateDescription: string;
   sources: readonly SourceLink[];
 }
 
-const ELEVATION_INPUT =
-  'USGS (U.S. Geological Survey) 3DEP (3D Elevation Program) 1 m lidar, an airborne laser survey of the ground';
+const ELEVATION_SOURCE_NAME = 'USGS 3DEP 1 m lidar';
+const ELEVATION_DESCRIPTION =
+  'an airborne laser survey of the ground, giving each creek segment its bed shape, cross-section, and slope. USGS is the U.S. Geological Survey; 3DEP is its 3D Elevation Program';
 
-/** Text after the two inputs; identical for every modeled Dataset. */
-const CALCULATION_METHOD =
-  "We cut the preserve's creeks into short segments along The Nature Conservancy's creek lines. For each segment we scaled the reach's flow by the segment's share of the drainage area, built a flow-versus-water-level curve from its lidar cross-section and slope using Manning's equation (an engineering formula that relates flow, channel shape, slope, and bed roughness; Manning, 1891; Chow, 1959), and solved for the water level that carries that flow. On steep creeks, roughness follows Jarrett's (1984) formula. This is a simplified steady-flow estimate that ignores wood, bedrock steps, and culverts, and the lidar cannot see below the water line.";
+/** Numbered steps after the two inputs; identical for every modeled Dataset. */
+const CALCULATION_STEPS: readonly string[] = [
+  "Cut the preserve's creeks into short segments along The Nature Conservancy's creek lines.",
+  "Scale each reach's flow rate by the segment's share of the drainage area.",
+  "Build a flow-versus-water-level curve from each segment's lidar cross-section and slope using Manning's equation (an engineering formula that relates flow, channel shape, slope, and bed roughness; Manning, 1891; Chow, 1959). On steep creeks, roughness follows Jarrett's (1984) formula.",
+  'Solve the curve for the water level that carries the scaled flow.',
+];
+
+const CALCULATION_LIMITS =
+  'This is a simplified steady-flow estimate that ignores wood, bedrock steps, and culverts, and the lidar cannot see below the water line.';
 
 const CALCULATION_REFERENCES: readonly { label: string; url?: string }[] = [
   {
@@ -56,8 +66,8 @@ const DATASET_SUMMARIES: Readonly<Record<string, DatasetSummary>> = {
   'california-natural-flows-monthly': {
     summary:
       'California Natural Flows estimates the average flow each stream in California would carry every month if people did not divert or store water. It is a statistical model that learns from gauged streams and gives one flow per stream reach, not a water level. The water heights shown here were derived from those flows by the UCSB Spatial Center and have not been checked against measurements on this creek.',
-    flowRateInput:
-      'California Natural Flows, a statistical model of the average monthly flow each California stream would carry without diversions or storage',
+    flowRateSourceName: 'California Natural Flows',
+    flowRateDescription: 'a statistical model of the average monthly flow each California stream would carry without diversions or storage',
     sources: [
       { label: 'California Natural Flows', url: 'https://rivers.codefornature.org/' },
       { label: 'API docs', url: 'https://flow-api.codefornature.org/' },
@@ -66,15 +76,17 @@ const DATASET_SUMMARIES: Readonly<Record<string, DatasetSummary>> = {
   'national-water-model-hourly': {
     summary:
       'The NOAA National Water Model is a nationwide computer simulation of rivers and streams driven by weather data. Its retrospective run gives an hourly flow for every stream reach but is not corrected to local gauges, so the timing of rises and falls is more trustworthy than the size of the flow. The water heights shown here were derived from those flows by the UCSB Spatial Center.',
-    flowRateInput:
-      'the NOAA (National Oceanic and Atmospheric Administration) National Water Model v3.0 retrospective, an hourly computer simulation of flow for every stream reach in the US',
+    flowRateSourceName: 'NOAA National Water Model v3.0 retrospective',
+    flowRateDescription:
+      'an hourly computer simulation of flow for every stream reach in the US. NOAA is the National Oceanic and Atmospheric Administration',
     sources: [{ label: 'NOAA National Water Model retrospective', url: 'https://registry.opendata.aws/nwm-archive/' }],
   },
   'national-water-model-operational-hourly': {
     summary:
       'The NOAA National Water Model is a nationwide computer simulation of rivers and streams driven by weather data. Its operational run (the Analysis and Assimilation run) gives an hourly flow for every stream reach from September 2025 to October 2026, but is not corrected to local gauges, so the timing of rises and falls is more trustworthy than the size of the flow. The water heights shown here were derived from those flows by the UCSB Spatial Center.',
-    flowRateInput:
-      'the NOAA (National Oceanic and Atmospheric Administration) National Water Model operational Analysis and Assimilation run, hourly flow estimates for every stream reach in the US',
+    flowRateSourceName: 'NOAA National Water Model operational Analysis and Assimilation run',
+    flowRateDescription:
+      'hourly flow estimates for every stream reach in the US. NOAA is the National Oceanic and Atmospheric Administration',
     sources: [{ label: 'NOAA National Water Model', url: 'https://www.nco.ncep.noaa.gov/pmb/products/nwm/' }],
   },
 };
@@ -107,13 +119,13 @@ function summaryBlock(selected: SelectedModeledDataset): HTMLElement {
   const block = element('div', SUMMARY_CLASS);
   block.id = 'modeled-dataset-summary';
   const known = DATASET_SUMMARIES[selected.dataset.datasetId];
+  if (known) block.append(calculationBlock(known));
+
   const summary = element('p', 'text-slate-200');
   summary.textContent =
     known?.summary ??
     `${selected.publisher.name} publishes this ${selected.dataset.timeStep} modeled Dataset. The water heights shown here were derived from its flows by the UCSB Spatial Center.`;
   block.append(summary);
-
-  if (known) block.append(calculationBlock(known), referencesBlock());
 
   if (known && known.sources.length > 0) {
     const sourceRow = element('p', '');
@@ -135,28 +147,43 @@ function summaryBlock(selected: SelectedModeledDataset): HTMLElement {
   return block;
 }
 
-/** "How the water heights are calculated": the two input sources named and described, then the shared method. */
+/** "How the water heights are calculated": the two inputs by name in parentheses, the shared steps, the limits, the references. */
 function calculationBlock(known: DatasetSummary): HTMLElement {
-  const block = element('p', '');
-  const lead = element('span', 'font-medium text-slate-200');
-  lead.textContent = 'How the water heights are calculated. ';
-  const flow = element('span', 'font-medium text-slate-200');
-  flow.textContent = 'Flow rate: ';
-  const elevation = element('span', 'font-medium text-slate-200');
-  elevation.textContent = 'Elevation: ';
+  const block = element('div', 'space-y-1.5');
+  block.append(heading('How the water heights are calculated'));
   block.append(
-    lead,
-    document.createTextNode('We combined two public data sources. '),
-    flow,
-    document.createTextNode(`${known.flowRateInput}. `),
-    elevation,
-    document.createTextNode(`${ELEVATION_INPUT}. ${CALCULATION_METHOD}`),
+    paragraph('Water level = Manning\'s equation applied to two public data sources, split into creek segments:'),
+    labeledList([
+      { label: `Flow rate (${known.flowRateSourceName})`, text: known.flowRateDescription },
+      { label: `Elevation (${ELEVATION_SOURCE_NAME})`, text: ELEVATION_DESCRIPTION },
+    ]),
+    list('ol', CALCULATION_STEPS),
+    paragraph(CALCULATION_LIMITS),
+    referencesBlock(),
   );
   return block;
 }
 
+function paragraph(text: string): HTMLElement {
+  const node = element('p', '');
+  node.textContent = text;
+  return node;
+}
+
+function labeledList(entries: readonly { label: string; text: string }[]): HTMLElement {
+  const node = element('ul', `${LIST_CLASS} list-disc`);
+  for (const entry of entries) {
+    const item = element('li', '');
+    const label = element('span', 'font-medium text-slate-200');
+    label.textContent = `${entry.label}: `;
+    item.append(label, document.createTextNode(`${entry.text}.`));
+    node.append(item);
+  }
+  return node;
+}
+
 function referencesBlock(): HTMLElement {
-  const block = element('div', '');
+  const block = element('div', 'pt-1');
   block.append(heading('References'));
   const items = element('ul', `${LIST_CLASS} list-disc`);
   for (const reference of CALCULATION_REFERENCES) {
