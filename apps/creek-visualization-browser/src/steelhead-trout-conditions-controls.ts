@@ -94,7 +94,7 @@ export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetim
     if (toggle) toggle.checked = shared.enabled;
     if (!shared.enabled) return;
 
-    if (seasonLine) seasonLine.textContent = rule.seasonText;
+    if (seasonLine) seasonLine.textContent = rule.scopeNote ? `${rule.seasonText}. ${rule.scopeNote}` : rule.seasonText;
     noBandLine?.classList.toggle('hidden', band !== null);
     if (noBandLine) noBandLine.textContent = rule.noDepthBandText ?? '';
     rangesList?.classList.toggle('hidden', band === null);
@@ -118,6 +118,7 @@ export function bindSteelheadTroutConditionsControls(lifetime: ExperienceLifetim
           ]
         : []),
       notRatedRow(),
+      ...(rule.scopeNote ? [scopeNoteRow(rule.scopeNote)] : []),
     );
   };
 
@@ -188,6 +189,13 @@ function legendRow(condition: SteelheadDepthClass | 'out-of-season', name: strin
   const text = document.createElement('span');
   text.textContent = `${glyph} ${name}: ${detail}`;
   row.append(swatch(condition), text);
+  return row;
+}
+
+function scopeNoteRow(text: string): HTMLElement {
+  const row = document.createElement('div');
+  row.className = 'mt-1.5 text-xs leading-relaxed text-amber-300';
+  row.textContent = text;
   return row;
 }
 

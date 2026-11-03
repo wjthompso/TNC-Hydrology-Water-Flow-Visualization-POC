@@ -328,7 +328,7 @@ function showInferredWaterLegend(hopsPerDirection: number): void {
   const row = document.getElementById('legend-inferred-row');
   const label = document.getElementById('legend-inferred-label');
   if (!row || !label || hopsPerDirection < 1) return;
-  label.textContent = `Inferred water on up to ${hopsPerDirection} creek segments each way. Estimated from the gauge's water depth, not measured.`;
+  label.textContent = 'Inferred water';
   row.classList.remove('hidden');
   row.classList.add('flex');
 }

@@ -34,7 +34,7 @@ const SELECTED_HOUR_UTC = '2023-02-01T00:00:00Z';
 const SEGMENT_ID = '27714637-026';
 /** One life stage per button, in the order the test presses them. The label is what the chart reports for its bands. */
 const LIFE_STAGES = [
-  { dataValue: 'eggs', label: 'Eggs' },
+  { dataValue: 'eggs', label: 'Eggs (Spawning)' },
   { dataValue: 'juveniles', label: 'Juveniles' },
   { dataValue: 'adults', label: 'Adults' },
 ] as const;

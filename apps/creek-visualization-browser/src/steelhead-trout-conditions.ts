@@ -64,6 +64,8 @@ interface LifeStageRule {
   /** Names the season for the legend, such as "Typical steelhead spawning season". */
   seasonName: string;
   seasonText: string;
+  /** Optional one-line limit on what the stage's bands mean, shown in the sidebar and the map legend. */
+  scopeNote?: string;
   /** Null when the research gives no defensible water-depth band for the stage. */
   depthBand: DepthBand | null;
   /** Shown instead of the ranges when `depthBand` is null. */
@@ -83,10 +85,11 @@ export const STEELHEAD_LIFE_STAGE_RULES: Readonly<Record<SteelheadLifeStage, Lif
   // This is a stand-in for the nest depth, not an incubation rule: "Egg incubation ... Still needs: temperature/DO,
   // not WSE alone." The "≥8 in" in the gravel row is gravel depth, not water depth, and is not used.
   eggs: {
-    label: 'Eggs',
+    label: 'Eggs (Spawning)',
     seasonMonths: [1, 5],
     seasonName: 'Typical steelhead spawning season',
     seasonText: 'Typical steelhead spawning season: Jan–May',
+    scopeNote: 'Spawning (nest) depth only. Not an egg incubation range.',
     depthBand: {
       unsuitableBelowM: 0.15,
       suitableFromM: 0.36,
@@ -113,7 +116,7 @@ export const STEELHEAD_LIFE_STAGE_RULES: Readonly<Record<SteelheadLifeStage, Lif
           ],
         },
         {
-          text: 'Depth over the nest is a stand-in for egg conditions. Incubation also needs cool, oxygenated water through the gravel (temperature and dissolved oxygen), which this app does not carry.',
+          text: 'These bands show depth suitable for spawning (nest building), not for egg incubation. Incubation depends on cool, oxygenated water moving through the gravel (temperature, dissolved oxygen), which this app does not model, and the research gives no defensible incubation depth range.',
         },
         { text: 'Marginal is the span between the 6 in minimum and the 14 in optimum (derived, not a published band).' },
       ],
