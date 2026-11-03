@@ -4,14 +4,17 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
 import type SceneView from '@arcgis/core/views/SceneView';
 import type { CreekSegment, MonitoringStation } from './creek-data-contract';
 import { createExperienceLifetime, type ExperienceLifetime } from './experience-lifetime';
-import { STREAM_GAUGE_MAST, stationMarkerSymbol } from './station-marker-models';
+import { STAFF_GAUGE_BOARD, stationMarkerSymbol } from './station-marker-models';
 
 export interface StationMarkerAttributes {
   readonly stationId: string;
   readonly name: string;
   readonly segmentId: string;
+  /** Where the marker is drawn. Can differ from `officialLocationWgs84` so the board stands in the water. */
   readonly longitude: number;
   readonly latitude: number;
+  /** Published USGS location, shown on the info card. */
+  readonly officialLocationWgs84: readonly [number, number];
   /** Link to the USGS monitoring-location page for this station. */
   readonly websiteUrl: string | null;
 }
@@ -29,14 +32,23 @@ function usgsWebsiteUrl(stationId: string): string | null {
 export const MONITORING_STATION_MARKER_LAYER_ID = 'monitoring-station-markers';
 
 /**
- * The mast model's radar arm points east (+x) at heading 0. Turning by
- * `bearing - 90` swings it to face that bearing.
+ * Drawn positions that replace a station's published location. The USGS point for the Jalama
+ * gauge sits on the bank about 2.5 m east and 2 m north of the wet channel; this point is a
+ * water-surface hit in the creek next to it (UCS-316), so the staff board stands in the water.
  */
-const ARM_BEARING_AT_ZERO_HEADING_DEGREES = 90;
+const DRAWN_LOCATION_OVERRIDES_WGS84: Readonly<Record<string, readonly [number, number]>> = {
+  'USGS-11120600': [-120.48486691929185, 34.51370458909748],
+};
 
 /**
- * Draws a stream gauge mast at each monitoring station's published location,
- * with its radar arm turned toward the station's Creek Segment. Returns the
+ * The staff gauge's ticked face looks south (bearing 180°) at heading 0. Turning by
+ * `bearing - 180` swings the face toward that bearing.
+ */
+const FACE_BEARING_AT_ZERO_HEADING_DEGREES = 180;
+
+/**
+ * Draws a staff gauge board at each monitoring station's published location,
+ * with its ticked face turned toward the station's Creek Segment. Returns the
  * layer and each placed station's attributes.
  */
 export async function addMonitoringStationMarkers(
@@ -58,11 +70,12 @@ export async function addMonitoringStationMarkers(
   });
 
   for (const station of stations) {
-    const [longitude, latitude] = station.locationWgs84;
+    const drawnLocation = DRAWN_LOCATION_OVERRIDES_WGS84[station.stationId] ?? station.locationWgs84;
+    const [longitude, latitude] = drawnLocation;
     const segment = segmentsById.get(station.segmentId);
-    const bearingToCreek = segment ? bearingToNearestPathPoint(station.locationWgs84, segment.pathWgs84) : null;
-    const symbol = await stationMarkerSymbol(STREAM_GAUGE_MAST, {
-      headingDegrees: bearingToCreek === null ? 0 : bearingToCreek - ARM_BEARING_AT_ZERO_HEADING_DEGREES,
+    const bearingToCreek = segment ? bearingToNearestPathPoint(drawnLocation, segment.pathWgs84) : null;
+    const symbol = await stationMarkerSymbol(STAFF_GAUGE_BOARD, {
+      headingDegrees: bearingToCreek === null ? 0 : bearingToCreek - FACE_BEARING_AT_ZERO_HEADING_DEGREES,
     });
     const attrs: StationMarkerAttributes = {
       stationId: station.stationId,
@@ -70,6 +83,7 @@ export async function addMonitoringStationMarkers(
       segmentId: station.segmentId,
       longitude,
       latitude,
+      officialLocationWgs84: station.locationWgs84,
       websiteUrl: usgsWebsiteUrl(station.stationId),
     };
     layer.add(

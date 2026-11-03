@@ -17,7 +17,7 @@ import {
   MONITORING_STATION_MARKER_LAYER_ID,
   type StationMarkerAttributes,
 } from './monitoring-station-marker-layer';
-import { STREAM_GAUGE_MAST } from './station-marker-models';
+import { STAFF_GAUGE_BOARD } from './station-marker-models';
 
 export const MONITORING_STATION_LOCATOR_LAYER_ID = 'monitoring-station-locators';
 
@@ -109,7 +109,7 @@ export async function installMonitoringStationLocator(
       new Point({
         longitude: attributes.longitude,
         latitude: attributes.latitude,
-        z: groundM + STREAM_GAUGE_MAST.heightM + CARD_ANCHOR_ABOVE_MAST_TOP_M,
+        z: groundM + STAFF_GAUGE_BOARD.heightM + CARD_ANCHOR_ABOVE_MAST_TOP_M,
         spatialReference: { wkid: 4326 },
       }),
     );
@@ -288,7 +288,8 @@ function readCardElements(): CardElements | null {
 
 function fillCard(card: CardElements, attributes: StationMarkerAttributes): void {
   card.name.textContent = attributes.name;
-  card.coords.textContent = `${attributes.latitude.toFixed(6)}°N, ${Math.abs(attributes.longitude).toFixed(6)}°W`;
+  const [officialLongitude, officialLatitude] = attributes.officialLocationWgs84;
+  card.coords.textContent = `${officialLatitude.toFixed(6)}°N, ${Math.abs(officialLongitude).toFixed(6)}°W`;
   card.link.hidden = attributes.websiteUrl === null;
   if (attributes.websiteUrl) card.link.href = attributes.websiteUrl;
 }

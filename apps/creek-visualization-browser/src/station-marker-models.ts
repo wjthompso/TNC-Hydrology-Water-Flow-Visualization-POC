@@ -29,7 +29,7 @@ export interface StationMarkerModel {
 const MODELS = `${import.meta.env.BASE_URL}station-marker-models`;
 const DOWNLOADED = `${MODELS}/downloaded`;
 
-/** Chosen marker for a stream gauge. Its radar arm points along heading + 90°. */
+/** Earlier stream gauge marker (UCS-261), now gallery-only. Its radar arm points along heading + 90°. */
 export const STREAM_GAUGE_MAST: StationMarkerModel = {
   id: 'stream-gauge-mast',
   label: 'Stream gauge mast',
@@ -37,6 +37,20 @@ export const STREAM_GAUGE_MAST: StationMarkerModel = {
   source: { kind: 'glb', href: `${MODELS}/stream-gauge-mast.glb` },
   anchor: 'origin',
   credit: 'Custom, 192 triangles',
+};
+
+/**
+ * Chosen marker for a stream gauge in the scene (UCS-316): a striped staff gauge,
+ * the meter-stick board USGS gauge photos show standing in the water.
+ * Its ticked face looks along heading + 180°, i.e. south at heading 0.
+ */
+export const STAFF_GAUGE_BOARD: StationMarkerModel = {
+  id: 'staff-gauge-board',
+  label: 'Staff gauge board',
+  heightM: 1.9,
+  source: { kind: 'glb', href: `${MODELS}/staff-gauge-board.glb` },
+  anchor: 'origin',
+  credit: 'Custom, 216 triangles',
 };
 
 export const STATION_MARKER_GALLERY_MODELS: readonly StationMarkerModel[] = [
@@ -49,14 +63,7 @@ export const STATION_MARKER_GALLERY_MODELS: readonly StationMarkerModel[] = [
     anchor: 'origin',
     credit: 'Custom, 92 triangles',
   },
-  {
-    id: 'staff-gauge-board',
-    label: 'Staff gauge board',
-    heightM: 1.9,
-    source: { kind: 'glb', href: `${MODELS}/staff-gauge-board.glb` },
-    anchor: 'origin',
-    credit: 'Custom, 216 triangles',
-  },
+  STAFF_GAUGE_BOARD,
   {
     id: 'location-beacon-pin',
     label: 'Location beacon pin',
