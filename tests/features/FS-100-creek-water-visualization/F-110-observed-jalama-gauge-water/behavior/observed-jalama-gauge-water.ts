@@ -299,6 +299,14 @@ export function watchLiveServices(page: Page): LiveServiceWatch {
   return { pageErrors, summarize: observeLiveNetwork(page) };
 }
 
+/** Modeled opens by default, so an observed-water test names the observed gauge Dataset in the URL. */
+function withObservedDataset(pagePath: string): string {
+  const [pathname, query = ''] = pagePath.split('?');
+  const params = new URLSearchParams(query);
+  params.set('dataset', 'observed-gauge');
+  return `${pathname}?${params.toString()}`;
+}
+
 /**
  * Opens the observed-water page. `imagery` picks the scene imagery dataset; a test
  * whose promise is not about imagery passes the fast one and names it in its methodology.
@@ -311,7 +319,7 @@ export async function openObservedWaterPage(
   imagery: SceneImageryId = DEFAULT_SCENE_IMAGERY_ID,
   pagePath = '/',
 ): Promise<void> {
-  await page.goto(withSceneImagery(pagePath, imagery), { waitUntil: 'commit', timeout: 30_000 });
+  await page.goto(withSceneImagery(withObservedDataset(pagePath), imagery), { waitUntil: 'commit', timeout: 30_000 });
   const outcome = await page.evaluate(async (readyBudgetMs: number) => {
     const started = performance.now();
     while (performance.now() - started < readyBudgetMs) {
